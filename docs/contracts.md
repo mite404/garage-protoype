@@ -1,8 +1,47 @@
 # Architectural design and HTTP contracts
 
-This is the project's architectural and HTTP reference, not a description of implemented APIs.
-The repository currently contains planning documents only. HTTP paths, payload sketches, and module
-names below are proposed until implementation validates them.
+This is the project's architectural and HTTP reference. The ETH-73 section below describes the
+implemented foundation. Other HTTP paths and payload sketches remain proposals until their owning
+implementation units validate them.
+
+## Implemented ETH-73 foundation
+
+App source lives in `src/`. All database, auth, and private-record modules import `server-only`.
+Node 22 LTS and npm are required. TypeScript tests use native `node:test` through `tsx`.
+
+- `POST /auth/sign-in` accepts an email/password form for an operator-provisioned Supabase identity.
+- `POST /auth/sign-out` ends that session. Both mutations require an exact configured Origin.
+- `POST /auth/sign-up` always returns `403 REGISTRATION_DISABLED`. Supabase registration must also
+  be disabled in the prototype project's Auth settings.
+- `GET /api/v1/desk/opportunities/:id` returns a permitted specialist opportunity row in `{data}`.
+- `GET /api/v1/buyer/opportunities/:id` returns only `{data: {id, vehicleId}}` to its owning buyer.
+- `GET /api/v1/desk/sources/:id/content` downloads authorized source bytes as an attachment.
+- `GET /api/v1/public/vehicles/:id` returns the published public projection in `{data}`. Facts
+  require both approval and permission to share. Photos and coverage are empty until ETH-76.
+- Source upload, import, retry, and buyer inquiry POST routes enforce identity and current spending
+  permission, then return `503 PROCESSING_DISABLED`. They queue nothing and spend nothing. Later
+  units must replace these denial gates with complete record checks and atomic budget admission.
+
+Protected HTTP reads and all JSON envelopes use `Cache-Control: no-store`. Inaccessible records
+return `404 NOT_FOUND`. Wrong-role actions return `403 FORBIDDEN`. Invalid or ended sessions return
+`401 UNAUTHENTICATED`. Uninvited and revoked identities return `403 ACCESS_REVOKED`.
+Private database or provider errors become sanitized `503 UNAVAILABLE` responses.
+
+`requireActor(client?)` verifies Supabase claims and the Auth user.
+`resolveActor(reference, client?)` checks `auth.sessions` and current application access.
+`refreshActor`, `requireSpending`, and `requireOpportunity` accept a caller-owned `pg.PoolClient`.
+They use that transaction, not another pool connection. `database()` returns the pool for callers
+that need to begin a transaction. `Actor.credential` retains a Supabase session ID, never a token or
+password. Bearer application credentials and their lifecycle belong to ETH-78.
+
+`canSpend` is not budget admission. ETH-74 must recheck current access inside its reservation
+transaction and again for a paid attempt. The current runtime database role is read-only.
+
+Private sources are bounded PostgreSQL `bytea` records, not static files or public object URLs.
+ETH-75 may replace storage while preserving the source-access operation. Public facts occupy an
+explicit allowlisted projection table. ETH-75 owns atomic projection updates when evidence and
+publication review change. Only operator SQL can currently publish facts; there is no unchecked
+publication endpoint. See [auth setup](auth-setup.md) for configuration and remaining live checks.
 
 The [product plan][plan] owns scope and acceptance examples. [ADR.md](ADR.md) owns the formal
 decision status. This reference adapts the [architecture candidate][candidate] to the later

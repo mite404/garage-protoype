@@ -7,7 +7,43 @@ The proposed slice helps a Garage sales specialist move an existing vehicle oppo
 sale: review source-backed specifications, request missing photos or documents, answer supported
 buyer questions, and prepare a qualified human handoff.
 
-The repository currently contains planning documentation, not an application.
+The repository includes the ETH-73 application and access foundation. Evidence processing and
+inference are disabled until their implementation units add spending admission and review.
+
+## Run the foundation
+
+Use Node 22 LTS and npm. Dependency versions are exact and the lockfile is committed.
+
+```sh
+nvm use
+npm ci
+cp .env.example .env.local
+npm run dev
+```
+
+Without credentials, the application still renders its public entry page, configuration notice,
+and protected-workspace denial. It does not simulate authentication. Live sign-in requires a
+separate prototype Supabase project. Never use Garage's project, credentials, or customer data.
+
+Follow [the auth setup guide](docs/auth-setup.md) to configure the database and provision accounts.
+
+## Verify locally
+
+```sh
+npm run typecheck
+npm test
+npm run build
+```
+
+The native Node test runner loads TypeScript through `tsx`. The quoted recursive glob includes
+nested tests. Set `TEST_DATABASE_URL` to an operator connection for a disposable PostgreSQL database
+whose name ends in `_test` to run integration checks. Tests create the foundation in a transaction
+and roll back their fixtures. They create a minimal local `auth.sessions` table for permission
+checks, not a replacement authentication service. `CI=true` requires this database configuration.
+
+Set `TEST_APP_URL` to a running local app to exercise HTTP access and processing denials. HTTP tests
+skip when the app is absent. Database tests skip outside CI when their URL is absent. Neither skip
+is evidence of live Supabase sign-in, sign-out, or token-refresh behavior.
 
 ## Project brief
 
@@ -18,8 +54,7 @@ See the [seven viability decisions](docs/viability-decisions.md) for the design 
 defaults, and the [architecture decision record](docs/ADR.md) for one-sentence decisions.
 
 Use [Architectural design and HTTP contracts](docs/contracts.md) as the architectural and API
-reference. It separates agreed constraints, selected implementation direction, and unresolved
-proposals. The documented endpoints are not implemented yet.
+reference. Its ETH-73 section distinguishes implemented routes from remaining proposals.
 
 Use synthetic or permissioned demo material. Do not scrape Garage or republish its listing assets
 without permission. Keep credentials out of Git.

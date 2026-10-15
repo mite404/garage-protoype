@@ -11,6 +11,8 @@ implemented functionality, and proposed entries remain open for review.
   traceable and conflicts must not disappear into a generated summary.
 - ADR-003: Use actual photo coverage rather than generated vehicle views because invented details
   could misrepresent the asset being sold.
+- ADR-012: Verify invited Supabase sessions against current private application permissions and
+  session records because token metadata can outlive role changes, revocation, and sign-out.
 
 ## Proposed
 
