@@ -13,6 +13,8 @@ implemented functionality, and proposed entries remain open for review.
   could misrepresent the asset being sold.
 - ADR-012: Verify invited Supabase sessions against current private application permissions and
   session records because token metadata can outlive role changes, revocation, and sign-out.
+- ADR-013: Reserve shared user and installation budgets per durable numbered attempt because
+  concurrent clients, retries, and uncertain provider outcomes must not bypass spending caps.
 
 ## Proposed
 
