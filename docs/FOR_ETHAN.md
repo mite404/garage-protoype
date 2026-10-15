@@ -6,6 +6,10 @@ The first implementation unit builds the locked doors before the evidence workbe
 Next.js app runs without credentials, but it tells the truth about the missing sign-in service.
 It never swaps in a pretend user to make the demo look finished.
 
+The evidence workbench now keeps the original takes and the approved edit separately. A 750-gallon
+brochure and a 500-gallon seller note remain two claims until a specialist resolves them. Reloading,
+reimporting, or restarting the worker cannot erase that specialist's correction.
+
 ## Cast & Crew (Architecture)
 
 Supabase Auth checks the person's identity at the studio entrance. PostgreSQL keeps the current
@@ -14,6 +18,10 @@ call sheet. Being on the lot does not authorize someone to enter every set or ch
 `src/server/auth.ts` verifies the Supabase session. `src/server/access.ts` reads current invitation,
 role, spending permission, and record membership. `src/server/records.ts` selects the facts and
 source bytes that those permissions allow. Next.js routes return those permitted results.
+
+`evidence.ts` is the review desk: it preserves sources and appends human decisions. `imports.ts`
+freezes an authorized packet before the worker extracts claims. `model.ts` still owns every paid
+attempt. The public record is the delivery cut, not a download of the entire source bin.
 
 ## Behind the Scenes (Decisions)
 
@@ -37,6 +45,14 @@ Permission locks last only through admission. Provider calls run after the trans
 without occupying a database connection. A revocation that commits first stops admission. Once
 an attempt is authorized, revocation cannot recall it. Revoked access cannot retrieve its result.
 
+Every claim has an exact page and character range. A correction changes the reviewed answer, not
+the original quote. Reviews remember which claims existed when the specialist approved them.
+When a new conflicting claim arrives, that old approval no longer silently counts as current.
+
+Seller responses return to their originating blocker, like a pickup shot returning to its scene.
+A reviewed seller assertion stays labeled seller-reported. It does not become a document-backed
+safety guarantee just because a person checked its wording.
+
 ## Bloopers (Bugs & Fixes)
 
 An unquoted shell glob can expand before Node sees it and miss deeply nested tests. The npm test
@@ -59,6 +75,15 @@ A retry has its own attempt number. Repeating attempt 1 returns its stored outco
 quietly turning a repeated network request into another bill. Attempt 2 needs fresh permission,
 available money, and the configured cooldown. Billed failures retain their usage separately.
 
+Private classification text could have leaked through a shared next-action field even when the
+source itself was hidden. Routing now uses sales-audience sources only. Private classification
+history stays with its source. The test assigns a second specialist and checks the entire returned
+workbench for the private text, not merely whether the source list hides a row.
+
+Job deduplication deliberately ignores a renamed file. A recovery test reused an earlier original
+and therefore received an already-completed job. Giving the fixture distinct bytes tested an actual
+killed worker instead of accidentally testing a duplicate upload.
+
 ## Director's Commentary
 
 Model the domain changed the data design. Invitations, buyer ownership, specialist membership, and
@@ -79,3 +104,12 @@ record. A database constraint separates unfinished attempts from settled reports
 The PostgreSQL race test starts twelve contenders for one remaining reservation. It asserts one
 provider dispatch and eleven budget denials. Controlled providers are deliberately below the real
 reservation path. They prove admission and recovery, not live model quality or provider pricing.
+
+A worker lease and a purchase order answer different questions. The lease says which worker may
+commit. The reservation says whether a provider might still bill. Expiring the first never clears
+the second. A real SIGKILL test verifies that distinction, and a second test lets an old worker
+finish after losing its lease to prove that its result cannot overwrite the recovered job.
+
+The UI uses native disclosure controls and explicit review states. Conflicts appear before unknown
+fields so the consequential decision is visible without searching through an empty specification
+sheet. Publication still requires separate approval and permission to share the cited excerpt.
