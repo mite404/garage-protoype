@@ -17,8 +17,9 @@ stakeholders, research sources, acceptance examples, and the proposed three-day 
 See the [seven viability decisions](docs/viability-decisions.md) for the design questions and
 defaults, and the [architecture decision record](docs/ADR.md) for one-sentence decisions.
 
-The proposed stack follows Garage's public engineering postings: Next.js, React, TypeScript,
-Tailwind CSS, and PostgreSQL. Providers and versions remain implementation decisions.
+Use [Architectural design and HTTP contracts](docs/contracts.md) as the architectural and API
+reference. It separates agreed constraints, selected implementation direction, and unresolved
+proposals. The documented endpoints are not implemented yet.
 
 Use synthetic or permissioned demo material. Do not scrape Garage or republish its listing assets
 without permission. Keep credentials out of Git.
