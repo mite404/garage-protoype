@@ -102,6 +102,17 @@ customer-facing view, not a separate product owner invented for the demo.
   questions, and an assigned operator; it cannot accept, counteroffer, or promise delivery.
 - R8. Follow-up and missing-evidence requests remain reviewable drafts inside the prototype, with
   proposed recipients shown and no external email, SMS, bid, or payment submission.
+  When a buyer question needs seller evidence, retain the original question, deal blocker, assigned
+  specialist, and seller-directed request together. A permissioned seller response re-enters
+  evidence review before drafting a buyer reply; it never becomes an automatically verified answer.
+
+**Actionable data classification**
+
+- R12. Classify permissioned source records and buyer messages into evidence-backed sales actions,
+  not just vehicle tags. Distinguish a supported question, missing or conflicting evidence, an
+  explicit conditional offer, and material needing human review. Retain the original input and
+  classification basis, allow specialist correction, and link the result to the existing
+  opportunity, blocker, assignee, and next action. Ambiguous intent remains human review.
 
 **Experience and execution**
 
@@ -122,6 +133,9 @@ customer-facing view, not a separate product owner invented for the demo.
   review item. Covers R1, R6, and R9.
 - F4. Buyer expresses a conditional offer. The specialist receives the structured handoff and a
   draft follow-up without a commercial commitment. Covers R1, R7, and R8.
+- F5. Classify a messy source packet and buyer inquiry, identify the evidence blocking the deal,
+  and route an unsent request to the seller through the specialist. Import a permissioned seller
+  response, review it, and prepare a cited buyer follow-up. Covers R2, R3, R6, R8, and R12.
 
 ```diagram
 ┌───────────────────┐     ┌───────────────────┐     ┌────────────────────┐
@@ -154,6 +168,14 @@ exploration; this plan does not prescribe a dashboard template.
   A failed import shows its error and can be retried. Covers R3 and R10.
 - AE6. An internal pricing note and a source document containing instructions to ignore safeguards
   do not leak into buyer answers or authorize actions. Covers R6, R8, and R9.
+- AE7. A buyer asks for a pump-test result, but a seller note only says a report is available.
+  Classification creates a missing-evidence blocker and an assigned seller-request draft, not a
+  passing-test claim or a qualified offer. Importing a permissioned report preserves the question
+  and blocker; only reviewed, shareable findings support the buyer follow-up. Covers R6, R8, R12.
+- AE8. A permissioned packet contains a specification, an internal note, and an ambiguous inquiry.
+  Classification preserves their sources and separates evidence, private context, and human-review
+  work. A specialist can correct the routing without changing original text. An explicit offer
+  follows AE4 instead; neither case invents contacts or creates duplicate opportunities. Covers R12.
 
 ### Model responsibilities and technical basis
 
@@ -182,9 +204,21 @@ corner rounding. Use these as visual references while creating original componen
 ### Three-day delivery proposal
 
 1. Day 1: Persist one vehicle source packet and render source-backed specifications. Complete the
-   import-to-review path before adding secondary screens.
-2. Day 2: Add photo coverage, correction, missing-evidence drafts, and the buyer-facing record.
-3. Day 3: Add cited answers and qualified handoff, then evaluate, polish, deploy, and rehearse.
+   import-to-review path and source classification before adding secondary screens.
+2. Day 2: Add photo coverage, correction, seller-request drafts tied to buyer blockers, and the
+   buyer-facing record.
+3. Day 3: Add cited Q&A, inquiry classification, and qualified handoff. Exercise the seller-response
+   loop, then evaluate, polish, prepare deployment, and rehearse. Actual deployment needs approval.
+
+Implementation ownership stays in the existing feature tickets rather than a separate AI project:
+
+- [003: Evidence review](003-evidence-review.md) owns source classification and reviewed responses.
+- [005: Buyer assistance](005-buyer-handoff.md) owns Q&A, routing, and seller handoff drafts.
+- [007: Evaluation](007-evaluate-and-polish.md) verifies classification and the handoff loop.
+
+Classification is required; Jev is not. Reuse the planned extraction and answer pipeline plus
+ordinary code for explicit structured inputs. Resolve labels and persisted result schemas against
+the [HTTP contract reference](../contracts.md) before implementation; do not create a second agent.
 
 Keep initial extraction to year, manufacturer, model, mileage, pump capacity, tank capacity, fuel,
 and transmission. Additional table fields may remain explicitly unknown. Use one complete primary
@@ -208,6 +242,11 @@ These require real usage and a baseline; they are not fabricated demo metrics.
 
 Exclude automated negotiation, real payments, external messages, legal or mechanical assurances,
 generated vehicle views, general crawling, CRM integrations, and a site-wide redesign.
+
+Data classification uses synthetic or permissioned exports, including lawfully obtained scraped
+records if supplied with permission. Building a scraper, acquiring contact lists, discovering new
+prospects, and sending outreach remain out of scope. This slice advances an existing inquiry; it
+does not claim to demonstrate pipeline acquisition merely because it classifies records.
 
 Use synthetic or permissioned source packets and licensed photos. Garage's terms prohibit automated
 scraping and restrict copying and derivative uses. The prototype must not ingest Garage's live
