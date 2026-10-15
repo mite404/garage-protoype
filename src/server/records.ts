@@ -4,10 +4,21 @@ import { z } from "zod";
 import { database } from "./db";
 import { refreshActor, type Actor } from "./access";
 import { AppError } from "./errors";
+import { photoView, photoCoverage } from "./photo-schema";
+
+const publishedPhotos = `select distinct on(s.sha256) s.id,s.sha256,r.view,r.revision
+  from signal_desk.sources s join signal_desk.opportunities o on o.id=s.opportunity_id
+  join lateral (select * from signal_desk.photo_reviews where source_id=s.id order by revision desc limit 1) r on true
+  where o.vehicle_id=v.id and s.kind='photo' and s.shareable and s.audience='sales'
+  and r.approved and r.readable and r.view<>'unknown'
+  order by s.sha256,r.revision desc,s.id`;
 
 const publicSchema = z.object({
   id: z.string(),
   title: z.string(),
+  photos: z.array(
+    z.object({ id: z.string(), sha256: z.string(), view: photoView, revision: z.number() }),
+  ),
   facts: z.array(
     z.object({
       field: z.string(),
@@ -35,16 +46,48 @@ export async function getPublicVehicle(id: string, client?: PoolClient) {
     (select jsonb_agg(jsonb_build_object('field',f.field,'value',f.value,'citation',
       jsonb_build_object('sourceLabel',f.source_label,'excerpt',f.citation_excerpt)) order by f.field)
     from signal_desk.public_facts f where f.vehicle_id=v.id and f.approved_at is not null and f.shareable),
-    '[]'::jsonb) as facts from signal_desk.vehicles v where v.id=$1 and v.published_at is not null`,
+    '[]'::jsonb) as facts,
+    coalesce((select jsonb_agg(p) from (${publishedPhotos}) p),'[]'::jsonb) as photos
+    from signal_desk.vehicles v where v.id=$1 and v.published_at is not null`,
     [id],
   );
   if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Vehicle not found.");
+  const vehicle = publicSchema.parse(result.rows[0]);
+  const coverage = photoCoverage(
+    vehicle.photos.map((p) => ({
+      sourceId: p.id,
+      sha256: p.sha256,
+      effective: { view: p.view, readable: true, reviewed: true, revision: p.revision },
+    })),
+  );
   return {
-    ...publicSchema.parse(result.rows[0]),
-    photos: [],
-    coverage: [],
+    ...vehicle,
+    photos: vehicle.photos.map((p) => ({
+      id: p.id,
+      view: p.view,
+      mediaUrl: `/api/v1/public/media/${encodeURIComponent(p.id)}`,
+    })),
+    coverage: coverage.map((c) => ({ view: c.view, state: c.state })),
     prototypeLabel: "Independent prototype · synthetic or permissioned evidence",
   };
+}
+
+/** Returns bytes only while the photo's latest review still explicitly approves public sharing.
+ * @throws {AppError} For private, unapproved, unreadable or unpublished media.
+ */
+export async function getPublicPhoto(id: string) {
+  const result = await database().query(
+    `select s.content,s.media_type from signal_desk.sources s
+    join signal_desk.opportunities o on o.id=s.opportunity_id
+    join signal_desk.vehicles v on v.id=o.vehicle_id
+    join lateral(select * from signal_desk.photo_reviews where source_id=s.id order by revision desc limit 1) r on true
+    where s.id=$1 and s.kind='photo' and s.audience='sales' and s.shareable and v.published_at is not null and r.approved and r.readable and r.view<>'unknown'`,
+    [id],
+  );
+  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Photo not found.");
+  return z
+    .object({ content: z.instanceof(Buffer), media_type: z.enum(["image/png", "image/jpeg"]) })
+    .parse(result.rows[0]);
 }
 
 /** Retrieves private source bytes only for their owner or an assigned sales reader.

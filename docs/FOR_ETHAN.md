@@ -10,6 +10,10 @@ The evidence workbench now keeps the original takes and the approved edit separa
 brochure and a 500-gallon seller note remain two claims until a specialist resolves them. Reloading,
 reimporting, or restarting the worker cannot erase that specialist's correction.
 
+The photo desk follows the same rule: a supplied image is the original take, a machine label is a
+proposed slate, and the specialist's review is a separate edit decision. Eight readable view types
+make a coverage checklist, not a mechanical inspection. Unknown and blurry shots leave gaps.
+
 ## Cast & Crew (Architecture)
 
 Supabase Auth checks the person's identity at the studio entrance. PostgreSQL keeps the current
@@ -23,6 +27,12 @@ source bytes that those permissions allow. Next.js routes return those permitted
 freezes an authorized packet before the worker extracts claims. `model.ts` still owns every paid
 attempt. The public record is the delivery cut, not a download of the entire source bin.
 
+`photos.ts` reads authorized photo originals and appends human reviews in that same transaction.
+`photo-schema.ts` calculates coverage and pure request suggestions. Existing jobs carry actual
+photo bytes through `runInference`; they do not get a second entrance around the spending gate.
+The follow-up workflow owns saved drafts. The photo desk only proposes unsent content and links
+back to the existing blockers and evidence.
+
 ## Behind the Scenes (Decisions)
 
 We do not trust a role in user-editable metadata. The application stores its own role and access
@@ -31,7 +41,8 @@ opens a record or requests spending permission.
 
 The approved public record is a separate export, like a final delivery cut. It does not serialize
 the entire editing project and hope that nobody notices the private tracks. Each fact needs both
-review approval and permission to share. Original source files are never public downloads.
+review approval and permission to share. Private documents are never public downloads. Photos have
+a separate public-media route that checks their latest explicit approval before serving bytes.
 
 Access helpers accept the current PostgreSQL transaction client. The next unit can check access
 and reserve a budget through one connection rather than accidentally reading a different snapshot.
@@ -52,6 +63,11 @@ When a new conflicting claim arrives, that old approval no longer silently count
 Seller responses return to their originating blocker, like a pickup shot returning to its scene.
 A reviewed seller assertion stays labeled seller-reported. It does not become a document-backed
 safety guarantee just because a person checked its wording.
+
+Photo coverage deliberately requires human review. A model suggesting "driver side" does not mean
+the evidence has been inspected. If two uploads contain the same image, the newest human decision
+wins and the image counts once. Otherwise one repeated take could falsely fill both side views.
+Private photos never complete the shared checklist, and public coverage uses only approved photos.
 
 ## Bloopers (Bugs & Fixes)
 
@@ -83,6 +99,12 @@ workbench for the private text, not merely whether the source list hides a row.
 Job deduplication deliberately ignores a renamed file. A recovery test reused an earlier original
 and therefore received an already-completed job. Giving the fixture distinct bytes tested an actual
 killed worker instead of accidentally testing a duplicate upload.
+
+An unreadable odometer does not become readable merely because a worker labels it correctly.
+The regression test gives the worker a conflicting passenger-side suggestion after a specialist
+marks the original odometer unreadable. Both decisions remain visible, coverage stays incomplete,
+and the suggested request still asks for a readable replacement. A missing live adapter produces
+an unavailable job, not invented image analysis.
 
 ## Director's Commentary
 
@@ -118,3 +140,9 @@ Build the Lever changed the quality gate. Each test run replaces its coverage ca
 the real production workbench through HTTP. Fallow consumes that fresh execution evidence instead
 of an imported coverage archive. Server rendering does not measure browser event handlers, just as
 a camera test does not prove an actor's performance. The browser review checks that separate layer.
+
+Treat permission and approval as two different gates. A shareable photo still needs a human's
+public approval; withdrawing that approval makes the media URL return 404 even if somebody kept
+the URL. Images bypass Next.js optimization so private originals cannot enter its shared cache.
+An unsent request preview is also not a saved draft. Its revision and source/task references give
+the next workflow enough context to recheck the evidence before persisting a final version.

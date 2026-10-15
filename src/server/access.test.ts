@@ -89,7 +89,16 @@ test(
           },
         ],
         photos: [],
-        coverage: [],
+        coverage: [
+          { view: "front", state: "missing" },
+          { view: "rear", state: "missing" },
+          { view: "driver_side", state: "missing" },
+          { view: "passenger_side", state: "missing" },
+          { view: "cab", state: "missing" },
+          { view: "pump_panel", state: "missing" },
+          { view: "odometer", state: "missing" },
+          { view: "identification_plate", state: "missing" },
+        ],
         prototypeLabel: "Independent prototype · synthetic or permissioned evidence",
       });
       await assert.rejects(getPublicVehicle("hidden", db), { status: 404 });

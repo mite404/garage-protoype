@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { photoReview, photoSuggestion } from "./photo-schema";
 
 /** Supported specification keys; other facts remain explicitly unknown. */
 export const fieldSchema = z.enum([
@@ -40,6 +41,7 @@ export const extractedClaim = z
 export const extractionSchema = z
   .object({
     claims: z.array(extractedClaim).max(200),
+    photos: z.array(photoSuggestion).max(20).default([]),
     classifications: z
       .array(
         z
@@ -57,6 +59,7 @@ export const extractionSchema = z
 const selection = z.object({ field: fieldSchema, claimId: z.string(), shareable: z.boolean() });
 /** Human commands append decisions without modifying source assertions. */
 export const reviewSchema = z.discriminatedUnion("kind", [
+  photoReview,
   selection.extend({ kind: z.literal("select") }).strict(),
   selection
     .extend({

@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 import { z } from "zod";
 import type { Workbench } from "@/server/evidence";
 import { classificationKind, fieldLabels } from "@/server/evidence-schema";
+import PhotoReview from "./photos";
 
 const labels = {
   unknown: "Unknown",
@@ -130,6 +131,11 @@ export default function EvidenceWorkbench({ view }: { view: Workbench }) {
       >
         {pending ? "Saving…" : message}
       </output>
+      <PhotoReview
+        view={view}
+        pending={pending}
+        save={(command) => mutate(`${base}/reviews${query}`, command, view.revision)}
+      />
       <div className="evidence-layout mt-5">
         <div className="min-w-0 space-y-6">
           <section className="evidence-panel" aria-labelledby="facts-heading">
@@ -480,6 +486,7 @@ export default function EvidenceWorkbench({ view }: { view: Workbench }) {
                     <label htmlFor="source-kind">Source type</label>
                     <select id="source-kind" name="kind">
                       <option value="document">Document</option>
+                      <option value="photo">Actual photo</option>
                       <option value="seller_note">Seller note</option>
                       <option value="private_note">Private context</option>
                       <option value="inquiry">Ambiguous inquiry</option>
@@ -499,16 +506,16 @@ export default function EvidenceWorkbench({ view }: { view: Workbench }) {
                 </label>
                 <textarea id="source-text" name="text" rows={3} maxLength={2000000} />
                 <label className="mt-4" htmlFor="source-file">
-                  Or upload a text-based PDF / UTF-8 text file
+                  Or upload a text-based PDF, UTF-8 text, PNG or JPEG
                 </label>
                 <input
                   id="source-file"
                   name="file"
                   type="file"
-                  accept="application/pdf,text/plain"
+                  accept="application/pdf,text/plain,image/png,image/jpeg"
                 />
                 <p className="mt-2 text-xs text-stone-500">
-                  10 MiB maximum · 500 pages · Scanned PDF OCR is not supported.
+                  Photos up to 5 MiB · Text/PDF up to 10 MiB and 500 pages · No scanned PDF OCR.
                 </p>
                 <div className="form-grid mt-4">
                   <div>
@@ -522,13 +529,11 @@ export default function EvidenceWorkbench({ view }: { view: Workbench }) {
                     <label htmlFor="source-blocker">Originating buyer blocker</label>
                     <select id="source-blocker" name="blockerId">
                       <option value="">Not a seller response</option>
-                      {view.blockers
-                        .filter((b) => b.field)
-                        .map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.question}
-                          </option>
-                        ))}
+                      {view.blockers.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.question}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

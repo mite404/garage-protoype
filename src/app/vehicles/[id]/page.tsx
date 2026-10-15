@@ -1,5 +1,7 @@
 import { getPublicVehicle } from "@/server/records";
+import Image from "next/image";
 import { AppError } from "@/server/errors";
+import { photoLabels } from "@/server/photo-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +46,40 @@ export default async function Vehicle({ params }: { params: Promise<{ id: string
           ))}
         </dl>
       </div>
-      <p className="mt-6 text-sm text-stone-600">
-        Photo coverage has not been reviewed. This record makes no claim about mechanical condition
-        or safety.
-      </p>
+      <section className="panel mt-6 max-w-3xl" aria-labelledby="public-photos">
+        <h2 id="public-photos">Approved photo evidence</h2>
+        <p className="mt-3 text-sm text-stone-600">
+          Only reviewed, permitted photos appear here. Missing means no approved readable view is
+          available, not that a component is absent. This is not an inspection or safety assessment.
+        </p>
+        <ul className="my-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {vehicle.coverage.map((c) => (
+            <li key={c.view} className="text-sm">
+              <strong className="block">{photoLabels[c.view]}</strong>
+              <span className="text-stone-500">
+                {c.state === "covered" ? "Reviewed readable" : "Missing"}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {vehicle.photos.map((p) => (
+            <figure key={p.id}>
+              <Image
+                unoptimized
+                width={800}
+                height={600}
+                className="h-52 w-full rounded-md bg-stone-100 object-contain"
+                src={p.mediaUrl}
+                alt={`${photoLabels[p.view]} supplied view`}
+              />
+              <figcaption className="mt-2 text-sm">
+                {photoLabels[p.view]} · Reviewed readable
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
     </section>
   );
 }
