@@ -1,0 +1,8 @@
+.amp/
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+coverage/
+.DS_Store
