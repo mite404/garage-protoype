@@ -1,0 +1,4 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  "ignorePatterns": [".next/**", ".amp/**", "next-env.d.ts"]
+}
