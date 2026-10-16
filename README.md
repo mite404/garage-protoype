@@ -7,10 +7,11 @@ The proposed slice helps a Garage sales specialist move an existing vehicle oppo
 sale: review source-backed specifications, request missing photos or documents, answer supported
 buyer questions, and prepare a qualified human handoff.
 
-The repository includes the ETH-73 application and access foundation. Evidence processing and
-inference are disabled until their implementation units add spending admission and review.
+The repository includes access controls, atomic inference budgets, durable imports, and evidence
+review. The explicitly selected saved example uses synthetic results without a paid call.
+Live extraction remains unavailable without a server-owned provider, model policy, and budget.
 
-## Run the foundation
+## Run the prototype
 
 Use Node 22 LTS and npm. Dependency versions are exact and the lockfile is committed.
 
@@ -30,15 +31,17 @@ Follow [the auth setup guide](docs/auth-setup.md) to configure the database and 
 ## Verify locally
 
 ```sh
-npm run check
 npm run build
+npm run check
 ```
 
-The native Node test runner loads TypeScript through `tsx`. The quoted recursive glob includes
+The native Node test runner loads TypeScript through `tsx`. Its recursive glob includes
 nested tests. Set `TEST_DATABASE_URL` to an operator connection for a disposable PostgreSQL database
-whose name ends in `_test` to run integration checks. Tests create the foundation in a transaction
-and roll back their fixtures. They create a minimal local `auth.sessions` table for permission
-checks, not a replacement authentication service. `CI=true` requires this database configuration.
+whose name ends in `_test` to run integration checks. Tests bootstrap the schema and clean up their
+fixtures. A minimal local `auth.sessions` table supports permission checks.
+The HTTP review regression launches the production build with a loopback-only controlled identity
+provider, not live Supabase. `CI=true` requires the database configuration.
+Tests regenerate V8 coverage for Fallow automatically.
 
 Set `TEST_APP_URL` to a running local app to exercise HTTP access and processing denials. HTTP tests
 skip locally when the app is absent and fail in CI without its URL. Database tests skip outside CI

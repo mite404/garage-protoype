@@ -113,3 +113,8 @@ finish after losing its lease to prove that its result cannot overwrite the reco
 The UI uses native disclosure controls and explicit review states. Conflicts appear before unknown
 fields so the consequential decision is visible without searching through an empty specification
 sheet. Publication still requires separate approval and permission to share the cited excerpt.
+
+Build the Lever changed the quality gate. Each test run replaces its coverage capture and exercises
+the real production workbench through HTTP. Fallow consumes that fresh execution evidence instead
+of an imported coverage archive. Server rendering does not measure browser event handlers, just as
+a camera test does not prove an actor's performance. The browser review checks that separate layer.

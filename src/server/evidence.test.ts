@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { Pool } from "pg";
 import { resolveActor } from "./access";
 import { prepareTestDatabase } from "./test-database";
+import { startTestApp } from "./test-app";
 import { getPublicVehicle, getSource } from "./records";
 import { addSource, getWorkbench, reviewEvidence, recordEvidenceBlocker } from "./evidence";
 import { queueImport, claimImport, processImport, retryImport, loadSavedEvidence } from "./imports";
@@ -215,6 +216,59 @@ test(
         );
         assert.deepEqual((await getPublicVehicle("evidence-truck")).facts, []);
       });
+      await t.test(
+        "HTTP review renders conflicts and rejects stale publication decisions",
+        async () => {
+          const app = await startTestApp(specialist, session);
+          try {
+            const headers = { Cookie: app.cookie };
+            const render = async () => {
+              const response = await fetch(`${app.origin}/desk/opportunities/evidence-deal`, {
+                headers,
+              });
+              assert.equal(response.status, 200);
+              return (await response.text()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "");
+            };
+            const html = await render();
+            assert.match(html, /Conflicting claims/);
+            assert.match(html, /No approved answer/);
+            assert.match(html, /750/);
+            assert.match(html, /500/);
+            const view = await getWorkbench(actor, "evidence-deal");
+            const claim = view.claims.find((c) => c.sourceId === brochure.id);
+            assert.ok(claim);
+            const command = {
+              kind: "select",
+              field: "tankCapacity",
+              claimId: claim.id,
+              shareable: true,
+            };
+            const review = () =>
+              fetch(
+                `${app.origin}/api/v1/desk/vehicles/evidence-truck/reviews?opportunityId=evidence-deal`,
+                {
+                  method: "POST",
+                  headers: {
+                    ...headers,
+                    Origin: "http://signal.test",
+                    "Content-Type": "application/json",
+                    "If-Match": `"${view.revision}"`,
+                  },
+                  body: JSON.stringify(command),
+                },
+              );
+            assert.equal((await review()).status, 200);
+            assert.equal((await review()).status, 412);
+            assert.equal((await getPublicVehicle("evidence-truck")).facts[0]?.value, "750 gal");
+            const approved = await render();
+            assert.match(approved, /Approved for public excerpts/);
+            assert.match(approved, /Original source packet/);
+            assert.match(approved, /500/);
+          } finally {
+            await app.stop();
+          }
+        },
+      );
       await t.test(
         "a human correction survives deduplication and new conflicts revoke publication",
         async () => {

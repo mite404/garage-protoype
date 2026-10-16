@@ -2,14 +2,18 @@
 
 Use the Node version pinned in `.node-version` and `.nvmrc`, and npm.
 Run `npm ci` after checkout; its `prepare` step installs Lefthook's pre-commit
-hook. Run `npm run check` before handing work to another ticket. Run `npm run build` for production
-build validation. These commands do not deploy the app or spend inference tokens.
+hook. Run `npm run build` before `npm run check`; the HTTP review test launches that production
+build against a loopback-only controlled identity provider. Rebuild after application changes.
+These commands do not deploy the app or spend inference tokens.
 
 Fresh orbs run `.agents/setup` to install the pinned Node toolchain, locked dependencies, and hook.
 The setup is safe to repeat. Fallow is a pinned development dependency, not a global installation.
 Existing ticket orbs receive these files with their dependency snapshot and run `.agents/setup`.
 Future orbs inherit this automatically only after the setup reaches the project's default branch.
 No Claude, Codex, or Cursor MCP configuration is needed for Amp's CLI checks.
+
+Orb setup and CI install `poppler-utils` for ETH-75's bounded text-PDF extraction. Other development
+and deployment environments need `pdftotext` on PATH. This is not OCR support for scanned documents.
 
 ## One gate, separate responsibilities
 
@@ -19,7 +23,7 @@ No Claude, Codex, or Cursor MCP configuration is needed for Amp's CLI checks.
 | `npm run format:check` | Code and configuration formatting with Oxfmt |
 | `npm run lint` | Local correctness and framework rules with Oxlint |
 | `npm run typecheck` | TypeScript contracts |
-| `npm test` | Native Node behavioral tests through tsx |
+| `npm test` | Native Node behavioral tests through tsx, with fresh V8 coverage |
 | `npm run fallow` | Changed-code dead code, complexity, duplication, and structural findings |
 
 `npm run check` runs these in order and stops on failure. Lefthook and GitHub Actions use that same
@@ -45,6 +49,15 @@ duplication thresholds. Cleanup and design-system warnings stay advisory. No bla
 or debt baseline is installed. Next.js route entry points are detected by Fallow's framework plugin.
 `fallow-plugin-node-test.json` declares the same native test roots as `npm test`. Fallow's default
 test-reachability estimate is not measured execution coverage or proof of live authentication.
+The worker CLI is an explicit entry point. `scripts/test.mjs` clears `coverage/`, then runs the
+same recursive native test glob with `NODE_V8_COVERAGE`. Fallow reads that newly generated directory
+at unchanged thresholds. Never substitute captured coverage from another checkout.
+
+The evidence HTTP regression launches the actual production app with synthetic credentials against
+a local test-only identity provider. It checks rendered conflict/unknown states, public approval,
+original preservation, and stale-review rejection. Its server process flushes source-mapped V8 data
+on shutdown. This measures server rendering, not browser event-handler execution.
+Browser interaction checks remain separate. Unmatched functions retain estimates.
 Custom architecture zones and policy rule packs are not configured yet.
 
 Locally Fallow compares with the remote default branch unless `FALLOW_AUDIT_BASE` is set. In CI,

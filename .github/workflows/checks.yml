@@ -36,6 +36,8 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      - name: Install text-PDF support
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: npm ci
       - run: npm run build
       - name: Check against the running application
