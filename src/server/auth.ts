@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import type { PoolClient } from "pg";
-import { resolveActor } from "./access";
+import { authenticateToken, resolveActor } from "./access";
 import { AppError } from "./errors";
 
 /** Reports configuration only, never credentials. */
@@ -68,6 +68,34 @@ export async function requireActor(client?: PoolClient) {
   )
     throw new AppError(401, "UNAUTHENTICATED", "Session has expired or is invalid.");
   return resolveActor({ userId: user.data.user.id, sessionId: claims.data.session_id }, client);
+}
+
+/** Authenticates explicit bearer credentials without cookie fallback; browser writes retain Origin checks.
+ * @throws {AppError} For invalid credentials or cross-site cookie mutations.
+ */
+export async function requireHttpActor(request: Request, mutation = false) {
+  const authorization = request.headers.get("authorization");
+  if (authorization !== null) {
+    if (!authorization.startsWith("Bearer "))
+      throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
+    return authenticateToken(authorization.slice(7));
+  }
+  const actor = await requireActor();
+  if (mutation) requireSameOrigin(request);
+  return actor;
+}
+
+/** Token management never accepts bearer credentials, even alongside a session cookie.
+ * @throws {AppError} For bearer authentication or invalid dashboard sessions/origins.
+ */
+export async function requireTokenManager(request: Request, mutation = false) {
+  if (request.headers.has("authorization"))
+    throw new AppError(
+      403,
+      "HUMAN_SESSION_REQUIRED",
+      "Use the specialist dashboard to manage tokens.",
+    );
+  return requireHttpActor(request, mutation);
 }
 
 /** Rejects cross-site browser mutations before authentication or side effects.

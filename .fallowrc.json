@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
-  "entry": ["src/worker.ts"],
+  "entry": ["src/worker.ts", "src/mcp.ts"],
   "health": { "coverage": "coverage" },
   "ignorePatterns": [".next/**", ".amp/**", "next-env.d.ts"]
 }

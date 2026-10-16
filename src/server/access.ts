@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { database } from "./db";
@@ -21,12 +22,92 @@ const opportunitySchema = z.object({
 
 export type Role = z.infer<typeof roleSchema>;
 export type SessionReference = { userId: string; sessionId: string };
+export type Credential =
+  | { kind: "supabase-session"; sessionId: string }
+  | { kind: "app-token"; tokenId: string };
 export type Actor = {
   userId: string;
   role: Role;
   canSpend: boolean;
-  credential: { kind: "supabase-session"; sessionId: string };
+  credential: Credential;
 };
+
+const tokenAccess = identitySchema.extend({
+  id: z.uuid(),
+  scopes: z.array(z.enum(["read", "write", "spend"])),
+});
+
+/** Rechecks a durable token reference and current specialist permissions, never cached scopes.
+ * @throws {AppError} For expired, revoked, unknown tokens or revoked specialist access.
+ */
+export async function resolveToken(tokenId: string, client?: PoolClient): Promise<Actor> {
+  const result = await database(client).query(
+    `select t.id,t.scopes,i.user_id,i.role,i.can_spend,i.revoked_at
+    from signal_desk.app_tokens t join signal_desk.identities i on i.user_id=t.user_id
+    where t.id=$1 and t.revoked_at is null and t.expires_at>clock_timestamp()`,
+    [tokenId],
+  );
+  if (!result.rowCount)
+    throw new AppError(401, "UNAUTHENTICATED", "Application token has expired or ended.");
+  const row = tokenAccess.parse(result.rows[0]);
+  if (row.revoked_at || row.role !== "specialist")
+    throw new AppError(403, "ACCESS_REVOKED", "Specialist access is not available.");
+  if (!row.scopes.includes("read"))
+    throw new AppError(403, "SCOPE_DENIED", "Read permission is required.");
+  return {
+    userId: row.user_id,
+    role: row.role,
+    canSpend: row.can_spend && row.scopes.includes("spend"),
+    credential: { kind: "app-token", tokenId: row.id },
+  };
+}
+
+/** Hashes a presented secret before lookup; plaintext never reaches storage.
+ * @throws {AppError} For malformed, unknown or inactive credentials.
+ */
+export async function authenticateToken(secret: string) {
+  if (!/^sd_[A-Za-z0-9_-]{43}$/.test(secret))
+    throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
+  const result = await database().query(
+    "select id from signal_desk.app_tokens where token_hash=$1",
+    [createHash("sha256").update(secret).digest("hex")],
+  );
+  if (!result.rowCount) throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
+  return resolveToken(z.object({ id: z.uuid() }).parse(result.rows[0]).id);
+}
+
+/** Requires an interactive session for token management and human review.
+ * @throws {AppError} For application-token credentials.
+ */
+export function requireSession(actor: Actor) {
+  if (actor.credential.kind !== "supabase-session")
+    throw new AppError(
+      403,
+      "HUMAN_SESSION_REQUIRED",
+      "An interactive specialist session is required.",
+    );
+}
+
+/** Checks explicit token write opt-in in shared operations, not only in transport tools.
+ * @throws {AppError} For ended credentials or missing write scope.
+ */
+export async function requireWrite(actor: Actor, client?: PoolClient) {
+  const current = await refreshActor(actor, client);
+  if (current.credential.kind === "app-token") {
+    const result = await database(client).query(
+      "select scopes from signal_desk.app_tokens where id=$1",
+      [current.credential.tokenId],
+    );
+    if (
+      !z
+        .object({ scopes: z.array(z.string()) })
+        .parse(result.rows[0])
+        .scopes.includes("write")
+    )
+      throw new AppError(403, "SCOPE_DENIED", "Write permission is required.");
+  }
+  return current;
+}
 
 /** Resolves a previously verified Supabase session against current application access.
  * @throws {AppError} If the session is gone, expired, uninvited, or revoked.
@@ -43,7 +124,7 @@ export async function resolveActor(
   const db = database(client);
   const session = await db.query(
     `select id from auth.sessions where id=$1 and user_id=$2
-    and (not_after is null or not_after > now())`,
+    and (not_after is null or not_after > clock_timestamp())`,
     [reference.sessionId, reference.userId],
   );
   if (!session.rowCount)
@@ -67,7 +148,9 @@ export async function resolveActor(
  * @throws {AppError} If access was revoked since the actor was created.
  */
 export function refreshActor(actor: Actor, client?: PoolClient) {
-  return resolveActor({ userId: actor.userId, sessionId: actor.credential.sessionId }, client);
+  return actor.credential.kind === "supabase-session"
+    ? resolveActor({ userId: actor.userId, sessionId: actor.credential.sessionId }, client)
+    : resolveToken(actor.credential.tokenId, client);
 }
 
 /** Requires explicit spending permission. Budget admission remains a separate required gate.

@@ -51,6 +51,11 @@ export default async function Desk() {
           <p className="mt-4 text-sm font-semibold text-orange-800">Review source packet →</p>
         </Link>
       ))}
+      {actor.role === "specialist" && (
+        <Link className="quiet-button mt-8" href="/desk/tokens">
+          Manage local MCP tokens
+        </Link>
+      )}
       <form action="/auth/sign-out" method="post" className="mt-8">
         <button className="button">Sign out</button>
       </form>

@@ -30,8 +30,8 @@ Private database or provider errors become sanitized `503 UNAVAILABLE` responses
 `resolveActor(reference, client?)` checks `auth.sessions` and current application access.
 `refreshActor`, `requireSpending`, and `requireOpportunity` accept a caller-owned `pg.PoolClient`.
 They use that transaction, not another pool connection. `database()` returns the pool for callers
-that need to begin a transaction. `Actor.credential` retains a Supabase session ID, never a token or
-password. Bearer application credentials and their lifecycle belong to ETH-78.
+that need to begin a transaction. `Actor.credential` retains either a Supabase session ID or an
+application-token ID, never a plaintext secret or password. ETH-78 defines bearer access below.
 
 `canSpend` is not budget admission. ETH-74 rechecks current access inside its reservation
 transaction. The runtime role can write inference accounting, but cannot change identity
@@ -41,6 +41,75 @@ Private sources are bounded PostgreSQL `bytea` records, not static files or publ
 Public facts occupy an explicit allowlisted projection table. ETH-75 atomically updates that
 projection after evidence and publication review change. See [auth setup](auth-setup.md) for
 configuration and remaining live checks.
+
+## Implemented ETH-78 local MCP access
+
+`src/mcp.ts` uses official `@modelcontextprotocol/sdk` 1.32.1 over stdio. It calls the same
+protected HTTP operations as the dashboard. It has no database, privileged Supabase, or provider
+credential.
+`SIGNAL_DESK_URL` is an HTTPS origin, without a path, query, fragment or URL credentials.
+Loopback HTTP is allowed only for controlled local verification. Redirects are rejected rather than
+forwarding the bearer secret to another address. Errors return sanitized JSON in MCP text content
+with `isError: true`. Successful text contains the existing `{data}` HTTP envelope.
+
+Every protected desk route used below accepts `Authorization: Bearer <application-token>`.
+An explicit invalid Authorization header never falls back to session cookies. Cookie mutations
+still require the exact configured Origin. Buyer routes and source-byte downloads remain
+session-only. No hosted MCP endpoint exists.
+
+| Tool | Existing or added HTTP operation |
+| --- | --- |
+| `list_opportunities` | `GET /api/v1/desk/opportunities?cursor=...` |
+| `get_workbench` | `GET /api/v1/desk/opportunities/:id/evidence` |
+| `get_assistance` | `GET /api/v1/desk/opportunities/:id/assistance` |
+| `get_job` | `GET /api/v1/desk/jobs/:id` |
+| `create_draft` | `POST /api/v1/desk/opportunities/:id/assistance` with `kind: draft` |
+| `queue_import` | `POST /api/v1/desk/vehicles/:id/imports?opportunityId=...` |
+| `retry_import` | `POST /api/v1/desk/jobs/:id/retry` |
+
+The opportunity list returns `{items, nextCursor}` with at most 100 membership-filtered records.
+The cursor is the previous page's last ID. A full final page may require one empty-page request.
+The workbench includes permitted original text, claims with exact locators, review states, photo
+coverage, blockers and jobs. Job status reuses that filtered projection, never frozen prompts.
+Assistance stays opportunity-scoped. Another buyer's negotiations are not vehicle-wide context.
+
+Drafts use the shared strict `draftCommand` schema in `assistance-schema.ts`. `seller_request` and
+`buyer_followup` require `inquiryId` and `revision`. `photo_request` requires `revision`, edited
+`recipientLabel` and `body`. The adapter sends the caller's explicit `key` as `Idempotency-Key`.
+Keys remain user-scoped for the installation lifetime. Replays preserve the same draft ID;
+different input with that key returns `409 IDEMPOTENCY_CONFLICT`. Stale evidence returns `412`.
+Queueing uses the server's `EVIDENCE_MODEL`, not a client-selected model. Retries use the existing
+job transition and numbered-attempt controls; a queued job cannot be retried into a second attempt.
+
+Only an interactive invited specialist can manage tokens at `/desk/tokens`:
+
+- `GET /api/v1/desk/tokens` lists that specialist's secret-free metadata.
+- `POST /api/v1/desk/tokens` accepts `{label, scopes?, expiresAt}` and returns metadata plus a
+  secret exactly once. `label` is 1 to 100 characters. Expiry must be in the future, at most
+  30 days.
+- `DELETE /api/v1/desk/tokens/:id` revokes an owned token idempotently. Another owner's token
+  is 404.
+
+Management rejects any bearer header, even with a valid cookie. Secrets contain 256 random bits;
+only SHA-256 hashes are stored. Metadata has `id`, `label`, `scopes`, `expiresAt`, `revokedAt`, and
+`createdAt`. Tokens need `read`, which is the default scope. `write` and `spend` are explicit
+opt-ins.
+Only a currently spending-enabled specialist can issue a spending token. Scope arrays must be
+unique and cannot contain additional names. Missing scope returns `403 SCOPE_DENIED`; absent
+spending authority returns `403 SPENDING_DENIED`. Expired or revoked tokens return 401.
+
+Shared operations, not tool visibility, enforce scopes. Token rights intersect with current
+identity, role and opportunity membership on every operation. Import queue and retry require write
+and spend. Drafts require write. Human evidence/photo approval remains session-only for every token,
+including write/spend tokens. No tool changes audiences, approves evidence, sends messages, accepts
+offers, counteroffers or promises delivery.
+
+Import jobs persist exactly one credential reference, `session_id` or `app_token_id`. The worker
+rechecks that original credential before queued, retried and lease-recovered work and each paid
+admission. Another credential cannot rescue a revoked job. Token revocation conflicts with the same
+short-lived permission locks as identity revocation. Revocation before admission denies the attempt;
+revocation after admission cannot recall an already authorized request. Budget reservations and
+uncertain-spend reconciliation retain ETH-74 semantics. See [MCP setup](mcp-setup.md).
 
 ## Implemented ETH-74 inference boundary
 
@@ -615,7 +684,7 @@ a representative trial has run.
 - File and model providers, private hosting, MIME and byte limits, models, and budget amounts.
 - ETag format, revision scope for job actions, idempotency scope and retention, and pagination.
 - Lease and retry policy, uncertain-spend reconciliation, and storage recovery behavior.
-- MCP tool names, application-token lifecycle, scopes, draft-creation endpoint, and client setup.
+- Hosted installation-free MCP access and OAuth, if that access becomes necessary.
 - Hosted MCP OAuth is deferred. A local adapter does not imply an unauthenticated remote endpoint.
 
 Resolve these in their owning implementation ticket and update this reference with the chosen

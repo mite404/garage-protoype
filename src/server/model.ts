@@ -81,12 +81,6 @@ async function transaction<T>(client: PoolClient, action: () => Promise<T>) {
 
 async function currentAccess(actor: Actor, request: Request, db: PoolClient) {
   await db.query("select signal_desk.lock_inference_access()");
-  const session = await db.query(
-    `select id from auth.sessions where id=$1 and user_id=$2
-    and (not_after is null or not_after > clock_timestamp())`,
-    [actor.credential.sessionId, actor.userId],
-  );
-  if (!session.rowCount) throw new AppError(401, "UNAUTHENTICATED", "Session has ended.");
   await requireSpending(actor, db);
   await requireOpportunity(actor, request.opportunityId, undefined, db);
 }

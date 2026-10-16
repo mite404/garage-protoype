@@ -14,6 +14,10 @@ The photo desk follows the same rule: a supplied image is the original take, a m
 proposed slate, and the specialist's review is a separate edit decision. Eight readable view types
 make a coverage checklist, not a mechanical inspection. Unknown and blurry shots leave gaps.
 
+The terminal now has a restricted visitor pass. A local MCP process reads the same workbench and
+saves the same unsent drafts as the dashboard. It does not carry keys to the footage vault or the
+inference provider. The server checks each pass again before it opens a record or admits paid work.
+
 ## Cast & Crew (Architecture)
 
 Supabase Auth checks the person's identity at the studio entrance. PostgreSQL keeps the current
@@ -32,6 +36,10 @@ attempt. The public record is the delivery cut, not a download of the entire sou
 photo bytes through `runInference`; they do not get a second entrance around the spending gate.
 The follow-up workflow owns saved drafts. The photo desk only proposes unsent content and links
 back to the existing blockers and evidence.
+
+`src/mcp.ts` parses tools with the official SDK and calls protected HTTPS routes. `tokens.ts` issues
+opaque secrets once and stores only hashes. `access.ts` resolves either a session ID or a token ID.
+An import keeps its original credential reference across worker restarts, never the plaintext pass.
 
 ## Behind the Scenes (Decisions)
 
@@ -59,6 +67,11 @@ an attempt is authorized, revocation cannot recall it. Revoked access cannot ret
 Every claim has an exact page and character range. A correction changes the reviewed answer, not
 the original quote. Reviews remember which claims existed when the specialist approved them.
 When a new conflicting claim arrives, that old approval no longer silently counts as current.
+
+Token scopes narrow the specialist's current rights. A write scope can save an unsent draft but
+cannot approve a claim. A spending scope cannot manufacture an account allowance or budget. The
+same admission locks coordinate revocation before a charge, whether the request began in a browser
+or a terminal. A revoked token's job cannot switch to a newer pass merely to get past the check.
 
 Seller responses return to their originating blocker, like a pickup shot returning to its scene.
 A reviewed seller assertion stays labeled seller-reported. It does not become a document-backed

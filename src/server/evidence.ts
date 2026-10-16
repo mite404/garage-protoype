@@ -8,7 +8,14 @@ import { promisify } from "node:util";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { database } from "./db";
-import { refreshActor, requireOpportunity, type Actor, type Role } from "./access";
+import {
+  refreshActor,
+  requireOpportunity,
+  requireSession,
+  requireWrite,
+  type Actor,
+  type Role,
+} from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
 import { appendPhotoReview, readPhotos, refreshPhotoBlockers } from "./photos";
@@ -132,12 +139,14 @@ export async function evidenceTransaction<T>(
   opportunityId: string,
   action: (db: PoolClient, vehicleId: string) => Promise<T>,
   role: Role = "specialist",
+  permission: "read" | "write" = "write",
 ) {
   const db = await database().connect();
   try {
     await db.query("begin");
     await db.query("set local lock_timeout='5s'");
     await db.query("select signal_desk.lock_evidence_access()");
+    if (permission === "write") await requireWrite(actor, db);
     const opportunity = await requireOpportunity(actor, opportunityId, role, db);
     await db.query("select id from signal_desk.vehicles where id=$1 for update", [
       opportunity.vehicle_id,
@@ -388,83 +397,89 @@ async function packet(db: PoolClient, actor: Actor, opportunityId: string, vehic
  * @throws {AppError} For revoked access or missing membership.
  */
 export async function getWorkbench(actor: Actor, opportunityId: string) {
-  return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
-    const evidence = await packet(db, actor, opportunityId, vehicleId);
-    const photos = await readPhotos(db, actor, opportunityId);
-    const coverage = photoCoverage(photos.filter((p) => p.audience === "sales"));
-    const header = z
-      .object({
-        title: z.string(),
-        revision: z.number(),
-        nextAction: z.string(),
-        assigneeId: z.string().nullable(),
-      })
-      .parse(
+  return evidenceTransaction(
+    actor,
+    opportunityId,
+    async (db, vehicleId) => {
+      const evidence = await packet(db, actor, opportunityId, vehicleId);
+      const photos = await readPhotos(db, actor, opportunityId);
+      const coverage = photoCoverage(photos.filter((p) => p.audience === "sales"));
+      const header = z
+        .object({
+          title: z.string(),
+          revision: z.number(),
+          nextAction: z.string(),
+          assigneeId: z.string().nullable(),
+        })
+        .parse(
+          (
+            await db.query(
+              `select v.title,v.revision,o.next_action as "nextAction",o.assignee_id as "assigneeId" from signal_desk.vehicles v join signal_desk.opportunities o on o.vehicle_id=v.id where o.id=$1`,
+              [opportunityId],
+            )
+          ).rows[0],
+        );
+      const jobs = z.array(jobView).parse(
         (
           await db.query(
-            `select v.title,v.revision,o.next_action as "nextAction",o.assignee_id as "assigneeId" from signal_desk.vehicles v join signal_desk.opportunities o on o.vehicle_id=v.id where o.id=$1`,
-            [opportunityId],
-          )
-        ).rows[0],
-      );
-    const jobs = z.array(jobView).parse(
-      (
-        await db.query(
-          `select j.id,j.state,j.error,j.attempt,j.mode,j.model from signal_desk.import_jobs j where j.opportunity_id=$1
+            `select j.id,j.state,j.error,j.attempt,j.mode,j.model from signal_desk.import_jobs j where j.opportunity_id=$1
       and not exists(select 1 from signal_desk.import_sources js join signal_desk.sources s on s.id=js.source_id where js.job_id=j.id and s.owner_id<>$2 and s.audience='private') order by j.created_at desc`,
-          [opportunityId, actor.userId],
-        )
-      ).rows,
-    );
-    const blockers = z
-      .array(blockerView)
-      .parse(
-        (
-          await db.query(
-            `select id,blocker_key as key,question,field,assignee_id as "assigneeId",next_action as "nextAction",state from signal_desk.evidence_blockers where opportunity_id=$1 order by id`,
-            [opportunityId],
+            [opportunityId, actor.userId],
           )
         ).rows,
       );
-    const classifications = z.array(classificationView).parse(
-      (
-        await db.query(
-          `select c.id,c.source_id as "sourceId",c.kind,c.basis,c.next_action as "nextAction",c.revision,(c.actor_id is not null) as reviewed
+      const blockers = z
+        .array(blockerView)
+        .parse(
+          (
+            await db.query(
+              `select id,blocker_key as key,question,field,assignee_id as "assigneeId",next_action as "nextAction",state from signal_desk.evidence_blockers where opportunity_id=$1 order by id`,
+              [opportunityId],
+            )
+          ).rows,
+        );
+      const classifications = z.array(classificationView).parse(
+        (
+          await db.query(
+            `select c.id,c.source_id as "sourceId",c.kind,c.basis,c.next_action as "nextAction",c.revision,(c.actor_id is not null) as reviewed
       from signal_desk.source_classifications c where c.source_id=any($1::text[]) order by (c.actor_id is not null) desc,c.revision desc,c.id`,
-          [evidence.sources.map((s) => s.id)],
-        )
-      ).rows,
-    );
-    return {
-      opportunityId,
-      vehicleId,
-      ...header,
-      sources: evidence.sources,
-      claims: evidence.claims.filter((c) => c.visible),
-      reviews: evidence.reviews.filter(
-        (r) =>
-          r.actorId === actor.userId ||
-          evidence.claims.some((c) => c.id === r.claimId && c.visible),
-      ),
-      facts: evidence.facts,
-      jobs,
-      blockers,
-      classifications: classifications.filter(
-        (c, i, all) => all.findIndex((a) => a.sourceId === c.sourceId) === i,
-      ),
-      classificationHistory: classifications,
-      photos,
-      coverage,
-      photoRequest: suggestPhotoRequest({
+            [evidence.sources.map((s) => s.id)],
+          )
+        ).rows,
+      );
+      return {
         opportunityId,
         vehicleId,
-        revision: header.revision,
-        coverage,
-        evidenceSourceIds: photos.filter((p) => p.audience === "sales").map((p) => p.sourceId),
+        ...header,
+        sources: evidence.sources,
+        claims: evidence.claims.filter((c) => c.visible),
+        reviews: evidence.reviews.filter(
+          (r) =>
+            r.actorId === actor.userId ||
+            evidence.claims.some((c) => c.id === r.claimId && c.visible),
+        ),
+        facts: evidence.facts,
+        jobs,
         blockers,
-      }),
-    };
-  });
+        classifications: classifications.filter(
+          (c, i, all) => all.findIndex((a) => a.sourceId === c.sourceId) === i,
+        ),
+        classificationHistory: classifications,
+        photos,
+        coverage,
+        photoRequest: suggestPhotoRequest({
+          opportunityId,
+          vehicleId,
+          revision: header.revision,
+          coverage,
+          evidenceSourceIds: photos.filter((p) => p.audience === "sales").map((p) => p.sourceId),
+          blockers,
+        }),
+      };
+    },
+    "specialist",
+    "read",
+  );
 }
 
 /** Removes obsolete approvals atomically after evidence changes; never promotes model output.
@@ -573,6 +588,7 @@ export async function reviewEvidence(
   revision: number,
   raw: unknown,
 ) {
+  requireSession(actor);
   const command = parseEvidence(reviewSchema, raw);
   await evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     const current = await db.query<{ revision: number }>(
@@ -718,15 +734,15 @@ export type Workbench = Awaited<ReturnType<typeof getWorkbench>>;
 /** Lists only opportunities explicitly assigned to a current specialist.
  * @throws {AppError} For expired or revoked access.
  */
-export async function listEvidenceOpportunities(actor: Actor) {
+export async function listEvidenceOpportunities(actor: Actor, cursor = "") {
   const current = await refreshActor(actor);
   if (current.role !== "specialist") return [];
   const result = await database().query(
     `select o.id,v.title,o.next_action as "nextAction" from signal_desk.opportunities o
     join signal_desk.vehicles v on v.id=o.vehicle_id
     join signal_desk.opportunity_members m on m.opportunity_id=o.id
-    where m.user_id=$1 order by o.id limit 100`,
-    [current.userId],
+    where m.user_id=$1 and o.id>$2 order by o.id limit 100`,
+    [current.userId, cursor],
   );
   return z
     .array(z.object({ id: z.string(), title: z.string(), nextAction: z.string() }))

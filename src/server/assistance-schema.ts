@@ -2,6 +2,31 @@ import { z } from "zod";
 import { fieldSchema, fieldLabels } from "./evidence-schema";
 
 const text = z.string().trim().min(1).max(2000);
+/** Unsent drafts reference current evidence and inquiries; clients cannot fabricate a cited answer. */
+export const draftCommand = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("seller_request"),
+      inquiryId: z.string().trim().min(1).max(160),
+      revision: z.number().int().min(0),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("buyer_followup"),
+      inquiryId: z.string().trim().min(1).max(160),
+      revision: z.number().int().min(0),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("photo_request"),
+      revision: z.number().int().min(0),
+      recipientLabel: z.string().trim().min(1).max(200),
+      body: z.string().trim().min(1).max(10000),
+    })
+    .strict(),
+]);
 /** Structured terms preserve buyer intent without interpreting ambiguous prose as an offer. */
 export const inquiryInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("question"), text }).strict(),

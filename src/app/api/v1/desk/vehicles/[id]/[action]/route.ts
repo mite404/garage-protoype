@@ -1,5 +1,5 @@
-import { requireActor, requireSameOrigin } from "@/server/auth";
-import { requireOpportunity } from "@/server/access";
+import { requireHttpActor } from "@/server/auth";
+import { requireOpportunity, requireSession, requireWrite, requireSpending } from "@/server/access";
 import { AppError, failure, success } from "@/server/errors";
 import { addSource, parseEvidence, reviewEvidence } from "@/server/evidence";
 import { queueImport, loadSavedEvidence } from "@/server/imports";
@@ -12,9 +12,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string; action: string }> },
 ) {
   try {
-    const actor = await requireActor();
-    requireSameOrigin(request);
+    const actor = await requireHttpActor(request, true);
     const { id, action } = await params;
+    if (action === "reviews") requireSession(actor);
+    await requireWrite(actor);
+    if (action === "imports") await requireSpending(actor);
     const opportunityId = parseEvidence(
       z.string().min(1).max(200),
       new URL(request.url).searchParams.get("opportunityId"),
