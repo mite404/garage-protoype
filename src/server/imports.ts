@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { database } from "./db";
-import { requireSpending, resolveActor, type Actor } from "./access";
+import { requireSpending, requireWrite, resolveActor, resolveToken, type Actor } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
 import {
@@ -37,7 +37,8 @@ const jobSchema = z.object({
   id: z.string(),
   opportunity_id: z.string(),
   actor_id: z.uuid(),
-  session_id: z.uuid(),
+  session_id: z.uuid().nullable(),
+  app_token_id: z.uuid().nullable(),
   input: z.string(),
   model: z.string(),
   mode: z.enum(["provider", "saved_example"]),
@@ -98,17 +99,18 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
     const id = found.rows[0]?.id ?? randomUUID();
     if (!found.rowCount) {
       await db.query(
-        `insert into signal_desk.import_jobs(id,opportunity_id,actor_id,session_id,fingerprint,model,config,input,mode) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `insert into signal_desk.import_jobs(id,opportunity_id,actor_id,session_id,fingerprint,model,config,input,mode,app_token_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           id,
           opportunityId,
           actor.userId,
-          actor.credential.sessionId,
+          actor.credential.kind === "supabase-session" ? actor.credential.sessionId : null,
           fingerprint,
           input.model,
           configuration,
           JSON.stringify(snapshot),
           mode,
+          actor.credential.kind === "app-token" ? actor.credential.tokenId : null,
         ],
       );
       for (const sourceId of sourceIds)
@@ -146,6 +148,12 @@ async function activeJob(lease: Lease) {
   );
   if (!row.rowCount) throw new AppError(409, "STALE_WORKER", "Worker lease is no longer current.");
   return jobSchema.parse(row.rows[0]);
+}
+
+async function jobActor(job: z.infer<typeof jobSchema>) {
+  if (job.app_token_id) return resolveToken(job.app_token_id);
+  if (job.session_id) return resolveActor({ userId: job.actor_id, sessionId: job.session_id });
+  throw new AppError(401, "UNAUTHENTICATED", "Import credential is unavailable.");
 }
 
 function validateOutput(raw: string, sources: z.infer<typeof frozenSource>[]) {
@@ -199,7 +207,9 @@ function validateOutput(raw: string, sources: z.infer<typeof frozenSource>[]) {
 export async function processImport(lease: Lease, provider?: Provider) {
   const job = await activeJob(lease);
   try {
-    const actor = await resolveActor({ userId: job.actor_id, sessionId: job.session_id });
+    const actor = await jobActor(job);
+    await requireWrite(actor);
+    await requireSpending(actor);
     const snapshot = frozenInput.parse(JSON.parse(job.input));
     // Check every source again before its frozen text can reach a provider after a restart.
     const photos: string[] = [];
@@ -341,6 +351,9 @@ export async function retryImport(actor: Actor, id: string) {
     await requireSpending(actor, db);
     if (job.actor_id !== actor.userId)
       throw new AppError(403, "FORBIDDEN", "Only the original requester can retry this import.");
+    const original = await jobActor(job);
+    await requireWrite(original, db);
+    await requireSpending(original, db);
     for (const source of frozenInput.parse(JSON.parse(job.input)).sources)
       await getSource(actor, source.id, db);
     const locked = jobSchema.parse(

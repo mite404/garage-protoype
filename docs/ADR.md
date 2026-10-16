@@ -19,6 +19,8 @@ implemented functionality, and proposed entries remain open for review.
   retries must preserve provenance and corrections without publishing obsolete evidence.
 - ADR-015: Restrict inline chat output to authored reference-based cards because presentation
   validation must not replace server-owned authorization, evidence checks, or spending admission.
+- ADR-016: Use scoped application tokens and a local stdio MCP adapter over shared HTTPS operations
+  because terminal access must preserve server authorization, budgets, and human review.
 
 ## Proposed
 

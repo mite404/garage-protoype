@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireActor, requireSameOrigin } from "@/server/auth";
+import { requireHttpActor } from "@/server/auth";
 import { boundedBody } from "@/server/evidence-http";
 import { parseEvidence } from "@/server/evidence";
 import {
@@ -24,9 +24,9 @@ const command = z.discriminatedUnion("kind", [
 ]);
 
 /** Returns private assistance only to a currently assigned specialist. */
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireActor();
+    const actor = await requireHttpActor(request);
     const { id } = await context.params;
     await requireOpportunity(actor, id, "specialist");
     return success(await getAssistance(actor, id));
@@ -38,8 +38,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 /** Executes bounded shared sales operations. Card parsing never authorizes a business operation. */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const actor = await requireActor();
-    requireSameOrigin(request);
+    const actor = await requireHttpActor(request, true);
     const { id } = await context.params;
     await requireOpportunity(actor, id, "specialist");
     const input = parseEvidence(command, await (await boundedBody(request, 20000)).json());

@@ -14,6 +14,7 @@ import {
   inlineCard,
   inquiryInput,
   routeQuestion,
+  draftCommand,
   type InlineCard,
 } from "./assistance-schema";
 
@@ -47,30 +48,6 @@ const correction = z
     revision: z.number().int().min(0),
   })
   .strict();
-const draftCommand = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("seller_request"),
-      inquiryId: keySchema,
-      revision: z.number().int().min(0),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("buyer_followup"),
-      inquiryId: keySchema,
-      revision: z.number().int().min(0),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("photo_request"),
-      revision: z.number().int().min(0),
-      recipientLabel: z.string().trim().min(1).max(200),
-      body: z.string().trim().min(1).max(10000),
-    })
-    .strict(),
-]);
 
 function sameInput(a: unknown, b: unknown) {
   if (!isDeepStrictEqual(a, b))
@@ -416,6 +393,7 @@ export async function getAssistance(actor: Actor, opportunityId: string) {
       };
     },
     actor.role,
+    "read",
   );
 }
 
