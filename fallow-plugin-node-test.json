@@ -1,6 +1,6 @@
 {
   "name": "node-test",
   "detection": { "type": "fileExists", "pattern": "src/**/*.test.ts" },
-  "entryPoints": ["src/**/*.test.ts"],
+  "entryPoints": ["src/**/*.test.ts", "scripts/*.test.mjs"],
   "entryPointRole": "test"
 }

@@ -50,8 +50,10 @@ or debt baseline is installed. Next.js route entry points are detected by Fallow
 `fallow-plugin-node-test.json` declares the same native test roots as `npm test`. Fallow's default
 test-reachability estimate is not measured execution coverage or proof of live authentication.
 The worker CLI is an explicit entry point. `scripts/test.mjs` clears `coverage/`, then runs the
-same recursive native test glob with `NODE_V8_COVERAGE`. Fallow reads that newly generated directory
-at unchanged thresholds. Never substitute captured coverage from another checkout.
+recursive native application and tooling tests with `NODE_V8_COVERAGE`. It then normalizes file
+source-map URLs and cache keys so escaped dynamic-route names match V8's literal script URLs.
+Execution ranges and hit counts remain unchanged. Fallow reads that newly generated directory at
+unchanged thresholds. Never substitute captured coverage from another checkout.
 
 The evidence HTTP regression launches the actual production app with synthetic credentials against
 a local test-only identity provider. It checks rendered conflict/unknown states, public approval,
