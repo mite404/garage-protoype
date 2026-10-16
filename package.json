@@ -20,6 +20,7 @@
     "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
     "@tailwindcss/postcss": "4.3.3",
