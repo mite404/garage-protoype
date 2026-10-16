@@ -17,7 +17,7 @@ Node 22 LTS and npm are required. TypeScript tests use native `node:test` throug
 - `GET /api/v1/buyer/opportunities/:id` returns only `{data: {id, vehicleId}}` to its owning buyer.
 - `GET /api/v1/desk/sources/:id/content` downloads authorized source bytes as an attachment.
 - `GET /api/v1/public/vehicles/:id` returns the published public projection in `{data}`. Facts
-  require both approval and permission to share. Photos and coverage are empty until ETH-76.
+  require both approval and permission to share. ETH-76 adds approved photos and public coverage.
 - Buyer inquiry POST routes still deny processing. ETH-75 implements the source, import, review,
   and retry routes described below, with record checks and ETH-74 inference admission.
 
@@ -156,7 +156,7 @@ documents. No message, commercial assurance, or response draft is created or sen
 - `queueImport(actor, opportunityId, {sourceIds, model, key})` authorizes every source before
   freezing its pages, hash, kind, provenance, and extraction instruction. The maximum packet is
   20 sources. Deduplication includes the opportunity, exact source IDs/hashes, model, and
-  `evidence-v1` configuration. Change the configuration version when extraction rules change.
+  `evidence-v2-photos` configuration. Change the version when extraction rules change.
 - `claimImport(id?)` claims one queued or expired job with a 60-second lease and increasing fence.
 - `processImport(lease, provider?)` rechecks access, calls only `runInference` for provider mode,
   validates exact citations and field units, and fences its atomic commit. A stale worker cannot
@@ -200,6 +200,55 @@ PDF extraction requires the OS `pdftotext` executable (`poppler-utils`), with a 
 returns `503 PDF_UNAVAILABLE`. Unreadable or scanned PDFs fail explicitly; OCR is not implemented.
 Hosted PostgreSQL grants/locking and live Supabase verification remain unverified. Provider-specific
 tokenizer, framing, pricing bounds, and live extraction quality also remain unverified.
+
+## Implemented ETH-76 photo boundary
+
+Photos extend the existing sources, import jobs, review transaction, and opportunity blockers.
+There is no separate upload, worker, or draft store. `db/004-photos.sql` adds append-only machine
+suggestions and human reviews. A worker can append a suggestion but cannot replace a human review.
+
+- `addSource` also accepts `kind: "photo"` with `image/png` or `image/jpeg`, up to 5 MiB. Declared
+  MIME must match the signature. Original bytes, SHA256, permission, and provenance are preserved.
+  Photo bytes never enter text extraction or specification claims. Photos may link `blockerId` to
+  the originating opportunity task. Authorized source routes serve these images inline; other
+  source types remain attachments.
+- View keys are `front`, `rear`, `driver_side`, `passenger_side`, `cab`, `pump_panel`, `odometer`,
+  `identification_plate`, and `unknown`. Unknown is a review state, not a ninth required view.
+- Existing import jobs freeze MIME with source metadata. Only authorized original data URLs enter
+  `runInference.photos`; all photo counts, spending, retries, and concurrency remain under ETH-74.
+  Output requires exactly one `{sourceId, view, readable, reason}` suggestion per photo. Non-photo
+  classifications remain required. Photos cannot produce specification claims or public approval.
+  The app has no installed live vision adapter. Missing configuration remains explicitly
+  unavailable; controlled provider tests prove wiring and admission, not live vision quality.
+- The existing review route accepts
+  `{kind: "reviewPhoto", sourceId, view, readable, approved, reason}` with current quoted
+  `If-Match`.
+  Notes are required and bounded to 1,000 characters. Public approval requires a readable known view
+  and a sales-audience source with explicit sharing permission. Stale reviews return `412`.
+- `getWorkbench` adds `photos`, `coverage`, and `photoRequest`. Each photo retains `suggestion` and
+  `review` separately; `effective` prefers the latest human decision. Coverage has eight entries
+  `{view, state, sourceIds}`. States are `covered`, `missing`, `unreadable`, and `needs_review`.
+  Only human-reviewed readable evidence counts as covered. Unknown, unreviewed, and unreadable
+  photos remain incomplete. Identical image hashes count once, with the newest human decision
+  taking precedence. Private photos never resolve shared coverage or shared blockers.
+- Stable opportunity blocker keys are `photo:<view>`. Uploads and reviews refresh those same tasks,
+  preserving their IDs and assignees. A human correction or later suggestion updates coverage
+  without erasing original evidence or inventing another buyer opportunity.
+- `suggestPhotoRequest` is pure content generation, not persistence. Its result includes
+  `kind: "photo_evidence_request"`, `status: "unsent_suggestion"`, opportunity/vehicle IDs,
+  `basisRevision`, `evidenceSourceIds` (including shared unknown photos), a placeholder
+  `recipientLabel`, editable `body`, and `gaps`. Each gap carries view/state/source IDs, stable
+  `blockerKey`, and the existing task's `blockerId`, `question`, and `assigneeId`. Those three task
+  fields are null before the first photo upload creates tasks. ETH-77 must reauthorize references
+  and recheck revision when persisting a final draft. No suggested contact is treated as verified.
+- Public vehicles contain only explicitly approved, readable, shareable photos and coverage derived
+  from that same public subset. `GET /api/v1/public/media/:id` rechecks latest approval on every
+  request and serves exact image bytes with `no-store`; withdrawal returns `404`. Private source
+  URLs, hashes, review notes, provenance, and machine suggestions never enter the public projection.
+
+Coverage is evidence availability, not mechanical condition, roadworthiness, or a completed
+inspection. The authored workbench offers editable unsent previews but cannot save or send them.
+ETH-77 owns final persisted drafts and follow-up operations. No generated views are provided.
 
 The [product plan][plan] owns scope and acceptance examples. [ADR.md](ADR.md) owns the formal
 decision status. This reference adapts the [architecture candidate][candidate] to the later

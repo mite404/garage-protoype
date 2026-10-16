@@ -11,6 +11,8 @@ import { database } from "./db";
 import { refreshActor, requireOpportunity, type Actor } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
+import { appendPhotoReview, readPhotos, refreshPhotoBlockers } from "./photos";
+import { photoCoverage, suggestPhotoRequest } from "./photo-schema";
 import {
   canonicalValue,
   classificationKind,
@@ -23,9 +25,16 @@ const exec = promisify(execFile);
 const sourceInput = z
   .object({
     name: z.string().trim().min(1).max(200),
-    mediaType: z.enum(["text/plain", "application/pdf"]),
+    mediaType: z.enum(["text/plain", "application/pdf", "image/png", "image/jpeg"]),
     content: z.instanceof(Buffer).refine((b) => b.length > 0 && b.length <= 10485760),
-    kind: z.enum(["document", "seller_note", "private_note", "inquiry", "seller_response"]),
+    kind: z.enum([
+      "document",
+      "seller_note",
+      "private_note",
+      "inquiry",
+      "seller_response",
+      "photo",
+    ]),
     audience: z.enum(["private", "sales"]).default("private"),
     shareable: z.boolean().default(false),
     permission: z.enum(["synthetic", "permissioned"]),
@@ -203,13 +212,26 @@ export async function addSource(actor: Actor, opportunityId: string, raw: unknow
     (input.audience !== "sales" || ["private_note", "inquiry"].includes(input.kind))
   )
     throw new AppError(422, "PRIVATE_SOURCE", "Private context cannot authorize publication.");
-  if ((input.kind === "seller_response") !== Boolean(input.blockerId))
+  if (input.kind !== "photo" && (input.kind === "seller_response") !== Boolean(input.blockerId))
     throw new AppError(
       422,
       "BLOCKER_REQUIRED",
       "Seller responses must link to their originating blocker.",
     );
-  const pages = await extractPages(input.content, input.mediaType);
+  const image = input.mediaType.startsWith("image/");
+  if (image !== (input.kind === "photo"))
+    throw new AppError(415, "INVALID_PHOTO", "Use photo source type for PNG or JPEG uploads.");
+  if (image) {
+    const png = input.content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const jpeg = input.content[0] === 255 && input.content[1] === 216 && input.content[2] === 255;
+    if ((input.mediaType === "image/png" ? !png : !jpeg) || input.content.length > 5242880)
+      throw new AppError(
+        415,
+        "INVALID_PHOTO",
+        "Provide a PNG or JPEG up to 5 MiB. The declared type must match its bytes.",
+      );
+  }
+  const pages = image ? [] : await extractPages(input.content, input.mediaType);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     if (input.blockerId) {
       const blocker = await db.query(
@@ -257,7 +279,7 @@ export async function addSource(actor: Actor, opportunityId: string, raw: unknow
       ],
     );
     await db.query("update signal_desk.vehicles set revision=revision+1 where id=$1", [vehicleId]);
-    if (!["private_note", "inquiry"].includes(input.kind)) {
+    if (!["private_note", "inquiry", "photo"].includes(input.kind)) {
       await db.query("delete from signal_desk.public_facts where vehicle_id=$1", [vehicleId]);
       await db.query(
         "update signal_desk.evidence_blockers set state='needs_review' where opportunity_id in (select id from signal_desk.opportunities where vehicle_id=$1)",
@@ -268,6 +290,7 @@ export async function addSource(actor: Actor, opportunityId: string, raw: unknow
       await db.query("update signal_desk.evidence_blockers set state='needs_review' where id=$1", [
         input.blockerId,
       ]);
+    if (image) await refreshPhotoBlockers(db, actor, opportunityId);
     return { id, sha256: hash };
   });
 }
@@ -348,7 +371,7 @@ async function packet(db: PoolClient, actor: Actor, opportunityId: string, vehic
   const reviews = z.array(reviewView).parse(decisions.rows);
   const pending = await db.query<{ pending: boolean }>(
     `select exists(select 1 from signal_desk.sources s join signal_desk.opportunities o on o.id=s.opportunity_id
-    where o.vehicle_id=$1 and s.kind not in ('private_note','inquiry') and not exists
+    where o.vehicle_id=$1 and s.kind not in ('private_note','inquiry','photo') and not exists
     (select 1 from signal_desk.import_sources js join signal_desk.import_jobs j on j.id=js.job_id where js.source_id=s.id and j.state='ready')) as pending`,
     [vehicleId],
   );
@@ -366,6 +389,8 @@ async function packet(db: PoolClient, actor: Actor, opportunityId: string, vehic
 export async function getWorkbench(actor: Actor, opportunityId: string) {
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     const evidence = await packet(db, actor, opportunityId, vehicleId);
+    const photos = await readPhotos(db, actor, opportunityId);
+    const coverage = photoCoverage(photos.filter((p) => p.audience === "sales"));
     const header = z
       .object({
         title: z.string(),
@@ -427,6 +452,16 @@ export async function getWorkbench(actor: Actor, opportunityId: string) {
         (c, i, all) => all.findIndex((a) => a.sourceId === c.sourceId) === i,
       ),
       classificationHistory: classifications,
+      photos,
+      coverage,
+      photoRequest: suggestPhotoRequest({
+        opportunityId,
+        vehicleId,
+        revision: header.revision,
+        coverage,
+        evidenceSourceIds: photos.filter((p) => p.audience === "sales").map((p) => p.sourceId),
+        blockers,
+      }),
     };
   });
 }
@@ -483,7 +518,7 @@ export async function refreshEvidenceProjection(
 }
 
 function factDecision(
-  command: Exclude<z.infer<typeof reviewSchema>, { kind: "classify" }>,
+  command: Exclude<z.infer<typeof reviewSchema>, { kind: "classify" | "reviewPhoto" }>,
   evidence: Awaited<ReturnType<typeof packet>>,
 ) {
   const fact = evidence.facts.find((f) => f.field === command.field);
@@ -546,7 +581,10 @@ export async function reviewEvidence(
     if (current.rows[0]?.revision !== revision)
       throw new AppError(412, "STALE_REVIEW", "Evidence changed. Reload before reviewing.");
     const evidence = await packet(db, actor, opportunityId, vehicleId);
-    if (command.kind === "classify") {
+    if (command.kind === "reviewPhoto") {
+      await appendPhotoReview(db, actor, opportunityId, revision, command);
+      await refreshPhotoBlockers(db, actor, opportunityId);
+    } else if (command.kind === "classify") {
       const source = evidence.sources.find((s) => s.id === command.sourceId);
       if (!source) throw new AppError(404, "NOT_FOUND", "Source not found.");
       await db.query(
