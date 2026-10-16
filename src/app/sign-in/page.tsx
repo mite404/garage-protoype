@@ -18,12 +18,9 @@ export default async function SignIn({
       </p>
       <div className="panel">
         {!configured && (
-          <p
-            role="status"
-            className="mb-6 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
-          >
+          <output className="mb-6 block rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             Sign-in is not configured yet. No live authentication or processing is available.
-          </p>
+          </output>
         )}
         {error && (
           <p role="alert" className="mb-6 text-sm text-red-800">

@@ -51,9 +51,13 @@ export async function requireActor(client?: PoolClient) {
   const supabase = await authClient();
   const { data, error } = await supabase.auth.getClaims();
   const claims = z
-    .object({ sub: z.uuid(), session_id: z.uuid(), exp: z.number() })
+    .object({
+      sub: z.uuid(),
+      session_id: z.uuid(),
+      exp: z.number().refine((expiry) => expiry * 1000 > Date.now()),
+    })
     .safeParse(data?.claims);
-  if (error || !claims.success || claims.data.exp * 1000 <= Date.now())
+  if (error || !claims.success)
     throw new AppError(401, "UNAUTHENTICATED", "Session has expired or is invalid.");
   const user = await supabase.auth.getUser();
   if (

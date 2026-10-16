@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+  git fetch --quiet --unshallow origin
+fi
+
+node_version="$(cat .node-version)"
+toolchain="$HOME/.local/share/signal-desk-node"
+node_bin="$toolchain/node_modules/node/bin"
+
+if [[ ! -x "$node_bin/node" ]] || [[ "$("$node_bin/node" --version)" != "v$node_version" ]]; then
+  npm install --prefix "$toolchain" --no-save "node@$node_version"
+fi
+
+export PATH="$node_bin:$PATH"
+profile_marker="# Signal Desk Node toolchain"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
+  export PATH="$node_bin:\$PATH"
+fi
+EOF
+fi
+
+node --version
+npm ci
+npm exec -- lefthook check-install
+npm exec -- fallow --version

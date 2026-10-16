@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { requireSameOrigin } from "./auth";
 import { AppError, failure } from "./errors";
 import { resolveActor } from "./access";
+import { POST as signIn } from "../app/auth/sign-in/route";
 
 test("malformed identity is denied before any database connection", async () => {
   await assert.rejects(resolveActor({ userId: "user-selected", sessionId: "fake" }), {
@@ -36,6 +37,21 @@ test("cross-site mutations are denied and internal errors are sanitized", async 
         requireSameOrigin(new Request("https://signal.example/auth/sign-out", { method: "POST" })),
       { status: 403 },
     );
+    const deniedSignIn = await signIn(
+      new Request("https://signal.example/auth/sign-in", {
+        method: "POST",
+        headers: { Origin: "https://evil.example" },
+      }),
+    );
+    assert.equal(deniedSignIn.status, 403);
+    assert.equal(deniedSignIn.headers.get("Cache-Control"), "no-store");
+    assert.deepEqual(await deniedSignIn.json(), {
+      error: {
+        code: "ORIGIN_DENIED",
+        message: "Request origin is not permitted.",
+        retryable: false,
+      },
+    });
     const response = failure(new Error("provider-secret and PRIVATE NOTE"));
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("Cache-Control"), "no-store");

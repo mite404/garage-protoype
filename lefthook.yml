@@ -1,0 +1,4 @@
+pre-commit:
+  jobs:
+    - name: quality
+      run: npm run check

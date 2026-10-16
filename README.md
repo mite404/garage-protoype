@@ -30,8 +30,7 @@ Follow [the auth setup guide](docs/auth-setup.md) to configure the database and 
 ## Verify locally
 
 ```sh
-npm run typecheck
-npm test
+npm run check
 npm run build
 ```
 
@@ -42,8 +41,8 @@ and roll back their fixtures. They create a minimal local `auth.sessions` table 
 checks, not a replacement authentication service. `CI=true` requires this database configuration.
 
 Set `TEST_APP_URL` to a running local app to exercise HTTP access and processing denials. HTTP tests
-skip when the app is absent. Database tests skip outside CI when their URL is absent. Neither skip
-is evidence of live Supabase sign-in, sign-out, or token-refresh behavior.
+skip locally when the app is absent and fail in CI without its URL. Database tests skip outside CI
+when their URL is absent. Neither skip verifies live Supabase sign-in, sign-out, or token refresh.
 
 ## Project brief
 
@@ -58,3 +57,6 @@ reference. Its ETH-73 section distinguishes implemented routes from remaining pr
 
 Use synthetic or permissioned demo material. Do not scrape Garage or republish its listing assets
 without permission. Keep credentials out of Git.
+
+See [development checks and ticket ownership](docs/development.md) for Lefthook, Fallow, CI, and
+implementation dependencies.

@@ -37,10 +37,10 @@ These are common instructions for Ethan's agents across all scenarios.
 - Never manually modify changelog.md files or any files that are marked as auto-generated.
 - When writing or editing Markdown files, keep every physical line at or under 100 columns, wrapping
   longer lines at word boundaries.
-  Planned enforcement: a pre-commit hook in `lefthook.yml` runs `scripts/wrap-md.js` on staged
-  markdown, leaving code fences, tables, and headings intact - so this is the rule to follow, not
-  one-sentence-per-line.
-  The hook and script are not installed yet; enforce the rule manually until then.
+  `npm run check:docs` enforces this without rewriting prose, code fences, tables, or headings.
+- Before committing, run `npm run check`. Lefthook runs the same gate automatically.
+  Fallow checks changed-code structure; types and behavioral tests remain separate checks.
+  See [development checks](docs/development.md) for setup, CI, and test prerequisites.
 - When making technical decisions, do not give much weight to development cost.
   Instead prefer quality, simplicity, robustness, scalability, and long-term maintainability.
   "Development cost" here means a human-scale effort estimate.

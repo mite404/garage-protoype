@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 const origin = process.env.TEST_APP_URL;
+if (process.env.CI && !origin) throw new Error("CI requires TEST_APP_URL.");
 
 test(
   "anonymous HTTP callers cannot read private records or initiate processing",

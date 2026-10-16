@@ -34,6 +34,10 @@ That unit still owns its locks and budget accounting.
 An unquoted shell glob can expand before Node sees it and miss deeply nested tests. The npm test
 command quotes `src/**/*.test.ts`, so Node 22 performs recursive discovery itself.
 
+Fallow did not automatically recognize those native test roots. A small plugin now declares the
+same glob to its analysis graph. That fixes its test-reachability estimate, not runtime coverage.
+The shared quality gate still executes PostgreSQL and HTTP checks separately.
+
 A signed access token can survive logout. The application checks its session ID against the live
 `auth.sessions` table as well as verifying identity. A removed or expired session cannot pass that
 second check. Local PostgreSQL tests exercise this rule; hosted sign-in remains unverified until
