@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { z } from "zod";
 import type { Workbench } from "@/server/evidence";
 import { classificationKind, fieldLabels } from "@/server/evidence-schema";
@@ -40,7 +40,13 @@ async function postEvidence(path: string, body: FormData | string, revision?: nu
 }
 
 /** Finite developer-authored review UI. All mutations return to authorized server operations. */
-export default function EvidenceWorkbench({ view }: { view: Workbench }) {
+export default function EvidenceWorkbench({
+  view,
+  conversation,
+}: {
+  view: Workbench;
+  conversation: ReactNode;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
@@ -108,6 +114,7 @@ export default function EvidenceWorkbench({ view }: { view: Workbench }) {
           View public record ↗
         </Link>
       </div>
+      {conversation}
       <div className="evidence-summary mt-7">
         <span>
           <strong>{view.sources.length}</strong> sources preserved

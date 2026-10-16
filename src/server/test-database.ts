@@ -24,4 +24,7 @@ export async function prepareTestDatabase(db: PoolClient) {
   const photos = await db.query("select to_regclass('signal_desk.photo_reviews') as name");
   if (!photos.rows[0]?.name)
     await db.query(await readFile(new URL("../../db/004-photos.sql", import.meta.url), "utf8"));
+  const assistance = await db.query("select to_regclass('signal_desk.inquiries') as name");
+  if (!assistance.rows[0]?.name)
+    await db.query(await readFile(new URL("../../db/005-assistance.sql", import.meta.url), "utf8"));
 }

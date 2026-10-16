@@ -146,3 +146,23 @@ public approval; withdrawing that approval makes the media URL return 404 even i
 the URL. Images bypass Next.js optimization so private originals cannot enter its shared cache.
 An unsent request preview is also not a saved draft. Its revision and source/task references give
 the next workflow enough context to recheck the evidence before persisting a final version.
+
+The buyer handoff now connects those pieces. Think of the inline card catalog as four approved
+graphics templates in post-production: answer, review, handoff, and draft. A caller supplies a
+result reference, not its own numbers or executable artwork. The server fetches the permitted
+evidence before filling the template. A correct prop shape does not make an assertion true.
+
+An explicit offer keeps its amount, timing, conditions, and unanswered questions. A sentence such
+as "Could $165,000 work?" stays a human-review item instead of becoming a fabricated offer. The
+current chat recognizes bounded single-field questions, not general language understanding, and
+says so on screen. No live model is installed.
+
+Seller follow-up is a review chain: buyer blocker, unsent seller request, permissioned response,
+human evidence approval, then cited unsent buyer follow-up. Reviewing one answer never accepts
+the offer or resolves its other conditions. Drafts keep their evidence revision and become stale
+when evidence changes, just as an edit made against yesterday's footage needs another review.
+
+Malformed card calls keep a durable count per tool and logical turn. Retrying the same call does
+not increment the count, and retrying the turn cannot reset it. Two distinct rejected calls retire
+only that tool for that turn. Missing evidence is a different outcome: a valid request for an
+unavailable fact needs human review, not repeated prop repairs.

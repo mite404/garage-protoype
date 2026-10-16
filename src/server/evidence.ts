@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { database } from "./db";
-import { refreshActor, requireOpportunity, type Actor } from "./access";
+import { refreshActor, requireOpportunity, type Actor, type Role } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
 import { appendPhotoReview, readPhotos, refreshPhotoBlockers } from "./photos";
@@ -131,20 +131,21 @@ export async function evidenceTransaction<T>(
   actor: Actor,
   opportunityId: string,
   action: (db: PoolClient, vehicleId: string) => Promise<T>,
+  role: Role = "specialist",
 ) {
   const db = await database().connect();
   try {
     await db.query("begin");
     await db.query("set local lock_timeout='5s'");
     await db.query("select signal_desk.lock_evidence_access()");
-    const opportunity = await requireOpportunity(actor, opportunityId, "specialist", db);
+    const opportunity = await requireOpportunity(actor, opportunityId, role, db);
     await db.query("select id from signal_desk.vehicles where id=$1 for update", [
       opportunity.vehicle_id,
     ]);
     await db.query("select id from signal_desk.opportunities where id=$1 for update", [
       opportunityId,
     ]);
-    await requireOpportunity(actor, opportunityId, "specialist", db);
+    await requireOpportunity(actor, opportunityId, role, db);
     const result = await action(db, opportunity.vehicle_id);
     await db.query("commit");
     return result;
