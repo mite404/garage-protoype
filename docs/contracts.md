@@ -62,6 +62,8 @@ research evidence, not automatic approval of every candidate detail.
   terminal clients. Both clients must obey the same permissions and spending controls.
 - Ethan prefers verified Garage stack parity over Better Auth. Public JavaScript and the observed
   OAuth callback establish Supabase Auth for Garage's web login, not every Garage service.
+- Ethan selected Yaklabs-style typed inline cards, not its visual design or runtime. Card contracts
+  validate presentation only; Signal Desk retains authorization, evidence review, and spending.
 
 ### Selected implementation direction, not formal ADR acceptance
 
@@ -139,6 +141,27 @@ Proposed ownership, not existing files:
 
 Module names may change without changing the HTTP contract. No repository-class hierarchy, vector
 database, Redis queue, separate Express service, or second sales-agent implementation is required.
+
+## Agreed specialist chat presentation boundary
+
+The specialist can request results in natural language. Inline output uses a finite catalog of
+developer-authored components with strict required and optional props. The model cannot generate
+bespoke HTML, JSX, SVG, executable chart specifications, or standalone visual artifacts as answers.
+Visual styling belongs to this project; reuse the contract pattern, not Yaklabs' whole application.
+
+UI-card schema validation rejects malformed or unknown props before rendering. The second malformed
+call retires that tool for the rest of the logical turn. Counts survive retries of that turn and
+reset for a new turn. Authorization and evidence failures remain separate business outcomes, not
+prop errors to fix by retrying until accepted.
+
+Shape-valid props are not proof of factual accuracy. The model requests server-owned result
+references; authorized operations resolve facts, citations, units, and any chart datasets. Unknown
+or conflicting evidence renders an explicit review state with the missing or disputed material
+and the next human action, never a verified fact. Prose answers need evidence checks too.
+
+Exact catalog members, prop schemas, streaming events, and chat HTTP routes remain implementation
+proposals owned by ETH-77. Keep the planned application and durable worker; this does not require
+another daemon. Client disconnects must not silently lose work or cause duplicate paid attempts.
 
 ## Identity and spending boundaries
 
