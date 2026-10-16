@@ -17,6 +17,8 @@ implemented functionality, and proposed entries remain open for review.
   concurrent clients, retries, and uncertain provider outcomes must not bypass spending caps.
 - ADR-014: Append source claims and human reviews separately with fenced import commits because
   retries must preserve provenance and corrections without publishing obsolete evidence.
+- ADR-015: Restrict inline chat output to authored reference-based cards because presentation
+  validation must not replace server-owned authorization, evidence checks, or spending admission.
 
 ## Proposed
 

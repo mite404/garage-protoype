@@ -18,8 +18,8 @@ Node 22 LTS and npm are required. TypeScript tests use native `node:test` throug
 - `GET /api/v1/desk/sources/:id/content` downloads authorized source bytes as an attachment.
 - `GET /api/v1/public/vehicles/:id` returns the published public projection in `{data}`. Facts
   require both approval and permission to share. ETH-76 adds approved photos and public coverage.
-- Buyer inquiry POST routes still deny processing. ETH-75 implements the source, import, review,
-  and retry routes described below, with record checks and ETH-74 inference admission.
+- ETH-77 implements deterministic buyer inquiry routing and human handoffs. ETH-75 implements the
+  source, import, review, and retry routes below, with record checks and ETH-74 inference admission.
 
 Protected HTTP reads and all JSON envelopes use `Cache-Control: no-store`. Inaccessible records
 return `404 NOT_FOUND`. Wrong-role actions return `403 FORBIDDEN`. Invalid or ended sessions return
@@ -47,8 +47,8 @@ configuration and remaining live checks.
 `src/server/model.ts` exports `runInference(actor, request, provider?)`.
 HTTP operations, the worker, and future MCP operations must use this shared operation rather than
 call a provider directly.
-Only implemented workflow operations can queue processing. Buyer inquiry processing remains
-disabled.
+Only implemented workflow operations can queue processing. Buyer inquiries use deterministic
+reviewed-evidence lookup and human routing, not paid model processing.
 No live provider adapter, provider purchase, default budget, or enabled model is installed.
 
 The request contains `key`, `opportunityId`, `model`, `input`, `photos`, and `attempt` (default 1).
@@ -366,9 +366,69 @@ references; authorized operations resolve facts, citations, units, and any chart
 or conflicting evidence renders an explicit review state with the missing or disputed material
 and the next human action, never a verified fact. Prose answers need evidence checks too.
 
-Exact catalog members, prop schemas, streaming events, and chat HTTP routes remain implementation
-proposals owned by ETH-77. Keep the planned application and durable worker; this does not require
-another daemon. Client disconnects must not silently lose work or cause duplicate paid attempts.
+ETH-77 implements the finite catalog and non-streaming chat routes below. The existing application
+and durable worker remain unchanged. No separate daemon or language-model adapter is installed.
+
+## Implemented ETH-77 buyer assistance and chat
+
+`db/005-assistance.sql` adds append-only inquiries, routing decisions, unsent drafts, logical chat
+turns, and card-call outcomes. `src/server/assistance.ts` owns the shared operations. They reuse
+the evidence transaction, current session and opportunity permissions, and existing blocker records.
+There are no external sending, acceptance, counteroffer, payment, or delivery operations.
+
+- `submitInquiry(actor, opportunityId, input, key)` records an inquiry on an existing opportunity.
+  Strict inputs are `{kind:"question", text}`, `{kind:"fact", text, field}`, or an explicit
+  `{kind:"offer", text, amountMinor, currency:"USD", timingText, conditions, unansweredQuestions}`.
+  Amounts are positive integer cents. Original text and terms remain unchanged. Unknown wording
+  becomes `human_review`, never an inferred offer. Whole single-field labels and bounded questions
+  such as "What is the tank capacity?" use current approved public evidence without inference.
+- R12 states are `supported`, `missing_evidence`, `conflict`, `human_review`, and
+  `conditional_offer`. Each inquiry retains its initial basis and subsequent specialist corrections.
+  `correctInquiry(actor, opportunityId, inquiryId, input)` appends a required field or null, reason,
+  next action, and expected routing revision. Stale corrections return `412`. Corrections cannot
+  rewrite structured offer terms or convert prose into an offer.
+- Stable `inquiry:<id>` blockers retain the question, assigned specialist, and next action.
+  Unknown and conflicting answers return explicit review cards. Handoffs retain amount, timing,
+  conditions, and unanswered questions with `recorded_not_accepted`, never acceptance.
+- `getAssistance(actor, opportunityId)` resolves current evidence on every read. Buyer views exclude
+  specialist chat, internal routing history, private next-action text, and unsent drafts. Another
+  buyer cannot retrieve the opportunity. Citations expose only the existing approved source label
+  and excerpt, not a whole source or a fabricated page locator.
+- `createDraft(actor, opportunityId, input, key)` persists `seller_request`, `buyer_followup`, or
+  edited `photo_request` content as unsent. All require the current evidence revision. Follow-ups
+  require a reviewed, shareable seller response linked to that inquiry's exact blocker. Drafts
+  retain their review and evidence basis and display stale after evidence changes. Photo requests
+  retain the upstream suggestion's source and task references after reauthorization. Recipient
+  labels remain unverified. No delivery action exists.
+- `beginChatTurn(actor, opportunityId, message, key)` persists a specialist turn and inquiry
+  atomically. Identical retries return the same turn. This bounded language path has no live model
+  and routes unsupported wording to human review. It does not claim general language understanding.
+- `renderCardCall(actor, opportunityId, turnId, callId, call)` validates presentation only. The
+  finite tools are `answer`, `review`, and `handoff` with required `props.inquiryId`, plus `draft`
+  with required `props.draftId`. No optional props exist yet. Unknown props, invented values,
+  markup, and chart specifications are rejected. Valid references resolve through authorized
+  server operations, not through caller-supplied facts.
+- Two distinct malformed calls retire that named tool for the logical turn. Persisted call IDs
+  make retries idempotent and rejection counts survive process restarts. Other tools and new turns
+  remain available. Unavailable or unauthorized result references do not count as malformed props.
+  Replaying accepted calls rechecks current evidence rather than returning a stale stored fact.
+
+HTTP routes use the existing `{data}` or `{error}` envelopes and protected `no-store` responses:
+
+- `GET /api/v1/desk/opportunities/:id/assistance` returns specialist assistance.
+- `POST` on that path accepts strict `chat`, `inquiry`, `draft`, `correct`, or `card` commands.
+  Chat uses `{kind:"chat", message}`. Inquiry and draft use `{kind, input}`. Correction adds
+  `inquiryId`. Card uses `{kind:"card", turnId, callId, call}`. Creates require `Idempotency-Key`.
+- `GET` and `POST /api/v1/buyer/vehicles/:id/inquiries?opportunityId=...` require an invited buyer
+  owning that exact linked opportunity. POST accepts the strict inquiry input and idempotency key.
+  Mutations require same-origin requests and bounded bodies. These deterministic operations require
+  no spending permission and dispatch no paid attempts.
+
+The specialist screen adds bounded chat and human follow-up controls above the existing workbench.
+The public vehicle links invited buyers to their own existing conversations at
+`/buyer/vehicles/:id` and `/buyer/opportunities/:id`. These links create no leads.
+Behavioral tests use real disposable PostgreSQL and production HTTP with controlled synthetic auth.
+Hosted auth, live extraction, vision, language-model quality, and live delivery remain unverified.
 
 ## Identity and spending boundaries
 

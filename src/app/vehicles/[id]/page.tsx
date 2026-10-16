@@ -1,5 +1,6 @@
 import { getPublicVehicle } from "@/server/records";
 import Image from "next/image";
+import Link from "next/link";
 import { AppError } from "@/server/errors";
 import { photoLabels } from "@/server/photo-schema";
 
@@ -27,6 +28,12 @@ export default async function Vehicle({ params }: { params: Promise<{ id: string
       <p className="eyebrow mb-4">Approved public record</p>
       <h1>{vehicle.title}</h1>
       <p className="mt-4 text-sm text-stone-500">{vehicle.prototypeLabel}</p>
+      <Link className="button mt-5" href={`/buyer/vehicles/${encodeURIComponent(vehicle.id)}`}>
+        Ask a question or record offer terms
+      </Link>
+      <p className="mt-2 text-xs text-stone-500">
+        Invited buyer account required. No external sending or offer acceptance.
+      </p>
       <div className="panel mt-8 max-w-3xl">
         <h2>Reviewed specifications</h2>
         {vehicle.facts.length === 0 && (
