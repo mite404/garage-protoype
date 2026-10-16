@@ -184,3 +184,15 @@ Malformed card calls keep a durable count per tool and logical turn. Retrying th
 not increment the count, and retrying the turn cannot reset it. Two distinct rejected calls retire
 only that tool for that turn. Missing evidence is a different outcome: a valid request for an
 unavailable fact needs human review, not repeated prop repairs.
+
+The [ETH-79 evaluation](evaluation.md) now checks the connected application with 18 frozen synthetic
+conversations, production HTTP, local PostgreSQL, and a real stdio MCP client. Eight development and
+ten held-out cases test the finite recognizer, not a general language model. Saved extraction and a
+controlled report callback cannot measure live extraction quality, provider prices, or actual-photo
+readability. Zero actual-photo samples means unavailable, not perfect coverage accuracy.
+
+A reviewed answer can invalidate yesterday's chat card. The browser rehearsal observed the old
+card becoming unavailable after review, then a fresh question returning the approved value and
+exact source citation. This is evidence freshness working, not a reason to cache the old answer.
+An explicit unknown remains an assigned next action, and the saved-feedback message confirms that
+nothing was sent. No revenue or human-time benefit has been measured.

@@ -63,3 +63,6 @@ without permission. Keep credentials out of Git.
 
 See [development checks and ticket ownership](docs/development.md) for Lefthook, Fallow, CI, and
 implementation dependencies.
+
+See [ETH-79 evaluation results](docs/evaluation.md) for the frozen conversation corpus, real-stack
+acceptance checks, rerun commands, measured accounting, and explicitly unavailable live trials.
