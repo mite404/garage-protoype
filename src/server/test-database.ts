@@ -13,4 +13,7 @@ export async function prepareTestDatabase(db: PoolClient) {
   const existing = await db.query("select to_regclass('signal_desk.identities') as name");
   if (!existing.rows[0]?.name)
     await db.query(await readFile(new URL("../../db/001-foundation.sql", import.meta.url), "utf8"));
+  const inference = await db.query("select to_regclass('signal_desk.inference_models') as name");
+  if (!inference.rows[0]?.name)
+    await db.query(await readFile(new URL("../../db/002-inference.sql", import.meta.url), "utf8"));
 }

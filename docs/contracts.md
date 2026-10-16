@@ -34,14 +34,84 @@ They use that transaction, not another pool connection. `database()` returns the
 that need to begin a transaction. `Actor.credential` retains a Supabase session ID, never a token or
 password. Bearer application credentials and their lifecycle belong to ETH-78.
 
-`canSpend` is not budget admission. ETH-74 must recheck current access inside its reservation
-transaction and again for a paid attempt. The current runtime database role is read-only.
+`canSpend` is not budget admission. ETH-74 rechecks current access inside its reservation
+transaction. The runtime role can write inference accounting, but cannot change identity
+permissions, model policies, or budget limits.
 
 Private sources are bounded PostgreSQL `bytea` records, not static files or public object URLs.
 ETH-75 may replace storage while preserving the source-access operation. Public facts occupy an
 explicit allowlisted projection table. ETH-75 owns atomic projection updates when evidence and
 publication review change. Only operator SQL can currently publish facts; there is no unchecked
 publication endpoint. See [auth setup](auth-setup.md) for configuration and remaining live checks.
+
+## Implemented ETH-74 inference boundary
+
+`src/server/model.ts` exports `runInference(actor, request, provider?)`.
+HTTP operations, the worker, and future MCP operations must use this shared operation rather than
+call a provider directly.
+Existing processing HTTP routes remain disabled until their owning workflow tickets implement them.
+No live provider adapter, provider purchase, default budget, or enabled model is installed.
+
+The request contains `key`, `opportunityId`, `model`, `input`, `photos`, and `attempt` (default 1).
+The key is scoped to the user for the installation's lifetime. Changing its payload returns
+`409 IDEMPOTENCY_CONFLICT`. Each numbered attempt is dispatched at most once. Repeating a settled
+attempt reuses its persisted report; a retry explicitly requests the next number. Skipping a number
+returns `409 ATTEMPT_CONFLICT`. A successful operation cannot be retried for another charge.
+
+Operator-provisioned `inference_models` rows define allowed model IDs, total UTF-8 input bytes,
+photo count, per-photo and framing token allowances, output tokens, integer micro-USD token rates,
+attempt cap, retry delay, and timeout. One USD is 1,000,000 micro-USD.
+`inference_budgets` contains lifetime caps
+and concurrency limits for `installation` and each spending user's UUID. Missing rows deny spending.
+There is no automatic daily reset or reservation expiry.
+
+Each admission locks session, identity, opportunity, and membership tables against writes for the
+short transaction. It checks current access, serializes the user/key, and locks both budget rows
+in sorted scope order. It reserves input bytes plus photo and framing allowances at the input rate,
+plus maximum output tokens at the output rate. It rechecks access after budget waits and commits
+a dispatched attempt before calling the provider. Revocation that wins the table lock denies
+admission; revocation after admission cannot undo an already authorized attempt. No database lock
+or connection remains held during the provider call. This coarse lock limits admission throughput
+and briefly delays unrelated session writes. Hosted Supabase locking privileges remain unverified.
+
+The server-owned provider callback receives `model`, `input`, `photos`, `maxInputTokens`,
+`maxOutputTokens`, `attemptId`, and an `AbortSignal`.
+It must disable SDK retries and honor both caps.
+The conservative input allowance must cover all billable input, including provider framing.
+Photos contain inline permitted content, not URLs that bypass input bounds.
+Callers own evidence filtering before constructing input. This operation checks opportunity access,
+not the truth or audience of each
+string. A future provider adapter needs a measured tokenizer, image, framing, and price bound before
+live use. These application estimates are not an exact provider-billing guarantee.
+
+Provider reports are validated variants. `completed` includes `output`, `modelVersion`,
+`inputTokens`, `outputTokens`, and `reviewOutcome` (`needs_review`, `validated`, or `rejected`).
+`failed` includes the same usage fields without output, plus `retryable`.
+`not-billed` includes `retryable` and requires positive confirmation that the attempt cannot bill.
+A thrown error, timeout, malformed report, or usage beyond reserved bounds is not that confirmation.
+Both completed and billed failed attempts settle actual usage against their snapshotted rates.
+Review outcomes describe evaluation, not human publication approval.
+
+Failures remain failures. Retryable confirmed failures return `503 PROVIDER_FAILED`; terminal ones
+return `422 PROVIDER_FAILED`. Retries require fresh access, fresh budget, a finished prior attempt,
+the configured delay after settlement, and the lower of the original and current attempt caps.
+Budget exhaustion returns `429 BUDGET_EXHAUSTED`; concurrency and cooldown return
+`429 CONCURRENCY_LIMIT` and `429 RETRY_LATER`. Missing configuration returns `503 NOT_CONFIGURED`.
+
+A crash after dispatch, timeout, or lost response retains the reservation and concurrency slot.
+Duplicates return `409 SPEND_UNCERTAIN`, never silently refund or redispatch. A late response after
+timeout cannot release the reservation. `reconcileInference(attemptId, report, evidence, client)`
+requires an idle operator `PoolClient`, a verified receipt reference, and confirmed usage or
+non-billing. Runtime connections cannot use this recovery API. Repeating the same settlement is
+idempotent; changing it returns `409 SETTLEMENT_CONFLICT`. Operator-confirmed overages can exceed
+the reservation and cap, recording the actual charge and blocking later admissions. Never reconcile
+an attempt as free merely because a worker lease expired or a provider stopped responding.
+
+Private PostgreSQL records retain attempt ID, number, timestamps, elapsed time to settlement,
+snapshotted rates and limits, reported usage, model version, review outcome, and result. Recovered
+elapsed time includes the unresolved interval and is not provider latency. Denial records contain
+only user ID, time, and sanitized code. Prompts and provider exception details are not logged.
+Results are checked against fresh record access before return, including cached results.
 
 The [product plan][plan] owns scope and acceptance examples. [ADR.md](ADR.md) owns the formal
 decision status. This reference adapts the [architecture candidate][candidate] to the later
@@ -307,7 +377,7 @@ receipt response. They are proposals, not an additional anonymous route kept for
 | `429` | Rate or concurrency limit |
 | `503` | Processing capability unavailable |
 
-Budget exhaustion needs its own stable error code and HTTP mapping before client implementation.
+Budget exhaustion uses `429 BUDGET_EXHAUSTED`, as defined in the implemented ETH-74 section.
 Do not silently treat a denied paid request as a successful saved-run response.
 
 ## Durable work and evidence consistency
