@@ -8,6 +8,11 @@ if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
   git fetch --quiet --unshallow origin
 fi
 
+if ! command -v pdftotext >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends poppler-utils
+fi
+
 node_version="$(cat .node-version)"
 toolchain="$HOME/.local/share/signal-desk-node"
 node_bin="$toolchain/node_modules/node/bin"
@@ -29,6 +34,7 @@ EOF
 fi
 
 node --version
+pdftotext -v
 npm ci
 npm exec -- lefthook check-install
 npm exec -- fallow --version

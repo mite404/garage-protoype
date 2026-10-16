@@ -4,11 +4,49 @@ import { requireSameOrigin } from "./auth";
 import { AppError, failure } from "./errors";
 import { resolveActor } from "./access";
 import { POST as signIn } from "../app/auth/sign-in/route";
+import { boundedBody, sourceUpload } from "./evidence-http";
 
 test("malformed identity is denied before any database connection", async () => {
   await assert.rejects(resolveActor({ userId: "user-selected", sessionId: "fake" }), {
     status: 401,
     code: "UNAUTHENTICATED",
+  });
+});
+
+test("evidence uploads bound actual bytes and preserve multipart source metadata", async () => {
+  const exact = new Request("https://signal.example/upload", { method: "POST", body: "abc" });
+  assert.equal(await (await boundedBody(exact, 3)).text(), "abc");
+  await assert.rejects(
+    boundedBody(
+      new Request("https://signal.example/upload", {
+        method: "POST",
+        headers: { "Content-Length": "1" },
+        body: "abcd",
+      }),
+      3,
+    ),
+    { status: 413 },
+  );
+  const form = new FormData();
+  form.set("name", "Original response");
+  form.set("text", "Pump test: passed.");
+  form.set("kind", "seller_response");
+  form.set("blockerId", "buyer-question");
+  form.set("permission", "synthetic");
+  form.set("provenance", "Synthetic response");
+  const source = await sourceUpload(
+    new Request("https://signal.example/upload", { method: "POST", body: form }),
+  );
+  assert.deepEqual(source, {
+    name: "Original response",
+    mediaType: "text/plain",
+    content: Buffer.from("Pump test: passed."),
+    kind: "seller_response",
+    audience: "private",
+    shareable: false,
+    permission: "synthetic",
+    provenance: "Synthetic response",
+    blockerId: "buyer-question",
   });
 });
 

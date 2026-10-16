@@ -18,9 +18,8 @@ Node 22 LTS and npm are required. TypeScript tests use native `node:test` throug
 - `GET /api/v1/desk/sources/:id/content` downloads authorized source bytes as an attachment.
 - `GET /api/v1/public/vehicles/:id` returns the published public projection in `{data}`. Facts
   require both approval and permission to share. Photos and coverage are empty until ETH-76.
-- Source upload, import, retry, and buyer inquiry POST routes enforce identity and current spending
-  permission, then return `503 PROCESSING_DISABLED`. They queue nothing and spend nothing. Later
-  units must replace these denial gates with complete record checks and atomic budget admission.
+- Buyer inquiry POST routes still deny processing. ETH-75 implements the source, import, review,
+  and retry routes described below, with record checks and ETH-74 inference admission.
 
 Protected HTTP reads and all JSON envelopes use `Cache-Control: no-store`. Inaccessible records
 return `404 NOT_FOUND`. Wrong-role actions return `403 FORBIDDEN`. Invalid or ended sessions return
@@ -39,17 +38,17 @@ transaction. The runtime role can write inference accounting, but cannot change 
 permissions, model policies, or budget limits.
 
 Private sources are bounded PostgreSQL `bytea` records, not static files or public object URLs.
-ETH-75 may replace storage while preserving the source-access operation. Public facts occupy an
-explicit allowlisted projection table. ETH-75 owns atomic projection updates when evidence and
-publication review change. Only operator SQL can currently publish facts; there is no unchecked
-publication endpoint. See [auth setup](auth-setup.md) for configuration and remaining live checks.
+Public facts occupy an explicit allowlisted projection table. ETH-75 atomically updates that
+projection after evidence and publication review change. See [auth setup](auth-setup.md) for
+configuration and remaining live checks.
 
 ## Implemented ETH-74 inference boundary
 
 `src/server/model.ts` exports `runInference(actor, request, provider?)`.
 HTTP operations, the worker, and future MCP operations must use this shared operation rather than
 call a provider directly.
-Existing processing HTTP routes remain disabled until their owning workflow tickets implement them.
+Only implemented workflow operations can queue processing. Buyer inquiry processing remains
+disabled.
 No live provider adapter, provider purchase, default budget, or enabled model is installed.
 
 The request contains `key`, `opportunityId`, `model`, `input`, `photos`, and `attempt` (default 1).
@@ -112,6 +111,95 @@ snapshotted rates and limits, reported usage, model version, review outcome, and
 elapsed time includes the unresolved interval and is not provider latency. Denial records contain
 only user ID, time, and sanitized code. Prompts and provider exception details are not logged.
 Results are checked against fresh record access before return, including cached results.
+
+## Implemented ETH-75 evidence and review
+
+`db/003-evidence.sql` extends the ordered foundation migrations. Originals (`sources`), extracted
+assertions (`claims`), human decisions (`evidence_reviews`), and classification history
+(`source_classifications`) are separate append-only records for the runtime role. Original bytes
+have a generated SHA256. Locators use one-based pages and UTF-16 start/end offsets with an exact
+excerpt. Repeated content with identical owner, media type, kind, audience, permission, provenance,
+sharing, and blocker metadata reuses its source. Renaming the same original does not duplicate it.
+
+`src/server/evidence.ts` exports these shared server operations:
+
+- `addSource(actor, opportunityId, input)` stores UTF-8 text or a text-based PDF. Input contains
+  `name`, `mediaType`, `content: Buffer`, `kind`, `audience`, `shareable`, `permission`,
+  `provenance`, and an optional `blockerId`. Kinds are `document`, `seller_note`, `private_note`,
+  `inquiry`, and `seller_response`. Responses require an originating blocker in this opportunity.
+  Permission is `synthetic` or `permissioned`; private context cannot grant public excerpts.
+- `getWorkbench(actor, opportunityId)` returns `Workbench`: source-filtered originals, claims,
+  review history, classification history/current decisions, jobs, blockers, revision, assignee,
+  and next action. Fact variants are `unknown`, `unreviewed`, `conflict`, `needs_review`, and
+  `reviewed`. None of the first four has a verified value. Restricted or unprocessed factual
+  sources conservatively prevent approval, including sources on another vehicle opportunity.
+- `reviewEvidence(actor, opportunityId, revision, command)` appends `select`, `correct`, `unknown`,
+  or `classify` decisions. Stale revisions return `412 STALE_REVIEW`. Corrections retain the
+  original claim, reason, reviewer, and evidence-basis hash. New claims invalidate obsolete
+  decisions without deleting them. Unknown reasons stay within their originating opportunity.
+- `recordEvidenceBlocker(actor, opportunityId, input)` adds an idempotent existing question using
+  `key`, `question`, `field`, `assigneeId`, and `nextAction`. Assignees need current specialist
+  membership. This operation creates neither an opportunity nor a draft. Blocker states are
+  `needs_review` and `resolved`; a classification-only blocker has a null field.
+- `listEvidenceOpportunities(actor)` lists only explicit specialist memberships.
+
+Vehicle revisions, opportunity assignees, evidence blockers, and import-job records are new
+foundation records for downstream owners. Human classification corrections outrank later worker
+suggestions and update the visible shared next action only for sales-audience sources. Private
+classification text never enters shared routing. Classification is not permission to disclose.
+Seller-response review resolves only its linked field blocker after human approval and source
+sharing permission. The public projection labels seller claims as seller-reported, not verified
+documents. No message, commercial assurance, or response draft is created or sent.
+
+`src/server/imports.ts` exports the durable job operations:
+
+- `queueImport(actor, opportunityId, {sourceIds, model, key})` authorizes every source before
+  freezing its pages, hash, kind, provenance, and extraction instruction. The maximum packet is
+  20 sources. Deduplication includes the opportunity, exact source IDs/hashes, model, and
+  `evidence-v1` configuration. Change the configuration version when extraction rules change.
+- `claimImport(id?)` claims one queued or expired job with a 60-second lease and increasing fence.
+- `processImport(lease, provider?)` rechecks access, calls only `runInference` for provider mode,
+  validates exact citations and field units, and fences its atomic commit. A stale worker cannot
+  write claims or classifications. Provider callbacks are server-owned, never HTTP payloads.
+- `retryImport(actor, jobId)` requires the original requester and current access. Confirmed
+  retryable failures advance the separately admitted paid attempt. Recovery of uncertainty keeps
+  the same attempt and its reservation until operator reconciliation. Invalid extraction is
+  terminal. Job states are `queued`, `processing`, `ready`, and `failed`, with sanitized errors.
+- `loadSavedEvidence(actor, opportunityId)` queues only the exact labeled synthetic packet through
+  `saved-example-v1`. Hashes, kinds, and pages must match; arbitrary input cannot use saved output.
+  This mode never calls a provider or inference admission.
+
+`src/worker.ts` exports `runWorker(signal, provider?)`. Its CLI is
+`node --conditions=react-server --import tsx src/worker.ts`; use a supervised service with the
+runtime database role. There is no installed live provider adapter. A missing adapter fails the
+job as unavailable, never as successful processing. Lease expiry never refunds inference spend.
+
+HTTP operations use the same server functions and `{data}` / `{error}` envelopes:
+
+- `GET /api/v1/desk/opportunities/:id/evidence` returns the workbench with a quoted revision ETag.
+- `POST /api/v1/desk/vehicles/:id/sources?opportunityId=...` accepts multipart fields matching
+  `addSource`, with `text` or `file`. Only the exact linked opportunity may receive the source.
+- `POST /api/v1/desk/vehicles/:id/imports?opportunityId=...` accepts `{sourceIds}` and an
+  `Idempotency-Key`. Model selection is server-only `EVIDENCE_MODEL`. Missing configuration is
+  `503 NOT_CONFIGURED`. Explicit model policy, budgets, and a server-owned adapter are also needed.
+- `POST /api/v1/desk/vehicles/:id/reviews?opportunityId=...` accepts a review command and quoted
+  current `If-Match`. Select/correct commands include `field`, `claimId`, and `shareable`.
+  Corrections add `value`, `unit`, and `reason`. Unknown commands include `field` and `reason`.
+  Classification commands include `sourceId`, `classification`, `reason`, and `nextAction`.
+- `POST /api/v1/desk/vehicles/:id/saved-example?opportunityId=...` queues the synthetic run.
+- `POST /api/v1/desk/jobs/:id/retry` requeues only a permitted failed import.
+
+All mutations require same-origin browser requests and fresh invited specialist access. Import
+and retry require spending permission; uploads and human review do not consume inference budget.
+Runtime credentials cannot edit identity permissions, immutable source bytes, or frozen job input.
+The UI at `/desk/opportunities/:id` is a finite authored review workbench, not a generated component
+renderer or a competing chat-card catalog. The finite chat presentation contract below is unchanged.
+
+PDF extraction requires the OS `pdftotext` executable (`poppler-utils`), with a 10-second timeout,
+2 MiB extracted-text cap, 10 MiB original-byte cap, and 500-page cap. Missing extraction tooling
+returns `503 PDF_UNAVAILABLE`. Unreadable or scanned PDFs fail explicitly; OCR is not implemented.
+Hosted PostgreSQL grants/locking and live Supabase verification remain unverified. Provider-specific
+tokenizer, framing, pricing bounds, and live extraction quality also remain unverified.
 
 The [product plan][plan] owns scope and acceptance examples. [ADR.md](ADR.md) owns the formal
 decision status. This reference adapts the [architecture candidate][candidate] to the later
