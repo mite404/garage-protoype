@@ -1,0 +1,74 @@
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-mustard: var(--mustard);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --font-display: "Barlow Condensed", Impact, sans-serif;
+}
+
+.eyebrow {
+  color: var(--primary);
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.state-conflict {
+  background: #fce8dd;
+  color: var(--primary);
+}
+.state-needs_review,
+.state-unreviewed {
+  background: #f8ecc5;
+  color: #65440f;
+}
+.state-reviewed {
+  background: #edf6ef;
+  color: #166534;
+}
+
+:root {
+  color-scheme: light;
+  --background: #f8f5ed;
+  --foreground: #282623;
+  --card: #fffdf8;
+  --primary: #b33418;
+  --primary-foreground: #fffdf8;
+  --accent: #f0552a;
+  --secondary: #e9dfc9;
+  --muted: #f1eadd;
+  --muted-foreground: #635b50;
+  --border: #d9cfbf;
+  --input: #958a7d;
+  --ring: #9c3018;
+  --destructive: #a32118;
+  --mustard: #c39b3b;
+  --radius: 8px;
+  --font-display: "Barlow Condensed", Impact, sans-serif;
+}

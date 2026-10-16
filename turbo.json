@@ -1,0 +1,33 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env*", "apps/*/.env*", "packages/*/.env*"],
+  "globalEnv": [
+    "DATABASE_URL",
+    "TEST_DATABASE_URL",
+    "TEST_APP_URL",
+    "MIGRATION_DATABASE_URL",
+    "SUPABASE_*",
+    "NEXT_PUBLIC_*",
+    "APP_ORIGIN",
+    "SIGNAL_DESK_*",
+    "EVIDENCE_MODEL",
+    "EVALUATION_*",
+    "INVITE_*",
+    "CI",
+    "NODE_ENV",
+    "PORT",
+    "PG*"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "@signal-desk/storybook#build": { "cache": false },
+    "typecheck": { "dependsOn": ["^typecheck"], "outputs": [] },
+    "dev": { "cache": false, "persistent": true },
+    "test": { "cache": false, "outputs": [] },
+    "worker": { "cache": false, "persistent": true },
+    "mcp": { "cache": false, "persistent": true }
+  }
+}

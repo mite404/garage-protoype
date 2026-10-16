@@ -25,6 +25,12 @@ npm run dev
 Without credentials, the application still renders its public entry page, configuration notice,
 and protected-workspace denial. It does not simulate authentication. Live sign-in requires a
 separate prototype Supabase project. Never use Garage's project, credentials, or customer data.
+The root `.env.local` is read by the web app's Next config and by root operator scripts; the
+worker and MCP commands also load it. An app-specific `apps/web/.env.local` is loaded by Next.
+Neither env file is copied into Storybook or tracked in Git.
+
+`npm run dev:web` runs only the Next app. `npm run storybook` runs the independent React-Vite
+catalog at port 6006. `npm run build-storybook` writes `storybook-static/`.
 
 Follow [the auth setup guide](docs/auth-setup.md) to configure the database and provision accounts.
 

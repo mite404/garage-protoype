@@ -41,6 +41,8 @@ These are common instructions for Ethan's agents across all scenarios.
 - Before committing, run `npm run check`. Lefthook runs the same gate automatically.
   Fallow checks changed-code structure; types and behavioral tests remain separate checks.
   See [development checks](docs/development.md) for setup, CI, and test prerequisites.
+- Before PR handoff, use the [verification skill](.agents/skills/verifying-signal-desk/SKILL.md).
+  Merge only after the build and full gate pass for the exact head commit, without skipped suites.
 - When making technical decisions, do not give much weight to development cost.
   Instead prefer quality, simplicity, robustness, scalability, and long-term maintainability.
   "Development cost" here means a human-scale effort estimate.
@@ -110,3 +112,14 @@ line will not fit in 50 characters, that is usually the commit doing two things 
 - Skip the body entirely when the subject fully covers the change.
 
 ---
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

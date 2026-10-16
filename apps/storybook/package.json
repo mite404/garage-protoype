@@ -1,0 +1,23 @@
+{
+  "name": "@signal-desk/storybook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "storybook dev -p 6006 --host 0.0.0.0",
+    "build": "storybook build -o ../../storybook-static",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@signal-desk/catalog": "0.1.0",
+    "@signal-desk/ui": "0.1.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "tailwindcss": "4.3.3"
+  },
+  "devDependencies": {
+    "@storybook/addon-docs": "10.6.2",
+    "@storybook/react-vite": "10.6.2",
+    "storybook": "10.6.2"
+  }
+}

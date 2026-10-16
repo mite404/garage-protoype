@@ -12,10 +12,13 @@ const errors = [];
 
 for (const file of new Set(files)) {
   const lines = readFileSync(file, "utf8").split(/\r?\n/u);
+  let generated = false;
   for (const [index, line] of lines.entries()) {
-    if (Array.from(line).length > 100) {
+    if (file === "AGENTS.md" && line === "<!-- BEGIN:turborepo-agent-rules -->") generated = true;
+    if (!generated && Array.from(line).length > 100) {
       errors.push(`${file}:${index + 1}: exceeds 100 columns`);
     }
+    if (line === "<!-- END:turborepo-agent-rules -->") generated = false;
   }
 }
 

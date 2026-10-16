@@ -1,6 +1,11 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
-  "entry": ["src/worker.ts", "src/mcp.ts"],
+  "entry": [
+    "apps/web/src/worker.ts",
+    "apps/web/src/mcp.ts",
+    "packages/**/*.stories.tsx",
+    "apps/storybook/.storybook/main.ts"
+  ],
   "health": { "coverage": "coverage" },
-  "ignorePatterns": [".next/**", ".amp/**", "next-env.d.ts"]
+  "ignorePatterns": [".next/**", "storybook-static/**", ".amp/**", "next-env.d.ts"]
 }

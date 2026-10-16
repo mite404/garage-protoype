@@ -12,10 +12,17 @@ const result = spawnSync(
     "--import",
     "tsx",
     "--test",
-    "src/**/*.test.ts",
+    "apps/web/src/**/*.test.ts",
     "scripts/*.test.mjs",
   ],
-  { stdio: "inherit", env: { ...process.env, NODE_V8_COVERAGE: coverage } },
+  {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      NODE_V8_COVERAGE: coverage,
+      TSX_TSCONFIG_PATH: fileURLToPath(new URL("../apps/web/tsconfig.json", import.meta.url)),
+    },
+  },
 );
 if (result.error) throw result.error;
 for (const name of readdirSync(coverage)) {

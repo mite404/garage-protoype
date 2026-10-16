@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/theme.css",
+    "baseColor": "stone",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@signal-desk/ui/components",
+    "utils": "cn",
+    "ui": "@signal-desk/ui/components/ui",
+    "lib": "@signal-desk/ui/lib",
+    "hooks": "@signal-desk/ui/hooks"
+  },
+  "iconLibrary": "lucide"
+}

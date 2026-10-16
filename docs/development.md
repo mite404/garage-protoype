@@ -1,6 +1,54 @@
 # Development checks
 
 Use the Node version pinned in `.node-version` and `.nvmrc`, and npm.
+`npm run dev` runs the web app and Storybook through Turbo; `npm run dev:web` selects only the app.
+`npm run build` builds both surfaces sequentially to bound memory use in small orbs.
+Run `npm run storybook` to review Dispatch components and synthetic assistance states at port
+6006. Run `npm run build-storybook` to check the independent React-Vite catalog. It writes ignored
+`storybook-static/`. The shared palette, display font, focus color, radii, and card review states
+live in `packages/ui/src/theme.css`. The seven UI components in `packages/ui/src/components/ui/`
+came from the official shadcn `base-nova` registry, configured in `packages/ui/components.json`.
+The agent-selectable authored cards and their stories live in `packages/catalog/`; stock primitives
+are not agent-selectable. Stories do not load server operations or send messages.
+
+The Dispatch shell uses charcoal navigation, an ivory workspace, and a generated original street-map
+texture limited to the top bar. It does not reuse Garage's logo, department badges, or artwork.
+`packages/catalog/src/workspace-shell.tsx` is human-facing chrome, not part of the agent schema.
+Storybook separates Primitives, Agent catalog, and Workspace so a visual export is not mistaken for
+permission to invoke a component. The agent still requests only reference-based answer, review,
+handoff, and draft cards; the server resolves facts and permissions before rendering.
+
+Conversation typography adapts Yaklabs' Quiet prose (ADR-140): 15px/24px body, 16px paragraph gaps,
+510px reading measure, bold authored findings, italic caveats, lists and inline code. Only authored
+response and next-action text uses the restricted Markdown parser. User messages, original source
+excerpts, offer conditions and draft bodies stay literal; HTML never executes and only HTTPS/mailto
+links become anchors. No live streaming, sharing, or Yaklabs runtime is imported.
+The [project verification skill](../.agents/skills/verifying-signal-desk/SKILL.md) owns browser
+recipes and the feature map. Use it before handing off UI changes; it complements the gate below.
+
+The monorepo layout was adapted from Better-T-Stack 3.44.1 with Turborepo. `bts.jsonc` preserves
+the generator metadata unchanged. To reproduce the reference in `/tmp` using npm 11.16.0, run:
+
+```sh
+npm exec --yes --package npm@11.16.0 -- npm exec --yes --package \
+  create-better-t-stack@3.44.1 -- create-better-t-stack signal-desk-bts-reference \
+  --frontend next --backend none --runtime none --database none --orm none --api none \
+  --auth none --payments none --addons turborepo --examples none --db-setup none \
+  --web-deploy none --server-deploy none --package-manager npm --no-git --no-install
+```
+
+The reference supplied the `apps/*` and `packages/*` workspaces, Turbo task structure, and shared
+TypeScript base. This repo keeps its existing Node 22, TypeScript 5.9, Next 16.4.1, React 19.3.1,
+PostgreSQL, and Supabase integration. It does not use the template's varlock override, example
+primitives, or extra dependencies. `apps/web` owns the existing Next routes, API, worker, and MCP.
+`apps/storybook` hosts stories colocated in `packages/ui` and `packages/catalog`.
+`packages/contracts` owns React-free evidence, photo, and assistance schemas and the authoritative
+field labels. The catalog's `./schema` subpath exposes only the finite card calls and inline cards;
+the server imports that subpath without loading JSX. `packages/config` only owns the TS base.
+Root `db/` and operator `scripts/` stay together so migration paths and root CLI contracts remain
+unchanged. Root `.env.local` is never copied or overwritten. Next loads it alongside app-local env;
+the worker, MCP, and operator scripts load it from their own commands. Turbo passes runtime and test
+environment variables through rather than excluding secrets via strict env filtering.
 Run `npm ci` after checkout; its `prepare` step installs Lefthook's pre-commit
 hook. Run `npm run build` before `npm run check`; the HTTP review test launches that production
 build against a loopback-only controlled identity provider. Rebuild after application changes.
@@ -49,8 +97,9 @@ duplication thresholds. Cleanup and design-system warnings stay advisory. No bla
 or debt baseline is installed. Next.js route entry points are detected by Fallow's framework plugin.
 `fallow-plugin-node-test.json` declares the same native test roots as `npm test`. Fallow's default
 test-reachability estimate is not measured execution coverage or proof of live authentication.
-The worker CLI is an explicit entry point. `scripts/test.mjs` clears `coverage/`, then runs the
-recursive native application and tooling tests with `NODE_V8_COVERAGE`. It then normalizes file
+The worker and MCP CLIs have explicit `npm run worker` and `npm run mcp` entry points.
+`scripts/test.mjs` clears `coverage/`, then runs the recursive `apps/web/src/` application and
+root tooling tests with `NODE_V8_COVERAGE`. It then normalizes file
 source-map URLs and cache keys so escaped dynamic-route names match V8's literal script URLs.
 Execution ranges and hit counts remain unchanged. Fallow reads that newly generated directory at
 unchanged thresholds. Never substitute captured coverage from another checkout.

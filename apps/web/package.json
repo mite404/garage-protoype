@@ -1,0 +1,34 @@
+{
+  "name": "@signal-desk/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "worker": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/worker.ts",
+    "mcp": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/mcp.ts"
+  },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@signal-desk/catalog": "0.1.0",
+    "@signal-desk/contracts": "0.1.0",
+    "@signal-desk/ui": "0.1.0",
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.118.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "next": "16.4.1",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "tailwindcss": "4.3.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

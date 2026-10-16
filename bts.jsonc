@@ -1,0 +1,28 @@
+// Better-T-Stack project metadata
+//
+// Keep this file to use the `add` command.
+// Add addons: npx create-better-t-stack@latest add
+//
+// Docs: https://better-t-stack.dev/docs
+// Stack Builder: https://better-t-stack.dev/new
+
+{
+  "$schema": "https://r2.better-t-stack.dev/schema.json",
+  "version": "3.44.1",
+  "createdAt": "2026-10-16T19:19:37.761Z",
+  "reproducibleCommand": "npx create-better-t-stack@latest signal-desk-bts-reference --frontend next --backend none --runtime none --database none --orm none --api none --auth none --payments none --addons turborepo --examples none --db-setup none --web-deploy none --server-deploy none --no-git --package-manager npm --no-install",
+  "database": "none",
+  "orm": "none",
+  "backend": "none",
+  "runtime": "none",
+  "frontend": ["next"],
+  "addons": ["turborepo"],
+  "examples": [],
+  "auth": "none",
+  "payments": "none",
+  "packageManager": "npm",
+  "dbSetup": "none",
+  "api": "none",
+  "webDeploy": "none",
+  "serverDeploy": "none",
+}

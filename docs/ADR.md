@@ -21,6 +21,13 @@ implemented functionality, and proposed entries remain open for review.
   validation must not replace server-owned authorization, evidence checks, or spending admission.
 - ADR-016: Use scoped application tokens and a local stdio MCP adapter over shared HTTPS operations
   because terminal access must preserve server authorization, budgets, and human review.
+- ADR-017: Use shadcn Base UI components and Storybook for the shared Dispatch design language
+  because one browser-reviewable catalog keeps the prototype's states and production UI aligned.
+- ADR-018: Adapt the Better-T-Stack Turborepo workspace layout with separate primitives, authored
+  catalog, and React-free contracts because web, Storybook, and tools need explicit shared
+  boundaries.
+- ADR-019: Adapt Yaklabs' semantic prose and card reading hierarchy because explicit emphasis and
+  separated actions improve scanning without changing source evidence or agent permissions.
 
 ## Proposed
 

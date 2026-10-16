@@ -44,7 +44,7 @@ jobs:
         env:
           TEST_APP_URL: http://127.0.0.1:3000
         run: |
-          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 > "$RUNNER_TEMP/app.log" 2>&1 &
+          npm run start -- --hostname 127.0.0.1 > "$RUNNER_TEMP/app.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           curl --retry 30 --retry-connrefused --retry-delay 1 --retry-all-errors \

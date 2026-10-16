@@ -1,0 +1,20 @@
+{
+  "name": "@signal-desk/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./assistance-schema": "./src/assistance-schema.ts",
+    "./evidence-schema": "./src/evidence-schema.ts",
+    "./photo-schema": "./src/photo-schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@signal-desk/config": "0.1.0"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "@signal-desk/config/tsconfig.base.json",
+  "compilerOptions": { "lib": ["dom", "dom.iterable", "esnext"], "jsx": "react-jsx" },
+  "include": [".storybook/**/*.ts", ".storybook/**/*.tsx"]
+}

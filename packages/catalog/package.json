@@ -1,0 +1,26 @@
+{
+  "name": "@signal-desk/catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./assistance-card": "./src/assistance-cards.tsx",
+    "./prose": "./src/prose.tsx",
+    "./workspace-shell": "./src/workspace-shell.tsx",
+    "./styles.css": "./src/dispatch.css",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@signal-desk/contracts": "0.1.0",
+    "@signal-desk/ui": "0.1.0",
+    "react": "19.3.1"
+  },
+  "devDependencies": {
+    "@signal-desk/config": "0.1.0",
+    "@storybook/react-vite": "10.6.2",
+    "storybook": "10.6.2"
+  }
+}

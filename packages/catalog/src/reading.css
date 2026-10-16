@@ -1,0 +1,161 @@
+/* Yaklabs Quiet prose (ADR-140), mapped to Dispatch tokens without global resets. */
+.quiet-prose {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+.quiet-prose > :is(p, h4, ul) {
+  max-width: 510px;
+}
+.quiet-prose > p {
+  margin: 0 0 16px;
+  line-height: 24px;
+}
+.quiet-prose > h4 {
+  margin: 32px 0 4px;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+}
+.quiet-prose strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.quiet-prose em {
+  font-style: italic;
+}
+.quiet-prose a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.quiet-prose a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.quiet-prose code {
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--muted);
+  font:
+    13px/20px ui-monospace,
+    monospace;
+}
+.quiet-prose > ul {
+  margin: 0 0 16px;
+  padding-left: 22px;
+  list-style: disc;
+}
+.quiet-prose li {
+  margin-bottom: 6px;
+}
+.quiet-prose > :first-child {
+  margin-top: 0;
+}
+.quiet-prose > :last-child {
+  margin-bottom: 0;
+}
+.literal-prose > p {
+  white-space: pre-wrap;
+}
+.reading-label {
+  margin: 0 0 6px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+}
+.assistance-card {
+  gap: 20px;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+.assistance-card > .state {
+  justify-self: start;
+  align-self: start;
+  font-size: 12px;
+}
+.assistance-card h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.assistance-card .answer-value {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+.card-next-action {
+  padding: 16px;
+  border-left: 3px solid var(--mustard);
+  border-radius: 0 4px 4px 0;
+  background: var(--muted);
+}
+.card-citation {
+  margin: 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--border);
+}
+.card-meta {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 20px;
+}
+.card-meta dt {
+  color: var(--muted-foreground);
+}
+.card-meta dd {
+  margin: 2px 0 0;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.card-caveat {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 20px;
+  font-style: italic;
+}
+.card-list {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 24px;
+  list-style: disc;
+}
+.card-list li + li {
+  margin-top: 6px;
+}
+.conversation-turn {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.conversation-turn + .conversation-turn {
+  margin-top: 32px;
+}
+.conversation-request {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted);
+}
+.conversation-response {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 480px) {
+  .assistance-card {
+    padding: 20px;
+  }
+}

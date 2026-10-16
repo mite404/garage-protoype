@@ -1,6 +1,20 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y", "nextjs"],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y"],
   "categories": { "correctness": "error" },
-  "ignorePatterns": [".next/**", "coverage/**", ".amp/**", "next-env.d.ts"]
+  "overrides": [
+    {
+      "files": ["apps/web/**"],
+      "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y", "nextjs"]
+    }
+  ],
+  "ignorePatterns": [
+    ".next/**",
+    "**/.next/**",
+    ".turbo/**",
+    "storybook-static/**",
+    "coverage/**",
+    ".amp/**",
+    "next-env.d.ts"
+  ]
 }

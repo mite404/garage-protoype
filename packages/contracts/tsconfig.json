@@ -1,0 +1,4 @@
+{
+  "extends": "@signal-desk/config/tsconfig.base.json",
+  "include": ["src/**/*.ts"]
+}
