@@ -18,8 +18,8 @@ Node 22 LTS and npm are required. TypeScript tests use native `node:test` throug
 - `GET /api/v1/desk/sources/:id/content` downloads authorized source bytes as an attachment.
 - `GET /api/v1/public/vehicles/:id` returns the published public projection in `{data}`. Facts
   require both approval and permission to share. ETH-76 adds approved photos and public coverage.
-- Buyer inquiry POST routes still deny processing. ETH-75 implements the source, import, review,
-  and retry routes described below, with record checks and ETH-74 inference admission.
+- ETH-77 implements deterministic buyer inquiry routing and human handoffs. ETH-75 implements the
+  source, import, review, and retry routes below, with record checks and ETH-74 inference admission.
 
 Protected HTTP reads and all JSON envelopes use `Cache-Control: no-store`. Inaccessible records
 return `404 NOT_FOUND`. Wrong-role actions return `403 FORBIDDEN`. Invalid or ended sessions return

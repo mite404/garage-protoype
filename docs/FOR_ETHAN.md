@@ -106,6 +106,11 @@ marks the original odometer unreadable. Both decisions remain visible, coverage 
 and the suggested request still asks for a readable replacement. A missing live adapter produces
 an unavailable job, not invented image analysis.
 
+A coverage report can lose its edit markers without losing its footage. V8 emitted literal `[id]`
+script URLs but escaped `%5Bid%5D` source-map cache keys, leaving six server-rendered functions
+unmapped. Normalizing the file URLs after tests restored the maps without changing any execution
+ranges or hit counts. Browser handlers still need their own interaction checks.
+
 ## Director's Commentary
 
 Model the domain changed the data design. Invitations, buyer ownership, specialist membership, and
