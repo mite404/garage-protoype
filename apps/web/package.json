@@ -16,7 +16,6 @@
     "@earendil-works/pi-ai": "1.3.0",
     "@flue/postgres": "2.3.0",
     "@flue/runtime": "2.3.0",
-    "@fontsource/barlow-condensed": "5.3.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "@signal-desk/catalog": "0.1.0",
     "@signal-desk/contracts": "0.1.0",

@@ -21,7 +21,7 @@ export default async function Desk() {
       <section className="max-w-xl">
         <p className="eyebrow mb-4">Private workspace</p>
         <h1>Access required.</h1>
-        <output className="mt-6 block text-stone-600">
+        <output className="mt-6 block text-muted-foreground">
           {error.message} No private records have been loaded.
         </output>
         <Link className="button mt-8" href="/sign-in">
@@ -34,7 +34,7 @@ export default async function Desk() {
     <section className="max-w-2xl">
       <p className="eyebrow mb-4">{actor.role} workspace</p>
       <h1>Municipal sales.</h1>
-      <p className="mt-6 text-stone-600">
+      <p className="mt-6 text-muted-foreground">
         Open a department to review its acquisition, purchase conditions and next sale blocker.
       </p>
       {municipalities.map((organization) => (
@@ -44,16 +44,16 @@ export default async function Desk() {
           href={`/desk/municipalities/${encodeURIComponent(organization.id)}`}
         >
           <h2>{organization.name}</h2>
-          <p className="mt-2 text-sm text-stone-600">
+          <p className="mt-2 text-sm text-muted-foreground">
             {organization.city}, {organization.region} · {organization.unit}
           </p>
           {organization.synthetic && (
-            <p className="mt-3 text-xs text-stone-500">Synthetic demonstration</p>
+            <p className="mt-3 text-xs text-muted-foreground">Synthetic demonstration</p>
           )}
         </Link>
       ))}
       {!municipalities.length && (
-        <p className="mt-6 text-sm text-stone-500">
+        <p className="mt-6 text-sm text-muted-foreground">
           No municipality profiles are linked to your assigned opportunities.
         </p>
       )}
@@ -71,10 +71,10 @@ export default async function Desk() {
             href={`/desk/opportunities/${encodeURIComponent(opportunity.id)}`}
           >
             <h2>{opportunity.title}</h2>
-            <p className="mt-2 text-sm text-stone-600">
+            <p className="mt-2 text-sm text-muted-foreground">
               {opportunity.nextAction || "Open evidence review"}
             </p>
-            <p className="mt-4 text-sm font-semibold text-orange-800">Review source packet →</p>
+            <p className="mt-4 text-sm font-semibold text-primary">Review source packet →</p>
           </Link>
         ))}
       </details>

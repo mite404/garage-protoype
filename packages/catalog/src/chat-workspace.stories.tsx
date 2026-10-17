@@ -27,8 +27,37 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Light: Story = {};
-export const Dark: Story = { args: { theme: "dark" } };
+function luminance(color: string) {
+  const [red = 0, green = 0, blue = 0] = (color.match(/[\d.]+/g) ?? []).slice(0, 3).map((value) => {
+    const channel = Number(value) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+}
+
+function contrast(first: string, second: string) {
+  const values = [luminance(first), luminance(second)];
+  return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+}
+
+const checkMessageContrast: NonNullable<Story["play"]> = async ({ canvasElement }) => {
+  const user = canvasElement.querySelector(".chat-message-user .chat-bubble");
+  const assistant = canvasElement.querySelector(
+    ".chat-message:not(.chat-message-user) .chat-bubble",
+  );
+  if (!user || !assistant) throw new Error("Both message roles must render.");
+  const userStyle = getComputedStyle(user);
+  const assistantStyle = getComputedStyle(assistant);
+  const separation = contrast(userStyle.backgroundColor, assistantStyle.backgroundColor);
+  await expect(separation).toBeGreaterThanOrEqual(1.2);
+  await expect(separation).toBeLessThan(1.23);
+  for (const style of [userStyle, assistantStyle]) {
+    await expect(contrast(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(4.5);
+  }
+};
+
+export const Light: Story = { play: checkMessageContrast };
+export const Dark: Story = { args: { theme: "dark" }, play: checkMessageContrast };
 export const EmailEditor: Story = { args: { initialEditorState: "open" } };
 export const DarkEmailEditor: Story = {
   args: { theme: "dark", initialEditorState: "open" },
@@ -71,6 +100,11 @@ export const RetainsDraftEdits: Story = {
       canvas.getByText("Please include the test date and pump serial number.", { selector: "p" }),
     ).toBeInTheDocument();
   },
+};
+
+export const DarkRetainsDraftEdits: Story = {
+  ...RetainsDraftEdits,
+  args: { theme: "dark" },
 };
 
 // Catches disappearing conversation text and treating a preview submit as a live model answer.

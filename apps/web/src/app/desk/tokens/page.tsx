@@ -27,12 +27,12 @@ export default async function TokenPage() {
   }
   return (
     <section className="max-w-2xl">
-      <Link href="/desk" className="text-sm text-orange-800">
+      <Link href="/desk" className="text-sm text-primary">
         ← Specialist workspace
       </Link>
       <p className="eyebrow mt-8 mb-4">Local MCP access</p>
       <h1>Connect your terminal.</h1>
-      <p className="mt-5 text-stone-600">
+      <p className="mt-5 text-muted-foreground">
         Tokens can access only your assigned records. Start read-only. Write and processing
         permissions are separate choices. No token can approve evidence or send messages.
       </p>

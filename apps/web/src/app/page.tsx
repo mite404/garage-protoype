@@ -11,7 +11,7 @@ export default function Home() {
           <br />
           Keep people in control.
         </h1>
-        <p className="mt-6 max-w-lg text-stone-600">
+        <p className="mt-6 max-w-lg text-muted-foreground">
           A focused workspace for reviewing vehicle evidence and resolving buyer questions. Only
           approved, shareable facts reach the public record.
         </p>
@@ -30,17 +30,17 @@ export default function Home() {
       <aside className="panel mt-5">
         <p className="eyebrow mb-5">Access by invitation</p>
         <h2>Evidence stays in its lane.</h2>
-        <ul className="mt-6 space-y-5 text-sm text-stone-600">
+        <ul className="mt-6 space-y-5 text-sm text-muted-foreground">
           <li>
-            <strong className="block text-stone-900">Public record</strong>Approved facts and
+            <strong className="block text-foreground">Public record</strong>Approved facts and
             permitted excerpts. No account required.
           </li>
           <li>
-            <strong className="block text-stone-900">Private workspace</strong>Invited buyers and
+            <strong className="block text-foreground">Private workspace</strong>Invited buyers and
             assigned specialists only.
           </li>
           <li>
-            <strong className="block text-stone-900">Processing access</strong>Separate permission
+            <strong className="block text-foreground">Processing access</strong>Separate permission
             and budget checks. Disabled in this foundation.
           </li>
         </ul>

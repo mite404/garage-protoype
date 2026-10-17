@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import type { StreamView } from "@signal-desk/contracts/assistance-schema";
 import AssistanceCard from "./assistance-cards";
+import { ChatIcon, ChatWindowHeader } from "./chat-window";
 import { Prose } from "./prose";
 
 const labels = {
@@ -15,7 +16,7 @@ const labels = {
 
 function GenerationError({ code }: { code: string }) {
   return (
-    <p className="mt-2 text-xs text-red-800">
+    <p className="mt-2 text-xs text-destructive">
       {code === "SPEND_UNCERTAIN"
         ? "Provider outcome uncertain. Budget remains reserved. No automatic paid retry."
         : "Generation stopped. Review the evidence before asking again."}
@@ -40,25 +41,25 @@ function ChatHistory({
     <div
       ref={history}
       aria-label="Conversation history"
-      className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5"
+      className="chat-transcript space-y-5"
       onScroll={onScroll}
     >
       {!streams.length && (
-        <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">
+        <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
           What is blocking this acquisition? Ask about its conditions or the evidence still needed.
         </p>
       )}
       {streams.map((turn) => (
         <article key={turn.id} className="space-y-3">
-          <div className="flex flex-col items-end gap-1">
-            <p className="pr-1 text-xs font-medium text-stone-600">You</p>
-            <div className="max-w-[85%] rounded-xl rounded-tr-sm bg-orange-100 px-3 py-2.5">
+          <div className="chat-message chat-message-user">
+            <p className="chat-message-label">You</p>
+            <div className="chat-bubble">
               <p className="whitespace-pre-wrap text-sm break-words">{turn.message}</p>
             </div>
           </div>
-          <div className="flex flex-col items-start gap-1">
-            <p className="pl-1 text-xs font-medium text-stone-600">Sale assistant</p>
-            <div className="max-w-[92%] rounded-xl rounded-tl-sm bg-stone-100 px-3 py-2.5">
+          <div className="chat-message">
+            <p className="chat-message-label">Sale assistant</p>
+            <div className="chat-bubble">
               <Prose text={turn.text} />
               <div className="space-y-3">
                 {turn.cards.map((card, index) => (
@@ -66,13 +67,13 @@ function ChatHistory({
                 ))}
               </div>
             </div>
-            <p className="pl-1 text-xs text-stone-500">{labels[turn.state]}</p>
+            <p className="mt-1 pl-1 text-xs text-muted-foreground">{labels[turn.state]}</p>
             {["queued", "running", "cancelling"].includes(turn.state) && (
-              <output className="pl-1 text-xs text-stone-500">
+              <output className="pl-1 text-xs text-muted-foreground">
                 <span aria-hidden="true" className="mr-2 inline-flex gap-1 align-middle">
-                  <span className="size-1.5 rounded-full bg-stone-400 motion-safe:animate-pulse" />
-                  <span className="size-1.5 rounded-full bg-stone-400 motion-safe:animate-pulse [animation-delay:150ms]" />
-                  <span className="size-1.5 rounded-full bg-stone-400 motion-safe:animate-pulse [animation-delay:300ms]" />
+                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
+                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:150ms]" />
+                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:300ms]" />
                 </span>
                 Sale assistant is working…
               </output>
@@ -112,11 +113,11 @@ function ChatComposer({
   status: string;
 }) {
   return (
-    <form onSubmit={onSubmit} className="shrink-0 bg-white px-4 pt-3 pb-4">
+    <form onSubmit={onSubmit} className="chat-compose-area">
       <label className="sr-only" htmlFor="sale-message">
         Message sale assistant
       </label>
-      <div className="flex items-center gap-2 rounded-xl border border-stone-300 px-2 py-1 focus-within:border-orange-600">
+      <div className="chat-composer">
         <textarea
           ref={composer}
           id="sale-message"
@@ -127,26 +128,24 @@ function ChatComposer({
           value={input}
           onChange={(event) => onChange(event.target.value)}
           placeholder="Ask about this sale…"
-          className="min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none outline-none focus:ring-0"
+          className="bg-transparent text-foreground"
         />
-        <button
-          type="submit"
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-700 text-white transition-colors hover:bg-orange-800 disabled:opacity-50"
-          disabled={pending || active || !input.trim()}
-          aria-label="Send to sale assistant"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-5">
-            <path
-              d="m4 4 16 8-16 8 3-8-3-8Zm3 8h13"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+        <div className="chat-composer-toolbar">
+          <span>Drafts only</span>
+          <button
+            type="submit"
+            className="chat-send"
+            disabled={pending || active || !input.trim()}
+            aria-label="Send to sale assistant"
+          >
+            <ChatIcon name="send" />
+          </button>
+        </div>
       </div>
-      <p className="mt-2 px-1 text-xs text-stone-500">Drafts only. Nothing is sent externally.</p>
-      <output className="mt-1 block text-xs text-stone-500" aria-live="polite">
+      <p className="mt-2 px-1 text-xs text-muted-foreground">
+        Drafts only. Nothing is sent externally.
+      </p>
+      <output className="mt-1 block text-xs text-muted-foreground" aria-live="polite">
         {status}
       </output>
     </form>
@@ -179,7 +178,10 @@ export default function SaleChat({
   const follow = useRef(true);
   const active = streams.some((turn) => ["queued", "running", "cancelling"].includes(turn.state));
   useEffect(() => {
-    if (open) composer.current?.focus();
+    if (!open) return;
+    const button = launcher.current;
+    composer.current?.focus();
+    return () => button?.focus();
   }, [open]);
   useEffect(() => {
     if (open && follow.current && history.current)
@@ -187,7 +189,6 @@ export default function SaleChat({
   }, [streams, open]);
   function minimize() {
     setOpen(false);
-    requestAnimationFrame(() => launcher.current?.focus());
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,21 +206,13 @@ export default function SaleChat({
     <>
       <button
         ref={launcher}
-        className="fixed right-5 bottom-5 z-40 inline-flex min-h-11 items-center gap-2.5 rounded-xl bg-orange-700 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_5px_14px_rgba(47,36,30,0.23)] transition-colors hover:bg-orange-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700"
+        className="chat-launcher sale-chat-launcher"
         hidden={open}
         aria-expanded={open}
         aria-controls="sale-chat"
         onClick={() => setOpen(true)}
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="size-5">
-          <path
-            d="M20 11.5a8 8 0 0 1-8 8 8.7 8.7 0 0 1-3.1-.6L4 20l1.2-4.7A8 8 0 1 1 20 11.5Z"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinejoin="round"
-          />
-          <path d="M8.5 11.5h7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        </svg>
+        <ChatIcon name="chat" />
         Sale assistant {active && <span className="text-xs">· Working</span>}
       </button>
       <dialog
@@ -231,41 +224,14 @@ export default function SaleChat({
         onKeyDown={(event) => {
           if (event.key === "Escape") minimize();
         }}
-        className="fixed top-auto right-3 bottom-3 left-auto z-50 m-0 flex h-[min(540px,calc(100dvh-24px))] w-[calc(100vw-24px)] max-w-[390px] flex-col overflow-hidden rounded-xl border border-stone-600 bg-white p-0 text-inherit shadow-[0_8px_22px_rgba(30,30,30,0.16)] sm:right-6 sm:bottom-6"
+        className="chat-window sale-chat"
       >
-        <header className="flex shrink-0 items-center gap-2 border-b border-stone-200 px-3 py-3 sm:gap-3 sm:px-4">
-          <span
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-700 text-white sm:size-10"
-          >
-            <svg viewBox="0 0 24 24" fill="none" className="size-6">
-              <path
-                d="M20 11.5a8 8 0 0 1-8 8 8.7 8.7 0 0 1-3.1-.6L4 20l1.2-4.7A8 8 0 1 1 20 11.5Z"
-                fill="currentColor"
-              />
-            </svg>
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight sm:text-base">Sale assistant</p>
-            <p className="mt-1 truncate text-xs text-stone-600">{context}</p>
-          </div>
-          <button
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xl hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-orange-700 sm:size-9"
-            aria-label="Minimize sale assistant"
-            onClick={minimize}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-xl hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-orange-700 sm:size-9"
-            aria-label="Dismiss sale assistant"
-            onClick={minimize}
-          >
-            ×
-          </button>
-        </header>
+        <ChatWindowHeader
+          title="Sale assistant"
+          subtitle={context}
+          icon="chat"
+          onMinimize={minimize}
+        />
         {denied ? (
           <p role="alert" className="p-5">
             Conversation access ended. Reload to sign in again.

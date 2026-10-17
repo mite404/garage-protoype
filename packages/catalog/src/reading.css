@@ -91,7 +91,7 @@
 }
 .card-next-action {
   padding: 16px;
-  border-left: 3px solid var(--mustard);
+  border-left: 3px solid var(--primary);
   border-radius: 0 4px 4px 0;
   background: var(--muted);
 }

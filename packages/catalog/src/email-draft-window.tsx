@@ -89,7 +89,7 @@ export function EmailDraftWindow({
           <div className="email-draft-actions">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               aria-pressed={large}
               onClick={() => {
                 setLarge(!large);

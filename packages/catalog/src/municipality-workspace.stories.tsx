@@ -74,7 +74,7 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
     await expect(canvas.getByText(/Contacted San Antonio Fire Department/)).toBeVisible();
-    await expect(canvas.getByText("$84,000 proposed")).toBeVisible();
+    await expect(canvas.getByText("$84,000")).toHaveTextContent("$84,000 proposed");
   },
 };
 export const EmptyActivityAndListings: Story = {

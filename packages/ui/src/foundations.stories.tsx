@@ -27,10 +27,10 @@ export const PaletteAndType: Story = {
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ["Ivory", "bg-background text-foreground"],
-          ["Vermilion", "bg-primary text-primary-foreground"],
-          ["Charcoal", "bg-foreground text-background"],
-          ["Mustard", "bg-mustard text-foreground"],
+          ["Background", "bg-background text-foreground"],
+          ["Action", "bg-primary text-primary-foreground"],
+          ["Foreground", "bg-foreground text-background"],
+          ["Muted", "bg-muted text-foreground"],
         ].map(([name, colors]) => (
           <div key={name} className={`rounded-lg border border-border p-6 text-sm ${colors}`}>
             {name}
@@ -39,7 +39,7 @@ export const PaletteAndType: Story = {
       </div>
       <Separator />
       <p className="text-sm text-muted-foreground">
-        Barlow Condensed for display. Legible sans for records.
+        Space Grotesk for headings. Roboto for records and conversation.
       </p>
     </div>
   ),

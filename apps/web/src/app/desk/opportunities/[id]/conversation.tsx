@@ -117,10 +117,10 @@ export default function Conversation({
           }
         />
       </div>
-      <output className="mt-3 block text-xs text-stone-500">{connection}</output>
+      <output className="mt-3 block text-xs text-muted-foreground">{connection}</output>
       <div className="my-5 space-y-5" aria-label="Conversation history">
         {!view.turns.length && !streams.length && (
-          <p className="rounded-md bg-stone-50 p-5 text-sm text-stone-500">
+          <p className="rounded-md bg-muted p-5 text-sm text-muted-foreground">
             Start with the question blocking this sale. Answers use only reviewed, shareable
             evidence.
           </p>
@@ -133,13 +133,13 @@ export default function Conversation({
                 <AssistanceCard card={card} key={i} />
               ))}
               {!turn.cards.length && (
-                <p className="text-sm text-stone-600">
+                <p className="text-sm text-muted-foreground">
                   No current card is available. Evidence may have changed. Retry the question as a
                   new turn or review its task below.
                 </p>
               )}
               {turn.statuses.some((s) => s === "malformed" || s === "retired") && (
-                <output className="mt-2 block text-sm text-red-800">
+                <output className="mt-2 block text-sm text-destructive">
                   A malformed card was rejected. A tool retires after two malformed calls for this
                   turn only.
                 </output>
@@ -166,7 +166,7 @@ export default function Conversation({
                 </button>
               )}
               {turn.errorCode && (
-                <p className="text-sm text-red-800">
+                <p className="text-sm text-destructive">
                   {turn.errorCode === "SPEND_UNCERTAIN"
                     ? "Provider outcome uncertain. Budget remains reserved; no automatic paid retry."
                     : "Generation stopped. Review current evidence before starting a new turn."}
@@ -190,23 +190,23 @@ export default function Conversation({
           <button className="button mt-3">{pending ? "Saving…" : "Ask evidence desk"}</button>
         </fieldset>
       </form>
-      <output className="mt-3 block text-sm text-stone-600" aria-live="polite">
+      <output className="mt-3 block text-sm text-muted-foreground" aria-live="polite">
         {message}
       </output>
-      <details className="mt-6 border-t border-stone-200 pt-5">
+      <details className="mt-6 border-t border-border pt-5">
         <summary className="cursor-pointer font-semibold">
           Buyer inquiries and human next actions ({view.inquiries.length})
         </summary>
         <div className="mt-5 space-y-6">
           {view.inquiries.map((q) => (
-            <article key={q.id} className="border-b border-stone-200 pb-5">
+            <article key={q.id} className="border-b border-border pb-5">
               <p className="mb-3 whitespace-pre-wrap text-sm">
                 <strong>Original inquiry</strong>
                 <br />
                 {q.input.text}
               </p>
               <AssistanceCard card={q.card} />
-              <p className="mt-2 text-xs text-stone-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Current classification · {q.classification.replaceAll("_", " ")}
               </p>
               <div className="mt-3 flex flex-wrap gap-3">

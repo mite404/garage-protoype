@@ -41,7 +41,7 @@ export default function BuyerConversation({
     <section className="mx-auto max-w-3xl">
       <p className="eyebrow mb-3">Independent prototype · Private buyer conversation</p>
       <h1>Keep your conditions clear.</h1>
-      <p className="mt-5 text-stone-600">
+      <p className="mt-5 text-muted-foreground">
         Supported answers cite reviewed, shareable evidence. Everything else goes to your assigned
         specialist. No live language model, external messages, accepted offers or delivery
         commitments.
@@ -52,7 +52,7 @@ export default function BuyerConversation({
       <div className="my-7 space-y-5">
         {view.inquiries.map((q) => (
           <div key={q.id}>
-            <p className="mb-3 whitespace-pre-wrap rounded-md bg-stone-100 p-4 text-sm">
+            <p className="mb-3 whitespace-pre-wrap rounded-md bg-muted p-4 text-sm">
               <strong>Your inquiry</strong>
               <br />
               {q.input.text}
@@ -63,7 +63,7 @@ export default function BuyerConversation({
       </div>
       <section className="panel">
         <h2>Ask an evidence question</h2>
-        <p className="mt-3 text-sm text-stone-600">
+        <p className="mt-3 text-sm text-muted-foreground">
           Try "What is the tank capacity?" or "What was the pump-test result?" Other wording needs
           human interpretation.
         </p>
@@ -83,7 +83,7 @@ export default function BuyerConversation({
       </section>
       <section className="panel mt-5">
         <h2>Record an explicit conditional offer</h2>
-        <p className="mt-3 text-sm text-stone-600">
+        <p className="mt-3 text-sm text-muted-foreground">
           This records your stated terms for a human. It is not acceptance, a bid submission or a
           promise of delivery.
         </p>
@@ -155,7 +155,7 @@ export default function BuyerConversation({
           </fieldset>
         </form>
       </section>
-      <output className="my-5 block text-sm text-stone-600" aria-live="polite">
+      <output className="my-5 block text-sm text-muted-foreground" aria-live="polite">
         {pending ? "Recording…" : message}
       </output>
     </section>

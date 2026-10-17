@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fontsource/barlow-condensed": "5.3.0",
     "@signal-desk/catalog": "0.1.0",
     "@signal-desk/ui": "0.1.0",
     "@tailwindcss/postcss": "4.3.3",

@@ -32,7 +32,7 @@ export default function PhotoReview({
         <span className="state state-unknown">{covered} of 8 views reviewed readable</span>
       </div>
       <div className="px-6 pb-6">
-        <p className="text-sm text-stone-600">
+        <p className="text-sm text-muted-foreground">
           Coverage describes supplied photos, not an inspection or a safety assessment. Private
           photos do not complete shared coverage. Duplicate images count once.
         </p>
@@ -42,7 +42,7 @@ export default function PhotoReview({
         </p>
         <ul className="my-5 grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Photo coverage">
           {view.coverage.map((c) => (
-            <li key={c.view} className="rounded-md border border-stone-200 p-3" data-view={c.view}>
+            <li key={c.view} className="rounded-md border border-border p-3" data-view={c.view}>
               <strong className="block text-sm">{photoLabels[c.view]}</strong>
               <span
                 className={`mt-2 state state-${c.state === "covered" ? "reviewed" : c.state === "unreadable" ? "conflict" : "unknown"}`}
@@ -53,16 +53,13 @@ export default function PhotoReview({
           ))}
         </ul>
         {!view.photos.length && (
-          <p className="py-5 text-sm text-stone-600">
+          <p className="py-5 text-sm text-muted-foreground">
             No photos supplied. Upload a permissioned PNG or JPEG using Add evidence below.
           </p>
         )}
         <div className="grid gap-5 lg:grid-cols-2">
           {view.photos.map((photo) => (
-            <article
-              className="min-w-0 rounded-lg border border-stone-200 p-4"
-              key={photo.sourceId}
-            >
+            <article className="min-w-0 rounded-lg border border-border p-4" key={photo.sourceId}>
               <a
                 href={`/api/v1/desk/sources/${encodeURIComponent(photo.sourceId)}/content`}
                 target="_blank"
@@ -73,13 +70,13 @@ export default function PhotoReview({
                   unoptimized
                   width={800}
                   height={600}
-                  className="h-52 w-full rounded-md bg-stone-100 object-contain"
+                  className="h-52 w-full rounded-md bg-muted object-contain"
                   src={`/api/v1/desk/sources/${encodeURIComponent(photo.sourceId)}/content`}
                   alt={`Supplied original: ${photo.name}`}
                 />
               </a>
               <h3 className="mt-3 break-words text-base font-semibold">{photo.name}</h3>
-              <p className="mt-1 text-xs text-stone-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {photo.audience === "private" ? "Private · Only you" : "Assigned specialists"} ·
                 Open image to inspect original
               </p>
@@ -88,9 +85,9 @@ export default function PhotoReview({
                 {photoLabels[photo.effective.view]} ·{" "}
                 {photo.effective.readable ? "Readable" : "Unreadable / unconfirmed"}
               </p>
-              <p className="mt-1 text-xs text-stone-600">{photo.effective.reason}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{photo.effective.reason}</p>
               {photo.suggestion && (
-                <p className="mt-3 text-xs text-stone-500">
+                <p className="mt-3 text-xs text-muted-foreground">
                   Preserved machine suggestion · {photoLabels[photo.suggestion.view]} ·{" "}
                   {photo.suggestion.readable ? "Readable" : "Unreadable"} · {photo.suggestion.model}
                   <br />
@@ -170,9 +167,9 @@ export default function PhotoReview({
             </article>
           ))}
         </div>
-        <details className="mt-6 rounded-lg border border-stone-200 p-4" id="photo-request">
+        <details className="mt-6 rounded-lg border border-border p-4" id="photo-request">
           <summary className="font-semibold">Suggested seller request · Unsent</summary>
-          <p className="mt-3 text-xs text-stone-600">
+          <p className="mt-3 text-xs text-muted-foreground">
             Editable preview only. Changes here are not persisted. No send action exists. Final
             drafts belong to the follow-up workflow.
           </p>
@@ -186,10 +183,10 @@ export default function PhotoReview({
             </label>
             <textarea id="photo-request-body" rows={10} defaultValue={view.photoRequest.body} />
           </div>
-          <p className="mt-3 text-xs text-stone-500">
+          <p className="mt-3 text-xs text-muted-foreground">
             Opportunity {view.opportunityId} · Based on revision {view.photoRequest.basisRevision}
           </p>
-          <ul className="mt-3 space-y-2 text-xs text-stone-600">
+          <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
             {view.photoRequest.gaps.map((g) => (
               <li key={g.view}>
                 {photoLabels[g.view]} ·{" "}

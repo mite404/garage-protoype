@@ -3,7 +3,6 @@ import { Button } from "@signal-desk/ui/components/ui/button";
 import { Textarea } from "@signal-desk/ui/components/ui/textarea";
 import { ChatIcon, ChatLauncher, ChatWindowHeader } from "./chat-window";
 import { EmailDraftWindow, type EmailDraft } from "./email-draft-window";
-import "./chat-workspace.css";
 
 type VehicleContext = {
   department: string;

@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import "@fontsource/barlow-condensed/600.css";
-import "@fontsource/barlow-condensed/700.css";
 import "./globals.css";
 import { AppShell } from "./workspace-shell";
 

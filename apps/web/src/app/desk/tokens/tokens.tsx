@@ -43,7 +43,7 @@ function TokenList({
     <section className="mt-8" aria-label="Application tokens">
       <h2>Your application tokens</h2>
       {tokens.length === 0 && (
-        <p className="mt-3 text-sm text-stone-600">No application tokens yet.</p>
+        <p className="mt-3 text-sm text-muted-foreground">No application tokens yet.</p>
       )}
       <ul className="mt-4 space-y-3">
         {tokens.map((token) => (
@@ -51,7 +51,7 @@ function TokenList({
             <div className="min-w-0 break-words">
               <h3 className="font-semibold">{token.label}</h3>
               <p className="mt-1 text-sm">{token.scopes.join(" · ")}</p>
-              <p className="mt-1 text-xs text-stone-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Expires {new Date(token.expiresAt).toISOString().slice(0, 10)} UTC
               </p>
               <p className="mt-2 text-sm">{token.revokedAt ? "Revoked" : "Not revoked"}</p>
@@ -147,7 +147,7 @@ export default function Tokens({
             <option value="30">30 days</option>
           </select>
         </div>
-        <p className="text-sm text-stone-600">
+        <p className="text-sm text-muted-foreground">
           Read assigned opportunities and permitted evidence is always included.
         </p>
         <label className="check-label">
@@ -165,7 +165,7 @@ export default function Tokens({
           Create token
         </button>
       </form>
-      <output className="mt-4 block text-sm text-stone-700">{message}</output>
+      <output className="mt-4 block text-sm text-muted-foreground">{message}</output>
       <TokenSecret secret={secret} hide={() => setSecret(null)} />
       <TokenList
         tokens={tokens}

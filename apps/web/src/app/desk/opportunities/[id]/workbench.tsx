@@ -95,7 +95,7 @@ export default function EvidenceWorkbench({
 
   return (
     <section className="evidence-desk" aria-busy={pending}>
-      <nav aria-label="Breadcrumb" className="mb-7 text-sm text-stone-500">
+      <nav aria-label="Breadcrumb" className="mb-7 text-sm text-muted-foreground">
         <Link href="/desk">Opportunities</Link>
         <span className="mx-3" aria-hidden="true">
           /
@@ -106,7 +106,7 @@ export default function EvidenceWorkbench({
         <div>
           <p className="eyebrow mb-3">Evidence workbench · {view.opportunityId}</p>
           <h1 className="workbench-title">{view.title}</h1>
-          <p className="mt-3 text-sm text-stone-600">
+          <p className="mt-3 text-sm text-muted-foreground">
             Resolve what the evidence says before a buyer relies on it.
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function EvidenceWorkbench({
         <span>
           <strong>{reviewed}</strong> reviewed facts
         </span>
-        <span className="text-stone-500">Revision {view.revision}</span>
+        <span className="text-muted-foreground">Revision {view.revision}</span>
       </div>
       {saved && (
         <p className="saved-notice mt-5">
@@ -134,7 +134,7 @@ export default function EvidenceWorkbench({
       )}
       <output
         aria-live="polite"
-        className={`mt-4 block text-sm ${error ? "text-red-800" : "text-stone-600"}`}
+        className={`mt-4 block text-sm ${error ? "text-destructive" : "text-muted-foreground"}`}
       >
         {pending ? "Saving…" : message}
       </output>
@@ -151,9 +151,9 @@ export default function EvidenceWorkbench({
                 <p className="eyebrow mb-2">01 · Review</p>
                 <h2 id="facts-heading">Claims, not assumptions.</h2>
               </div>
-              <span className="text-xs text-stone-500">Human approval required</span>
+              <span className="text-xs text-muted-foreground">Human approval required</span>
             </div>
-            <p className="px-6 pb-4 text-sm text-stone-600">
+            <p className="px-6 pb-4 text-sm text-muted-foreground">
               A reviewed seller statement remains seller-reported. Approval is separate from
               permission to share.
             </p>
@@ -175,7 +175,7 @@ export default function EvidenceWorkbench({
                           {fact.value} {fact.unit}
                         </span>
                       ) : (
-                        <span className="text-xs text-stone-500">
+                        <span className="text-xs text-muted-foreground">
                           {claims.length
                             ? `${claims.length} source assertions`
                             : "No approved answer"}
@@ -183,23 +183,23 @@ export default function EvidenceWorkbench({
                       )}
                     </summary>
                     <div className="fact-body">
-                      <p className="mb-4 text-sm text-stone-600">{factDescription(fact)}</p>
+                      <p className="mb-4 text-sm text-muted-foreground">{factDescription(fact)}</p>
                       <div className="claim-grid">
                         {claims.map((claim) => (
                           <blockquote key={claim.id} className="claim-card">
-                            <p className="text-xs font-semibold text-stone-500">
+                            <p className="text-xs font-semibold text-muted-foreground">
                               {claim.sourceKind.startsWith("seller")
                                 ? "Seller-reported"
                                 : "Document assertion"}
                             </p>
                             <p className="my-2 text-2xl font-semibold tabular-nums">
                               {claim.value}{" "}
-                              <span className="text-base font-normal text-stone-500">
+                              <span className="text-base font-normal text-muted-foreground">
                                 {claim.unit}
                               </span>
                             </p>
                             <p className="text-sm">“{claim.excerpt}”</p>
-                            <footer className="mt-3 text-xs text-stone-500">
+                            <footer className="mt-3 text-xs text-muted-foreground">
                               {claim.sourceName}
                               <br />
                               Page {claim.page} · characters {claim.start}-{claim.end}
@@ -269,7 +269,7 @@ export default function EvidenceWorkbench({
                           </div>
                           {claims.length > 0 && (
                             <details className="mt-4">
-                              <summary className="text-sm text-stone-600">
+                              <summary className="text-sm text-muted-foreground">
                                 Correction value and unit
                               </summary>
                               <div className="form-grid mt-3">
@@ -326,7 +326,7 @@ export default function EvidenceWorkbench({
               </div>
             </div>
             {!view.sources.length && (
-              <p className="px-6 pb-6 text-sm text-stone-600">
+              <p className="px-6 pb-6 text-sm text-muted-foreground">
                 No sources yet. Add a permissioned source or load the labeled synthetic example.
               </p>
             )}
@@ -337,7 +337,7 @@ export default function EvidenceWorkbench({
                   <summary>
                     <span className="min-w-0">
                       <strong className="block break-words text-sm">{source.name}</strong>
-                      <span className="text-xs text-stone-500">
+                      <span className="text-xs text-muted-foreground">
                         {source.kind.replaceAll("_", " ")} · {source.audience} · {source.permission}
                       </span>
                     </span>
@@ -346,19 +346,19 @@ export default function EvidenceWorkbench({
                     </span>
                   </summary>
                   <div className="fact-body">
-                    <p className="text-sm text-stone-600">{source.provenance}</p>
-                    <p className="mt-2 break-all font-mono text-[10px] text-stone-500">
+                    <p className="text-sm text-muted-foreground">{source.provenance}</p>
+                    <p className="mt-2 break-all font-mono text-[10px] text-muted-foreground">
                       SHA256 {source.sha256}
                     </p>
                     <a
-                      className="mt-3 inline-block text-sm text-orange-800 underline"
+                      className="mt-3 inline-block text-sm text-primary underline"
                       href={`/api/v1/desk/sources/${encodeURIComponent(source.id)}/content`}
                     >
                       Download original
                     </a>
                     {source.pages.map((page, index) => (
                       <div className="source-page mt-4" key={index}>
-                        <p className="mb-2 text-xs font-semibold text-stone-500">
+                        <p className="mb-2 text-xs font-semibold text-muted-foreground">
                           Page {index + 1}
                         </p>
                         <pre className="whitespace-pre-wrap break-words font-sans text-sm">
@@ -380,7 +380,7 @@ export default function EvidenceWorkbench({
                             : "Extraction suggestion"}
                         </strong>
                         <p>{classification.basis}</p>
-                        <p className="mt-1 text-stone-600">
+                        <p className="mt-1 text-muted-foreground">
                           Next action · {classification.nextAction}
                         </p>
                       </div>
@@ -521,7 +521,7 @@ export default function EvidenceWorkbench({
                   type="file"
                   accept="application/pdf,text/plain,image/png,image/jpeg"
                 />
-                <p className="mt-2 text-xs text-stone-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Photos up to 5 MiB · Text/PDF up to 10 MiB and 500 pages · No scanned PDF OCR.
                 </p>
                 <div className="form-grid mt-4">
@@ -567,9 +567,11 @@ export default function EvidenceWorkbench({
           <section className="evidence-panel context-panel">
             <p className="eyebrow mb-3">Keep the deal in view</p>
             <h2>Buyer blockers</h2>
-            <p className="mt-2 text-sm text-stone-600">No reply is sent automatically.</p>
+            <p className="mt-2 text-sm text-muted-foreground">No reply is sent automatically.</p>
             {!view.blockers.length && (
-              <p className="mt-5 text-sm text-stone-500">No buyer blocker has been recorded.</p>
+              <p className="mt-5 text-sm text-muted-foreground">
+                No buyer blocker has been recorded.
+              </p>
             )}
             {view.blockers.map((blocker) => (
               <div key={blocker.id} className="blocker mt-5">
@@ -579,14 +581,14 @@ export default function EvidenceWorkbench({
                   {blocker.state === "resolved" ? "Evidence reviewed" : "Needs human review"}
                 </span>
                 <p className="mt-3 text-sm font-semibold">{blocker.question}</p>
-                <p className="mt-2 text-sm text-stone-600">{blocker.nextAction}</p>
-                <p className="mt-3 break-all text-[11px] text-stone-500">
+                <p className="mt-2 text-sm text-muted-foreground">{blocker.nextAction}</p>
+                <p className="mt-3 break-all text-[11px] text-muted-foreground">
                   Assigned specialist · {blocker.assigneeId}
                 </p>
               </div>
             ))}
-            <div className="mt-6 border-t border-stone-200 pt-5">
-              <p className="text-xs font-semibold text-stone-500">NEXT ACTION</p>
+            <div className="mt-6 border-t border-border pt-5">
+              <p className="text-xs font-semibold text-muted-foreground">NEXT ACTION</p>
               <p className="mt-2 text-sm">
                 {view.nextAction || "Inspect the source packet and identify the next human action."}
               </p>
@@ -594,20 +596,20 @@ export default function EvidenceWorkbench({
           </section>
           <section className="evidence-panel context-panel">
             <h2>Import activity</h2>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className="mt-2 text-xs text-muted-foreground">
               Durable jobs survive reloads. Originals and corrections stay intact.
             </p>
             {view.jobs.map((job) => (
-              <div className="mt-5 border-t border-stone-200 pt-4" key={job.id}>
+              <div className="mt-5 border-t border-border pt-4" key={job.id}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="state state-unknown">{job.state}</span>
-                  <span className="text-xs text-stone-500">Attempt {job.attempt}</span>
+                  <span className="text-xs text-muted-foreground">Attempt {job.attempt}</span>
                 </div>
-                <p className="mt-2 text-xs text-stone-600">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {job.mode === "saved_example" ? "Saved synthetic run" : "Provider extraction"}
                 </p>
                 {job.error && (
-                  <p className="mt-2 break-words text-xs text-red-800">
+                  <p className="mt-2 break-words text-xs text-destructive">
                     {job.error}.{" "}
                     {job.error === "SPEND_UNCERTAIN"
                       ? "Reservation retained. Operator reconciliation is required."
@@ -643,7 +645,7 @@ export default function EvidenceWorkbench({
             >
               Queue extraction
             </button>
-            <p className="mt-3 text-xs text-stone-500">
+            <p className="mt-3 text-xs text-muted-foreground">
               Arbitrary extraction needs a configured provider, model and budget. It is never
               replaced by saved output.
             </p>
@@ -664,7 +666,7 @@ export default function EvidenceWorkbench({
           </section>
         </aside>
       </div>
-      <p className="mt-6 text-xs text-stone-500">
+      <p className="mt-6 text-xs text-muted-foreground">
         Evidence review does not establish vehicle safety, accept an offer or promise delivery.
       </p>
     </section>

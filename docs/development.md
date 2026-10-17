@@ -11,8 +11,10 @@ came from the official shadcn `base-nova` registry, configured in `packages/ui/c
 The agent-selectable authored cards and their stories live in `packages/catalog/`; stock primitives
 are not agent-selectable. Stories do not load server operations or send messages.
 
-The Dispatch shell uses charcoal navigation, an ivory workspace, and a generated original street-map
-texture limited to the top bar. It does not reuse Garage's logo, department badges, or artwork.
+The Dispatch shell, chat and draft editor share Roboto/Space Grotesk typography, neutral surfaces,
+outlined controls and orange light-theme or lime dark-theme actions. The app follows the system
+color scheme; explicit theme attributes isolate Storybook's light and dark chat specimens.
+It does not reuse Garage's logo, department badges, or artwork.
 `packages/catalog/src/workspace-shell.tsx` is human-facing chrome, not part of the agent schema.
 Storybook separates Primitives, Agent catalog, and Workspace so a visual export is not mistaken for
 permission to invoke a component. The agent still requests only reference-based answer, review,
