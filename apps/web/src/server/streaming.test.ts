@@ -33,6 +33,7 @@ test(
     runtime.searchParams.set("options", "-c role=signal_desk_runtime");
     process.env.DATABASE_URL = runtime.toString();
     let calls = 0;
+    const closedRequests = new Set<number>();
     let providerInput = "";
     let release: () => void = () => {};
     let inquiryId = "";
@@ -58,6 +59,8 @@ test(
       const input = JSON.parse(Buffer.concat(body).toString());
       providerInput = JSON.stringify(input);
       calls++;
+      const call = calls;
+      response.on("close", () => closedRequests.add(call));
       response.writeHead(200, { "Content-Type": "text/event-stream" });
       const chunk = async (delta: unknown, finish_reason: string | null = null) => {
         const bytes = Buffer.from(
@@ -265,6 +268,39 @@ test(
       assert.equal(completed.cards.length, 1);
       assert.equal(calls, 2);
       await t.test(
+        "a transient observation timeout closes without revoking conversation access",
+        async () => {
+          const observation = await fetch(endpoint, { headers: { cookie: app!.cookie } });
+          const reader = observation.body!.getReader();
+          const initial = new TextDecoder().decode((await reader.read()).value);
+          assert.match(initial, /Review the missing evidence/);
+          await db.query("begin");
+          try {
+            // Let the real evidence read hit its configured lock timeout after the first snapshot.
+            await db.query("lock table signal_desk.claims in access exclusive mode");
+            let events = "";
+            for (;;) {
+              const event = await reader.read();
+              if (event.done) break;
+              events += new TextDecoder().decode(event.value);
+            }
+            assert.doesNotMatch(events, /event: denied/);
+            assert.doesNotMatch(events, /lock timeout|select |signal_desk/);
+          } finally {
+            await db.query("rollback");
+            await reader.cancel();
+          }
+          const reconnect = await fetch(`${endpoint}?view=snapshot`, {
+            headers: { cookie: app!.cookie },
+          });
+          assert.equal(reconnect.status, 200);
+          const snapshot = await reconnect.json();
+          assert.equal(snapshot.data[0].id, submitted.id);
+          assert.equal(snapshot.data[0].text, completed.text);
+          assert.equal(calls, 2);
+        },
+      );
+      await t.test(
         "buyer and another specialist cannot observe, cancel, or submit this conversation",
         async () => {
           for (const role of ["buyer", "specialist"]) {
@@ -344,10 +380,7 @@ test(
         "cancel-key",
       );
       await cancelStream(actor, "stream-deal", cancelled.id);
-      assert.equal(
-        (await readStreams(actor, "stream-deal")).find((turn) => turn.id === cancelled.id)?.state,
-        "cancelled",
-      );
+      await waitFor((turn) => turn.state === "cancelled", cancelled.id);
       await t.test(
         "evidence changes stop a pending card without further provider admission",
         async () => {
@@ -420,7 +453,7 @@ test(
           if (key !== undefined) process.env.OPENROUTER_API_KEY = key;
         }
       });
-      function spawnOwner(faultKey = "") {
+      function spawnOwner(faultKey = "", settledTurn = "", pauseDispatch = false) {
         const worker = spawn(
           process.execPath,
           [
@@ -435,10 +468,19 @@ test(
           import { startStreamingOwner } from './apps/web/src/server/streaming-owner.ts';
           const original = pg.Client.prototype.query;
           const key = ${JSON.stringify(faultKey)};
-          if (key) pg.Client.prototype.query = async function(text, ...args) {
+          const settled = ${JSON.stringify(settledTurn)};
+          const pause = ${JSON.stringify(pauseDispatch)};
+          if (key || settled || pause) pg.Client.prototype.query = async function(text, ...args) {
             const statement = typeof text === 'string' ? text : text.text;
-            if (/insert into flue_/i.test(statement)) {
-              const found = await original.call(this, 'select id from signal_desk.assistance_drafts where request_key=$1', [key]);
+            if (pause && /update.*stream_turns.*submission_id/i.test(statement)) {
+              process.stdout.write('dispatch-paused\\n');
+              await original.call(this, 'select pg_advisory_lock(80002)');
+              await original.call(this, 'select pg_advisory_unlock(80002)');
+            }
+            if ((key || settled) && /insert into flue_/i.test(statement)) {
+              const found = settled
+                ? await original.call(this, 'select a.id from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key like $1 and a.report is not null', ['flue:' + settled + ':%'])
+                : await original.call(this, 'select id from signal_desk.assistance_drafts where request_key=$1', [key]);
               if (found.rowCount) process.kill(process.pid, 'SIGKILL');
             }
             return original.call(this, text, ...args);
@@ -463,6 +505,102 @@ test(
         });
         return worker;
       }
+      await t.test(
+        "cancellation during dispatch aborts the transport before acknowledging stopped",
+        async (t) => {
+          t.after(async () => {
+            await db.query("select pg_advisory_unlock(80002)");
+            if (child && child.exitCode === null && child.signalCode === null) {
+              child.kill("SIGKILL");
+              await once(child, "exit");
+            }
+            child = undefined;
+          });
+          mode = "holding";
+          const count = calls;
+          await db.query("select pg_advisory_lock(80002)");
+          const turn = await submitStream(
+            actor,
+            "stream-deal",
+            "Stop during dispatch",
+            "dispatch-stop",
+          );
+          child = spawnOwner("", "", true);
+          for (
+            let i = 0;
+            i < 200 && (!childLogs.includes("dispatch-paused") || calls === count);
+            i++
+          )
+            await setTimeout(25);
+          assert.match(childLogs, /dispatch-paused/);
+          assert.equal(
+            calls,
+            count + 1,
+            "The real provider must be active at the dispatch boundary",
+          );
+          await cancelStream(actor, "stream-deal", turn.id);
+          await db.query("select pg_advisory_unlock(80002)");
+          const result = await waitFor((value) => value.state === "cancelled", turn.id);
+          for (let i = 0; i < 40 && !closedRequests.has(count + 1); i++) await setTimeout(25);
+          assert.equal(
+            closedRequests.has(count + 1),
+            true,
+            "Stopped must mean the provider was aborted",
+          );
+          const saved = result.text;
+          await setTimeout(300);
+          assert.equal(
+            (await readStreams(actor, "stream-deal")).find((value) => value.id === turn.id)?.text,
+            saved,
+          );
+          assert.equal(calls, count + 1);
+        },
+      );
+      await t.test(
+        "crash after paid settlement before Flue completion never buys a replacement response",
+        async (t) => {
+          t.after(async () => {
+            if (child && child.exitCode === null && child.signalCode === null) {
+              child.kill("SIGKILL");
+              await once(child, "exit");
+            }
+            child = undefined;
+          });
+          mode = "normal";
+          const turn = await submitStream(
+            actor,
+            "stream-deal",
+            "Summarize the missing evidence",
+            "settled-crash",
+          );
+          child = spawnOwner("", turn.id);
+          const [, signal] = await once(child, "exit");
+          assert.equal(signal, "SIGKILL");
+          const before = await db.query(
+            "select a.id,a.report from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key like $1",
+            [`flue:${turn.id}:%`],
+          );
+          assert.equal(before.rowCount, 1);
+          assert.equal(before.rows[0].report.kind, "completed");
+          const count = calls;
+          child = spawnOwner();
+          const result = await waitFor(
+            (value) => ["completed", "interrupted"].includes(value.state),
+            turn.id,
+          );
+          assert.equal(calls, count, "Recovery must not issue another provider request");
+          assert.equal(result.state, "interrupted");
+          assert.equal(result.errorCode, "MODEL_CHECKPOINT_MISSING");
+          const after = await db.query(
+            "select a.id,a.report from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key like $1",
+            [`flue:${turn.id}:%`],
+          );
+          assert.deepEqual(after.rows, before.rows);
+          child.kill("SIGKILL");
+          await once(child, "exit");
+          child = undefined;
+        },
+      );
       await t.test(
         "crash after draft commit before Flue acknowledgement recovers one unsent draft",
         async () => {

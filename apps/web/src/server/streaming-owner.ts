@@ -1,15 +1,15 @@
 import "server-only";
 import { setTimeout } from "node:timers/promises";
-import { eq, inArray, and, sql, exists, isNull } from "drizzle-orm";
+import { eq, inArray, and, sql } from "drizzle-orm";
 import { init, instrument } from "@flue/runtime";
 import { start } from "@flue/runtime/node";
 import type { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { approvedSalesTool } from "@signal-desk/contracts/assistance-schema";
 import { orm } from "./db";
-import { streamTurns, inferenceAttempts, inferenceOperations } from "./db-schema";
+import { streamTurns } from "./db-schema";
 import { streamActor, streamError, streamPrompt } from "./streaming";
 import { flueStorage, lockStreamingOwner } from "./flue-storage";
-import { admittedProvider, modelExecution } from "./streaming-provider";
+import { admittedProvider, modelExecution, requireModelCheckpoint } from "./streaming-provider";
 import { AppError } from "./errors";
 import { SpecialistStream } from "../agents/specialist";
 
@@ -20,6 +20,12 @@ async function execute(id: string) {
   let text = "";
   let afterTool = false;
   try {
+    const claimed = await orm()
+      .update(streamTurns)
+      .set({ state: "running" })
+      .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])))
+      .returning({ id: streamTurns.id });
+    if (!claimed.length) return;
     const { row } = await streamActor(id);
     const context = await streamPrompt(id);
     const receipt = await handle.dispatch({
@@ -47,10 +53,13 @@ Current permitted inquiry result: ${JSON.stringify(context.inquiry)}
 Current evidence revision: ${context.revision}`,
       },
     });
-    await orm()
+    const [dispatched] = await orm()
       .update(streamTurns)
-      .set({ state: "running", submissionId: receipt.submissionId })
-      .where(and(eq(streamTurns.id, id), eq(streamTurns.state, "queued")));
+      .set({ submissionId: receipt.submissionId })
+      .where(eq(streamTurns.id, id))
+      .returning({ state: streamTurns.state });
+    // An earlier abort may have raced ahead of dispatch and found no submission yet.
+    if (dispatched?.state !== "running") await handle.abort();
     await handle.read(receipt, {
       onEvent: (chunk) => {
         if (chunk.type === "tool-input") afterTool = true;
@@ -63,7 +72,10 @@ Current evidence revision: ${context.revision}`,
             .then(async () => {
               if (writeError) return;
               await streamActor(id);
-              await orm().update(streamTurns).set({ text: snapshot }).where(eq(streamTurns.id, id));
+              await orm()
+                .update(streamTurns)
+                .set({ text: snapshot })
+                .where(and(eq(streamTurns.id, id), eq(streamTurns.state, "running")));
             })
             .catch(async (error: unknown) => {
               writeError = error;
@@ -122,37 +134,37 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
     },
   });
   let runtime;
+  let stores: Awaited<ReturnType<typeof adapter.connect>>;
   try {
-    // Only requests left by the previous owner are uncertain. Do this before Flue resumes work.
-    await orm()
-      .update(streamTurns)
-      .set({ state: "interrupted", errorCode: "SPEND_UNCERTAIN" })
-      .where(
-        and(
-          inArray(streamTurns.state, ["queued", "running"]),
-          exists(
-            orm()
-              .select({ id: inferenceAttempts.id })
-              .from(inferenceAttempts)
-              .innerJoin(
-                inferenceOperations,
-                eq(inferenceOperations.id, inferenceAttempts.operation_id),
-              )
-              .where(
-                and(
-                  eq(inferenceOperations.user_id, streamTurns.actorId),
-                  sql`${inferenceOperations.request_key} like 'flue:' || ${streamTurns.id} || ':%'`,
-                  isNull(inferenceAttempts.report),
-                ),
-              ),
-          ),
-        ),
-      );
+    stores = await adapter.connect();
+    // Check paid results against canonical completions before Flue can resume any submission.
+    const pending = await orm()
+      .select({ id: streamTurns.id })
+      .from(streamTurns)
+      .where(inArray(streamTurns.state, ["queued", "running"]));
+    for (const row of pending) {
+      try {
+        await requireModelCheckpoint(row.id, stores.conversationStreamStore);
+      } catch (error) {
+        if (
+          !(error instanceof AppError) ||
+          !["SPEND_UNCERTAIN", "MODEL_CHECKPOINT_MISSING"].includes(error.code)
+        )
+          throw error;
+        await orm()
+          .update(streamTurns)
+          .set({ state: "interrupted", errorCode: error.code })
+          .where(
+            and(eq(streamTurns.id, row.id), inArray(streamTurns.state, ["queued", "running"])),
+          );
+      }
+    }
     runtime = await start({
       agents: [SpecialistStream],
-      providers: [admittedProvider(options.transport)],
+      providers: [admittedProvider(stores.conversationStreamStore, options.transport)],
       db: {
         ...adapter,
+        connect: () => stores,
         migrate: async () => {
           await pool.query("select value from flue_meta where key='format_version'");
         },
@@ -166,6 +178,26 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
   }
   let stopped = false;
   const active = new Map<string, Promise<void>>();
+  async function acknowledgeCancellation(id: string) {
+    try {
+      await init(SpecialistStream, { id }).abort();
+      await active.get(id);
+      const turn = await orm().query.streamTurns.findFirst({
+        where: eq(streamTurns.id, id),
+      });
+      if (turn?.submissionId) {
+        const submission = await stores.submissionStore.getSubmission(turn.submissionId);
+        if (submission && submission.status !== "settled") return;
+      }
+    } catch {
+      // Keep cancellation pending until the owner can confirm that execution has stopped.
+      return;
+    }
+    await orm()
+      .update(streamTurns)
+      .set({ state: "cancelled" })
+      .where(and(eq(streamTurns.id, id), eq(streamTurns.state, "cancelling")));
+  }
   const loop = (async () => {
     while (!stopped) {
       const rows = await orm()
@@ -174,13 +206,7 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
         .where(inArray(streamTurns.state, ["queued", "running", "cancelling"]));
       for (const row of rows) {
         if (row.state === "cancelling") {
-          await init(SpecialistStream, { id: row.id })
-            .abort()
-            .catch(() => undefined);
-          await orm()
-            .update(streamTurns)
-            .set({ state: "cancelled" })
-            .where(eq(streamTurns.id, row.id));
+          await acknowledgeCancellation(row.id);
         } else if (!active.has(row.id)) {
           const work = execute(row.id).finally(() => {
             active.delete(row.id);

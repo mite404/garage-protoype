@@ -165,7 +165,7 @@ export async function cancelStream(actor: Actor, opportunityId: string, id: stri
   if (!row) throw new AppError(404, "NOT_FOUND", "Stream not found.");
   await orm()
     .update(streamTurns)
-    .set({ state: row.state === "queued" ? "cancelled" : "cancelling" })
+    .set({ state: "cancelling" })
     .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
 }
 

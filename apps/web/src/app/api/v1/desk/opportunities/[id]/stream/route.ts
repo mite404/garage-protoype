@@ -4,7 +4,7 @@ import { requireHttpActor } from "@/server/auth";
 import { boundedBody } from "@/server/evidence-http";
 import { parseInput } from "@/server/validation";
 import { cancelStream, readStreams, streamId, submitStream } from "@/server/streaming";
-import { failure, success } from "@/server/errors";
+import { AppError, failure, success } from "@/server/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,8 +37,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
               previous = current;
             } else stream.enqueue(encode.encode(": observing\n\n"));
           }
-        } catch {
-          if (!controller.signal.aborted)
+        } catch (error) {
+          if (
+            !controller.signal.aborted &&
+            error instanceof AppError &&
+            [401, 403, 404].includes(error.status)
+          )
             stream.enqueue(encode.encode("event: denied\ndata: {}\n\n"));
         } finally {
           if (!controller.signal.aborted) stream.close();

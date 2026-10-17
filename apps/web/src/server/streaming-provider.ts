@@ -7,17 +7,61 @@ import {
   type ProviderStreams,
 } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import type { ConversationStreamStore } from "@flue/runtime/adapter";
 import { z } from "zod";
 import { approvedSalesTool } from "@signal-desk/contracts/assistance-schema";
 import { runInference } from "./model";
 import { streamContext, streamError } from "./streaming";
 import { orm } from "./db";
-import { streamTurns } from "./db-schema";
-import { eq } from "drizzle-orm";
+import { streamTurns, inferenceAttempts, inferenceOperations } from "./db-schema";
+import { eq, like } from "drizzle-orm";
 import { AppError } from "./errors";
 
 /** Carries trusted Flue execution identity, including compaction, to paid admission. */
 export const modelExecution = new AsyncLocalStorage<{ id: string; requestId: string }>();
+
+/** Requires durable Flue acknowledgement before another model step can spend.
+ * @throws {AppError} For unknown charges or a paid response absent from Flue's completed history.
+ */
+export async function requireModelCheckpoint(
+  id: string,
+  store: ConversationStreamStore,
+  currentRequestId?: string,
+) {
+  const prefix = `flue:${id}:`;
+  const attempts = await orm()
+    .select({ key: inferenceOperations.request_key, report: inferenceAttempts.report })
+    .from(inferenceAttempts)
+    .innerJoin(inferenceOperations, eq(inferenceOperations.id, inferenceAttempts.operation_id))
+    .where(like(inferenceOperations.request_key, `${prefix}%`));
+  if (attempts.some((attempt) => attempt.report === null))
+    throw new AppError(409, "SPEND_UNCERTAIN", "Prior provider request requires reconciliation.");
+  const prior = attempts.filter((attempt) => attempt.key !== `${prefix}${currentRequestId}`);
+  if (!prior.length) return;
+  const completed = new Set<string>();
+  let offset: string | undefined;
+  // Flue 2.3's durable stream path and canonical turn IDs, not its projected UI history.
+  for (;;) {
+    const page = await store.read(`agents/SpecialistStream/${id}`, { offset });
+    for (const record of page.batches.flatMap((batch) => batch.records)) {
+      if (
+        record.type === "assistant_message_completed" &&
+        record.stopReason !== "aborted" &&
+        record.stopReason !== "error" &&
+        record.turnId
+      )
+        completed.add(`${prefix}${record.turnId}`);
+    }
+    if (page.upToDate) break;
+    offset = page.nextOffset;
+  }
+  if (prior.some((attempt) => !completed.has(attempt.key)))
+    throw new AppError(
+      409,
+      "MODEL_CHECKPOINT_MISSING",
+      "A paid response was not acknowledged. Review saved progress before asking again.",
+    );
+}
 
 const usage = z.object({
   input: z.number(),
@@ -97,7 +141,10 @@ function emptyError(): AssistantMessage {
 /** Registers only the admitted provider; no built-in fallback can make an unaccounted request.
  * The optional transport is a server-owned boundary for controlled provider verification.
  */
-export function admittedProvider(transport: typeof streamSimple = streamSimple) {
+export function admittedProvider(
+  store: ConversationStreamStore,
+  transport: typeof streamSimple = streamSimple,
+) {
   const stream: ProviderStreams["streamSimple"] = (_model, context, options) => {
     const output = createAssistantMessageEventStream();
     const execution = modelExecution.getStore();
@@ -107,6 +154,7 @@ export function admittedProvider(transport: typeof streamSimple = streamSimple) 
         if (transport === streamSimple && !process.env.OPENROUTER_API_KEY)
           throw new AppError(503, "NOT_CONFIGURED", "OpenRouter is not configured.");
         const { actor, row } = await streamContext(execution.id);
+        await requireModelCheckpoint(row.id, store, execution.requestId);
         const permittedContext = {
           ...context,
           messages: context.messages.map((message) =>
