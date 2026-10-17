@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { Pool } from "pg";
 import { z } from "zod";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { identities } from "../apps/web/src/server/db-schema";
 
 const config = z
   .object({
@@ -24,10 +26,7 @@ try {
   });
   if (error || !data.user)
     throw new Error("Identity creation failed. Inspect the prototype Auth dashboard.");
-  await pool.query(`insert into signal_desk.identities(user_id,role) values ($1,$2)`, [
-    data.user.id,
-    config.INVITE_ROLE,
-  ]);
+  await drizzle(pool).insert(identities).values({ userId: data.user.id, role: config.INVITE_ROLE });
   process.stdout.write(`Invited identity ${data.user.id}. Spending remains disabled.\n`);
 } finally {
   await pool.end();

@@ -28,12 +28,7 @@ test("shared UI cannot reach the web app or server-only code", () => {
       );
     }
   }
-  assert.deepEqual(imports("packages/catalog/src/schema.ts"), [
-    "@signal-desk/contracts/assistance-schema",
-    "@signal-desk/contracts/assistance-schema",
-  ]);
-  assert.equal(readFileSync("packages/catalog/package.json", "utf8").includes('"./schema"'), true);
-  for (const path of ["packages/catalog/src/schema.ts", ...sources("packages/contracts/src")]) {
+  for (const path of sources("packages/contracts/src")) {
     assert.ok(path.endsWith(".ts"), `${path} is not a React-free schema`);
     for (const specifier of imports(path)) {
       assert.doesNotMatch(

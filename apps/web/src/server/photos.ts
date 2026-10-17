@@ -2,6 +2,9 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
+import { and, desc, eq, or, sql } from "drizzle-orm";
+import { orm } from "./db";
+import { evidenceBlockers, importJobs, photoReviews, photoSuggestions, sources } from "./db-schema";
 import type { Actor } from "./access";
 import { AppError } from "./errors";
 import { photoView, photoReview, photoCoverage } from "@signal-desk/contracts/photo-schema";
@@ -25,18 +28,47 @@ const photoRow = z.object({
 
 /** Reads only source-authorized photos. Reviews take precedence without erasing suggestions. */
 export async function readPhotos(db: PoolClient, actor: Actor, opportunityId: string) {
-  const result = await db.query(
-    `select s.id as "sourceId",s.sha256,s.name,s.audience,s.shareable,s.provenance,
-    (select jsonb_build_object('view',p.view,'readable',p.readable,'reason',p.reason,'revision',p.revision,'jobId',p.job_id,'model',j.model)
-      from signal_desk.photo_suggestions p join signal_desk.import_jobs j on j.id=p.job_id where p.source_id=s.id order by p.revision desc limit 1) as suggestion,
-    (select jsonb_build_object('view',r.view,'readable',r.readable,'reason',r.reason,'revision',r.revision,'approved',r.approved)
-      from signal_desk.photo_reviews r where r.source_id=s.id order by r.revision desc limit 1) as review
-    from signal_desk.sources s where s.opportunity_id=$1 and s.kind='photo' and (s.owner_id=$2 or s.audience='sales') order by s.created_at,s.id`,
-    [opportunityId, actor.userId],
-  );
+  const store = orm(db);
+  const suggestion = store
+    .select({
+      value: sql`jsonb_build_object('view',${photoSuggestions.view},'readable',${photoSuggestions.readable},'reason',${photoSuggestions.reason},'revision',${photoSuggestions.revision},'jobId',${photoSuggestions.job_id},'model',${importJobs.model})`,
+    })
+    .from(photoSuggestions)
+    .innerJoin(importJobs, eq(importJobs.id, photoSuggestions.job_id))
+    .where(eq(photoSuggestions.source_id, sources.id))
+    .orderBy(desc(photoSuggestions.revision))
+    .limit(1);
+  const review = store
+    .select({
+      value: sql`jsonb_build_object('view',${photoReviews.view},'readable',${photoReviews.readable},'reason',${photoReviews.reason},'revision',${photoReviews.revision},'approved',${photoReviews.approved})`,
+    })
+    .from(photoReviews)
+    .where(eq(photoReviews.source_id, sources.id))
+    .orderBy(desc(photoReviews.revision))
+    .limit(1);
+  const result = await store
+    .select({
+      sourceId: sources.id,
+      sha256: sources.sha256,
+      name: sources.name,
+      audience: sources.audience,
+      shareable: sources.shareable,
+      provenance: sources.provenance,
+      suggestion: sql`(${suggestion})`,
+      review: sql`(${review})`,
+    })
+    .from(sources)
+    .where(
+      and(
+        eq(sources.opportunity_id, opportunityId),
+        eq(sources.kind, "photo"),
+        or(eq(sources.owner_id, actor.userId), eq(sources.audience, "sales")),
+      ),
+    )
+    .orderBy(sources.created_at, sources.id);
   return z
     .array(photoRow)
-    .parse(result.rows)
+    .parse(result)
     .map((p) => ({
       ...p,
       effective: {
@@ -70,37 +102,38 @@ export async function appendPhotoReview(
     throw new AppError(403, "DISCLOSURE_DENIED", "This photo does not permit public sharing.");
   if (command.approved && (!command.readable || command.view === "unknown"))
     throw new AppError(422, "PHOTO_INCOMPLETE", "Only a readable identified view can be approved.");
-  await db.query(
-    `insert into signal_desk.photo_reviews(id,source_id,actor_id,view,readable,approved,reason,revision) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [
-      randomUUID(),
-      photo.sourceId,
-      actor.userId,
-      command.view,
-      command.readable,
-      command.approved,
-      command.reason,
-      revision + 1,
-    ],
-  );
+  await orm(db)
+    .insert(photoReviews)
+    .values({
+      id: randomUUID(),
+      source_id: photo.sourceId,
+      actor_id: actor.userId,
+      view: command.view,
+      readable: command.readable,
+      approved: command.approved,
+      reason: command.reason,
+      revision: revision + 1,
+    });
 }
 
 /** Refreshes stable photo blockers in the opportunity; private photos never resolve shared tasks. */
 export async function refreshPhotoBlockers(db: PoolClient, actor: Actor, opportunityId: string) {
   const photos = (await readPhotos(db, actor, opportunityId)).filter((p) => p.audience === "sales");
   for (const gap of photoCoverage(photos)) {
-    await db.query(
-      `insert into signal_desk.evidence_blockers(id,opportunity_id,blocker_key,question,assignee_id,next_action,state)
-    values ($1,$2,$3,$4,$5,$6,$7) on conflict(opportunity_id,blocker_key) do update set state=excluded.state`,
-      [
-        randomUUID(),
-        opportunityId,
-        `photo:${gap.view}`,
-        `Supply readable ${gap.view.replaceAll("_", " ")} evidence`,
-        actor.userId,
-        "Inspect supplied photos and request missing evidence from the seller",
-        gap.state === "covered" ? "resolved" : "needs_review",
-      ],
-    );
+    await orm(db)
+      .insert(evidenceBlockers)
+      .values({
+        id: randomUUID(),
+        opportunity_id: opportunityId,
+        blocker_key: `photo:${gap.view}`,
+        question: `Supply readable ${gap.view.replaceAll("_", " ")} evidence`,
+        assignee_id: actor.userId,
+        next_action: "Inspect supplied photos and request missing evidence from the seller",
+        state: gap.state === "covered" ? "resolved" : "needs_review",
+      })
+      .onConflictDoUpdate({
+        target: [evidenceBlockers.opportunity_id, evidenceBlockers.blocker_key],
+        set: { state: sql`excluded.state` },
+      });
   }
 }

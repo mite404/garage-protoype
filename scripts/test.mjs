@@ -13,6 +13,7 @@ const result = spawnSync(
     "tsx",
     "--test",
     "apps/web/src/**/*.test.ts",
+    "packages/*/src/**/*.test.ts",
     "scripts/*.test.mjs",
   ],
   {

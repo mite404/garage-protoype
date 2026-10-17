@@ -6,7 +6,8 @@
   "exports": {
     "./assistance-schema": "./src/assistance-schema.ts",
     "./evidence-schema": "./src/evidence-schema.ts",
-    "./photo-schema": "./src/photo-schema.ts"
+    "./photo-schema": "./src/photo-schema.ts",
+    "./token-schema": "./src/token-schema.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

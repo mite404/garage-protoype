@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireHttpActor } from "@/server/auth";
 import { boundedBody } from "@/server/evidence-http";
-import { parseEvidence } from "@/server/evidence";
+import { parseInput } from "@/server/validation";
 import {
   beginChatTurn,
   getAssistance,
@@ -41,7 +41,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const actor = await requireHttpActor(request, true);
     const { id } = await context.params;
     await requireOpportunity(actor, id, "specialist");
-    const input = parseEvidence(command, await (await boundedBody(request, 20000)).json());
+    const input = parseInput(command, await (await boundedBody(request, 20000)).json());
     const key = request.headers.get("Idempotency-Key") ?? "";
     switch (input.kind) {
       case "chat": {

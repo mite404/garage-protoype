@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
-import type { InlineCard } from "./schema";
+import type { InlineCard } from "@signal-desk/contracts/assistance-schema";
 import AssistanceCard from "./assistance-cards";
 
 const answer = {

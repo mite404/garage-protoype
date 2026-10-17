@@ -3,7 +3,7 @@
   "printWidth": 100,
   "ignorePatterns": [
     "**/*.md",
-    "bts.jsonc",
+    "docs/reference/bts-3.44.1.jsonc",
     "package-lock.json",
     "storybook-static/**",
     ".turbo/**",

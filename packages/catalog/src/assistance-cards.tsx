@@ -1,4 +1,4 @@
-import type { InlineCard } from "./schema";
+import type { InlineCard } from "@signal-desk/contracts/assistance-schema";
 import { fieldLabels } from "@signal-desk/contracts/evidence-schema";
 import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Card } from "@signal-desk/ui/components/ui/card";

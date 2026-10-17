@@ -1,7 +1,22 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { database } from "./db";
+import { and, desc, eq, gt, isNotNull, lt, notExists, or, sql } from "drizzle-orm";
+import { orm } from "./db";
+import {
+  claims,
+  evidenceBlockers,
+  importJobs,
+  importKeys,
+  importSources,
+  inferenceAttempts,
+  inferenceOperations,
+  opportunities,
+  photoSuggestions,
+  sourceClassifications,
+  sources as sourceTable,
+  vehicles,
+} from "./db-schema";
 import { requireSpending, requireWrite, resolveActor, resolveToken, type Actor } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
@@ -9,9 +24,9 @@ import {
   addSource,
   recordEvidenceBlocker,
   evidenceTransaction,
-  parseEvidence,
   refreshEvidenceProjection,
 } from "./evidence";
+import { parseInput } from "./validation";
 import { canonicalValue, extractionSchema } from "@signal-desk/contracts/evidence-schema";
 import { examples, savedExtraction } from "./saved-evidence";
 import { refreshPhotoBlockers } from "./photos";
@@ -55,23 +70,30 @@ type Provider = Parameters<typeof import("./model").runInference>[2];
  * @throws {AppError} For denied source access, changed idempotency input or invalid configuration.
  */
 export async function queueImport(actor: Actor, opportunityId: string, raw: unknown) {
-  const input = parseEvidence(requestSchema, raw);
+  const input = parseInput(requestSchema, raw);
   return evidenceTransaction(actor, opportunityId, async (db) => {
     await requireSpending(actor, db);
-    await db.query("select pg_advisory_xact_lock(hashtextextended($1,75001))", [
-      actor.userId + ":" + input.key,
-    ]);
+    await orm(db).execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${actor.userId + ":" + input.key},75001))`,
+    );
     const sourceIds = [...new Set(input.sourceIds)].sort();
     const sources = [];
     for (const id of sourceIds) {
       const source = await getSource(actor, id, db);
       if (source.opportunity_id !== opportunityId)
         throw new AppError(404, "NOT_FOUND", "Source not found.");
-      const metadata = await db.query(
-        'select id,sha256,kind,pages,provenance,media_type as "mediaType" from signal_desk.sources where id=$1',
-        [id],
-      );
-      sources.push(frozenSource.parse(metadata.rows[0]));
+      const metadata = await orm(db)
+        .select({
+          id: sourceTable.id,
+          sha256: sourceTable.sha256,
+          kind: sourceTable.kind,
+          pages: sourceTable.pages,
+          provenance: sourceTable.provenance,
+          mediaType: sourceTable.media_type,
+        })
+        .from(sourceTable)
+        .where(eq(sourceTable.id, id));
+      sources.push(frozenSource.parse(metadata[0]));
     }
     const mode = input.model === "saved-example-v1" ? "saved_example" : "provider";
     if (mode === "saved_example") savedExtraction(sources);
@@ -82,47 +104,46 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
     const fingerprint = createHash("sha256")
       .update(JSON.stringify({ configuration, model: input.model, sources }))
       .digest("hex");
-    const prior = await db.query<{ fingerprint: string; job_id: string }>(
-      "select fingerprint,job_id from signal_desk.import_keys where actor_id=$1 and request_key=$2",
-      [actor.userId, input.key],
-    );
-    if (prior.rows[0] && prior.rows[0].fingerprint !== fingerprint)
+    const prior = await orm(db)
+      .select({ fingerprint: importKeys.fingerprint, job_id: importKeys.job_id })
+      .from(importKeys)
+      .where(and(eq(importKeys.actor_id, actor.userId), eq(importKeys.request_key, input.key)));
+    if (prior[0] && prior[0].fingerprint !== fingerprint)
       throw new AppError(
         409,
         "IDEMPOTENCY_CONFLICT",
         "Import key already used for another packet.",
       );
-    const found = await db.query<{ id: string }>(
-      "select id from signal_desk.import_jobs where opportunity_id=$1 and fingerprint=$2",
-      [opportunityId, fingerprint],
-    );
-    const id = found.rows[0]?.id ?? randomUUID();
-    if (!found.rowCount) {
-      await db.query(
-        `insert into signal_desk.import_jobs(id,opportunity_id,actor_id,session_id,fingerprint,model,config,input,mode,app_token_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [
-          id,
-          opportunityId,
-          actor.userId,
-          actor.credential.kind === "supabase-session" ? actor.credential.sessionId : null,
-          fingerprint,
-          input.model,
-          configuration,
-          JSON.stringify(snapshot),
-          mode,
-          actor.credential.kind === "app-token" ? actor.credential.tokenId : null,
-        ],
+    const found = await orm(db)
+      .select({ id: importJobs.id })
+      .from(importJobs)
+      .where(
+        and(eq(importJobs.opportunity_id, opportunityId), eq(importJobs.fingerprint, fingerprint)),
       );
-      for (const sourceId of sourceIds)
-        await db.query("insert into signal_desk.import_sources(job_id,source_id) values ($1,$2)", [
+    const id = found[0]?.id ?? randomUUID();
+    if (!found.length) {
+      await orm(db)
+        .insert(importJobs)
+        .values({
           id,
-          sourceId,
-        ]);
+          opportunity_id: opportunityId,
+          actor_id: actor.userId,
+          session_id:
+            actor.credential.kind === "supabase-session" ? actor.credential.sessionId : null,
+          fingerprint,
+          model: input.model,
+          config: configuration,
+          input: JSON.stringify(snapshot),
+          mode,
+          app_token_id: actor.credential.kind === "app-token" ? actor.credential.tokenId : null,
+        });
+      for (const sourceId of sourceIds)
+        await orm(db).insert(importSources).values({ job_id: id, source_id: sourceId });
     }
-    await db.query(
-      "insert into signal_desk.import_keys(actor_id,request_key,fingerprint,job_id) values ($1,$2,$3,$4) on conflict do nothing",
-      [actor.userId, input.key, fingerprint, id],
-    );
+    await orm(db)
+      .insert(importKeys)
+      .values({ actor_id: actor.userId, request_key: input.key, fingerprint, job_id: id })
+      .onConflictDoNothing();
     return { id };
   });
 }
@@ -131,23 +152,52 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
  * Recovery keeps the paid attempt number unchanged. Never releases a spend reservation.
  */
 export async function claimImport(id?: string): Promise<Lease | null> {
-  const row = await database().query(
-    `update signal_desk.import_jobs set state='processing',fence=fence+1,lease_until=clock_timestamp()+interval '60 seconds',error=null
-    where id=(select id from signal_desk.import_jobs where ($1::text is null or id=$1)
-    and (state='queued' or (state='processing' and lease_until<clock_timestamp())) order by created_at for update skip locked limit 1)
-    returning id,fence`,
-    [id ?? null],
-  );
-  return row.rows[0] ? z.object({ id: z.string(), fence: z.number() }).parse(row.rows[0]) : null;
+  const db = orm();
+  const candidate = db
+    .select({ id: importJobs.id })
+    .from(importJobs)
+    .where(
+      and(
+        id === undefined ? undefined : eq(importJobs.id, id),
+        or(
+          eq(importJobs.state, "queued"),
+          and(
+            eq(importJobs.state, "processing"),
+            lt(importJobs.lease_until, sql`clock_timestamp()`),
+          ),
+        ),
+      ),
+    )
+    .orderBy(importJobs.created_at)
+    .for("update", { skipLocked: true })
+    .limit(1);
+  const row = await db
+    .update(importJobs)
+    .set({
+      state: "processing",
+      fence: sql`${importJobs.fence}+1`,
+      lease_until: sql`clock_timestamp()+interval '60 seconds'`,
+      error: null,
+    })
+    .where(eq(importJobs.id, candidate))
+    .returning({ id: importJobs.id, fence: importJobs.fence });
+  return row[0] ? z.object({ id: z.string(), fence: z.number() }).parse(row[0]) : null;
 }
 
 async function activeJob(lease: Lease) {
-  const row = await database().query(
-    "select * from signal_desk.import_jobs where id=$1 and fence=$2 and state='processing' and lease_until>clock_timestamp()",
-    [lease.id, lease.fence],
-  );
-  if (!row.rowCount) throw new AppError(409, "STALE_WORKER", "Worker lease is no longer current.");
-  return jobSchema.parse(row.rows[0]);
+  const row = await orm()
+    .select()
+    .from(importJobs)
+    .where(
+      and(
+        eq(importJobs.id, lease.id),
+        eq(importJobs.fence, lease.fence),
+        eq(importJobs.state, "processing"),
+        gt(importJobs.lease_until, sql`clock_timestamp()`),
+      ),
+    );
+  if (!row.length) throw new AppError(409, "STALE_WORKER", "Worker lease is no longer current.");
+  return jobSchema.parse(row[0]);
 }
 
 async function jobActor(job: z.infer<typeof jobSchema>) {
@@ -238,104 +288,141 @@ export async function processImport(lease: Lease, provider?: Provider) {
           ).output;
     const output = validateOutput(text, snapshot.sources);
     await evidenceTransaction(actor, job.opportunity_id, async (db, vehicleId) => {
-      const current = await db.query(
-        "select id from signal_desk.import_jobs where id=$1 and fence=$2 and state='processing' and lease_until>clock_timestamp() for update",
-        [job.id, lease.fence],
-      );
-      if (!current.rowCount)
+      const current = await orm(db)
+        .select({ id: importJobs.id })
+        .from(importJobs)
+        .where(
+          and(
+            eq(importJobs.id, job.id),
+            eq(importJobs.fence, lease.fence),
+            eq(importJobs.state, "processing"),
+            gt(importJobs.lease_until, sql`clock_timestamp()`),
+          ),
+        )
+        .for("update");
+      if (!current.length)
         throw new AppError(409, "STALE_WORKER", "Worker lease is no longer current.");
       for (const source of snapshot.sources) await getSource(actor, source.id, db);
-      const row = await db.query<{ revision: number }>(
-        "update signal_desk.vehicles set revision=revision+1 where id=$1 returning revision",
-        [vehicleId],
-      );
+      const row = await orm(db)
+        .update(vehicles)
+        .set({ revision: sql`${vehicles.revision}+1` })
+        .where(eq(vehicles.id, vehicleId))
+        .returning({ revision: vehicles.revision });
+      const revision = z.object({ revision: z.number() }).parse(row[0]).revision;
       for (const claim of output.claims)
-        await db.query(
-          `insert into signal_desk.claims(id,vehicle_id,source_id,job_id,field,value,unit,page,start_offset,end_offset,excerpt)
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(source_id,field,value,unit,page,start_offset,end_offset) do nothing`,
-          [
-            randomUUID(),
-            vehicleId,
-            claim.sourceId,
-            job.id,
-            claim.field,
-            claim.value,
-            claim.unit,
-            claim.page,
-            claim.start,
-            claim.end,
-            claim.excerpt,
-          ],
-        );
-      for (const item of output.classifications) {
-        await db.query(
-          `insert into signal_desk.source_classifications(id,source_id,job_id,kind,basis,next_action,revision) values ($1,$2,$3,$4,$5,$6,$7)`,
-          [
-            randomUUID(),
-            item.sourceId,
-            job.id,
-            item.kind,
-            item.basis,
-            item.nextAction,
-            row.rows[0]?.revision,
-          ],
-        );
-        const routingSource = await db.query(
-          `select id from signal_desk.sources s where id=$1 and audience='sales'
-          and not exists(select 1 from signal_desk.source_classifications c where c.source_id=s.id and c.actor_id is not null)`,
-          [item.sourceId],
-        );
-        if (
-          routingSource.rowCount &&
-          item.kind !== "supported" &&
-          item.kind !== "private_context"
-        ) {
-          await db.query(
-            `insert into signal_desk.evidence_blockers(id,opportunity_id,blocker_key,question,field,assignee_id,next_action)
-            values ($1,$2,$3,$4,null,$5,$6) on conflict(opportunity_id,blocker_key) do nothing`,
-            [
-              randomUUID(),
-              job.opportunity_id,
-              `classification:${item.sourceId}`,
-              "Review source classification before routing",
-              actor.userId,
-              item.nextAction,
+        await orm(db)
+          .insert(claims)
+          .values({
+            id: randomUUID(),
+            vehicle_id: vehicleId,
+            source_id: claim.sourceId,
+            job_id: job.id,
+            field: claim.field,
+            value: claim.value,
+            unit: claim.unit,
+            page: claim.page,
+            start_offset: claim.start,
+            end_offset: claim.end,
+            excerpt: claim.excerpt,
+          })
+          .onConflictDoNothing({
+            target: [
+              claims.source_id,
+              claims.field,
+              claims.value,
+              claims.unit,
+              claims.page,
+              claims.start_offset,
+              claims.end_offset,
             ],
+          });
+      for (const item of output.classifications) {
+        await orm(db).insert(sourceClassifications).values({
+          id: randomUUID(),
+          source_id: item.sourceId,
+          job_id: job.id,
+          kind: item.kind,
+          basis: item.basis,
+          next_action: item.nextAction,
+          revision,
+        });
+        const routingSource = await orm(db)
+          .select({ id: sourceTable.id })
+          .from(sourceTable)
+          .where(
+            and(
+              eq(sourceTable.id, item.sourceId),
+              eq(sourceTable.audience, "sales"),
+              notExists(
+                orm(db)
+                  .select({ id: sourceClassifications.id })
+                  .from(sourceClassifications)
+                  .where(
+                    and(
+                      eq(sourceClassifications.source_id, sourceTable.id),
+                      isNotNull(sourceClassifications.actor_id),
+                    ),
+                  ),
+              ),
+            ),
           );
-          await db.query(
-            "update signal_desk.opportunities set assignee_id=$2,next_action=$3 where id=$1 and next_action=''",
-            [job.opportunity_id, actor.userId, item.nextAction],
-          );
+        if (routingSource.length && item.kind !== "supported" && item.kind !== "private_context") {
+          await orm(db)
+            .insert(evidenceBlockers)
+            .values({
+              id: randomUUID(),
+              opportunity_id: job.opportunity_id,
+              blocker_key: `classification:${item.sourceId}`,
+              question: "Review source classification before routing",
+              field: null,
+              assignee_id: actor.userId,
+              next_action: item.nextAction,
+            })
+            .onConflictDoNothing({
+              target: [evidenceBlockers.opportunity_id, evidenceBlockers.blocker_key],
+            });
+          await orm(db)
+            .update(opportunities)
+            .set({ assignee_id: actor.userId, next_action: item.nextAction })
+            .where(
+              and(eq(opportunities.id, job.opportunity_id), eq(opportunities.next_action, "")),
+            );
         }
       }
-      await db.query(
-        "update signal_desk.import_jobs set state='ready',lease_until=null,error=null where id=$1",
-        [job.id],
-      );
+      await orm(db)
+        .update(importJobs)
+        .set({ state: "ready", lease_until: null, error: null })
+        .where(eq(importJobs.id, job.id));
       for (const photo of output.photos)
-        await db.query(
-          `insert into signal_desk.photo_suggestions(id,source_id,job_id,view,readable,reason,revision)
-          values ($1,$2,$3,$4,$5,$6,$7) on conflict(source_id,job_id) do nothing`,
-          [
-            randomUUID(),
-            photo.sourceId,
-            job.id,
-            photo.view,
-            photo.readable,
-            photo.reason,
-            row.rows[0]?.revision,
-          ],
-        );
+        await orm(db)
+          .insert(photoSuggestions)
+          .values({
+            id: randomUUID(),
+            source_id: photo.sourceId,
+            job_id: job.id,
+            view: photo.view,
+            readable: photo.readable,
+            reason: photo.reason,
+            revision,
+          })
+          .onConflictDoNothing({ target: [photoSuggestions.source_id, photoSuggestions.job_id] });
       if (output.photos.length) await refreshPhotoBlockers(db, actor, job.opportunity_id);
       await refreshEvidenceProjection(db, actor, job.opportunity_id, vehicleId);
     });
   } catch (error) {
     if (error instanceof AppError && error.code === "STALE_WORKER") throw error;
     const code = error instanceof AppError ? error.code : "IMPORT_FAILED";
-    await database().query(
-      "update signal_desk.import_jobs set state='failed',error=$3,lease_until=null where id=$1 and fence=$2 and state='processing' and lease_until>clock_timestamp()",
-      [job.id, lease.fence, code],
-    );
+    await orm()
+      .update(importJobs)
+      .set({ state: "failed", error: code, lease_until: null })
+      .where(
+        and(
+          eq(importJobs.id, job.id),
+          eq(importJobs.fence, lease.fence),
+          eq(importJobs.state, "processing"),
+          gt(importJobs.lease_until, sql`clock_timestamp()`),
+        ),
+      );
   }
 }
 
@@ -344,9 +431,9 @@ export async function processImport(lease: Lease, provider?: Provider) {
  * @throws {AppError} For denied access, terminal extraction, or an invalid transition.
  */
 export async function retryImport(actor: Actor, id: string) {
-  const result = await database().query("select * from signal_desk.import_jobs where id=$1", [id]);
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Job not found.");
-  const job = jobSchema.parse(result.rows[0]);
+  const result = await orm().select().from(importJobs).where(eq(importJobs.id, id));
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Job not found.");
+  const job = jobSchema.parse(result[0]);
   return evidenceTransaction(actor, job.opportunity_id, async (db) => {
     await requireSpending(actor, db);
     if (job.actor_id !== actor.userId)
@@ -357,8 +444,7 @@ export async function retryImport(actor: Actor, id: string) {
     for (const source of frozenInput.parse(JSON.parse(job.input)).sources)
       await getSource(actor, source.id, db);
     const locked = jobSchema.parse(
-      (await db.query("select * from signal_desk.import_jobs where id=$1 for update", [id]))
-        .rows[0],
+      (await orm(db).select().from(importJobs).where(eq(importJobs.id, id)).for("update"))[0],
     );
     if (locked.state !== "failed" || locked.error === "INVALID_EXTRACTION")
       throw new AppError(
@@ -366,23 +452,33 @@ export async function retryImport(actor: Actor, id: string) {
         "INVALID_TRANSITION",
         "This import cannot be retried. Review its configuration or source.",
       );
-    const previous = await db.query<{
-      state: string;
-      report: { kind: string; retryable?: boolean } | null;
-    }>(
-      `select a.state,a.report from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id
-      where o.user_id=$1 and o.request_key=$2 order by a.number desc limit 1`,
-      [actor.userId, `import:${id}`],
-    );
-    const last = previous.rows[0];
+    const previous = await orm(db)
+      .select({ state: inferenceAttempts.state, report: inferenceAttempts.report })
+      .from(inferenceAttempts)
+      .innerJoin(inferenceOperations, eq(inferenceOperations.id, inferenceAttempts.operation_id))
+      .where(
+        and(
+          eq(inferenceOperations.user_id, actor.userId),
+          eq(inferenceOperations.request_key, `import:${id}`),
+        ),
+      )
+      .orderBy(desc(inferenceAttempts.number))
+      .limit(1);
+    const last = z
+      .object({
+        state: z.string(),
+        report: z.object({ kind: z.string(), retryable: z.boolean().optional() }).nullable(),
+      })
+      .optional()
+      .parse(previous[0]);
     if (last?.report && last.report.kind !== "completed" && !last.report.retryable)
       throw new AppError(409, "ATTEMPTS_EXHAUSTED", "Provider failure is terminal.");
     const attempt = locked.attempt + (last?.report && last.report.kind !== "completed" ? 1 : 0);
     if (attempt > 5) throw new AppError(409, "ATTEMPTS_EXHAUSTED", "Attempt limit reached.");
-    await db.query(
-      "update signal_desk.import_jobs set state='queued',error=null,attempt=$2 where id=$1",
-      [id, attempt],
-    );
+    await orm(db)
+      .update(importJobs)
+      .set({ state: "queued", error: null, attempt })
+      .where(eq(importJobs.id, id));
     return { id };
   });
 }

@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
-import { tokenView } from "@/server/token-schema";
+import { tokenView } from "@signal-desk/contracts/token-schema";
 
 type Token = z.infer<typeof tokenView>;
 

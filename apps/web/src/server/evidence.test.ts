@@ -85,6 +85,18 @@ test(
       const actor = await resolveActor({ userId: specialist, sessionId: session });
       const buyerActor = await resolveActor({ userId: buyer, sessionId: buyerSession });
       const outsider = await resolveActor({ userId: stranger, sessionId: strangerSession });
+      await t.test("evidence readers do not block another workspace reader", async () => {
+        await db.query("begin");
+        try {
+          await db.query("select id from signal_desk.vehicles where id='evidence-truck' for share");
+          await db.query(
+            "select id from signal_desk.opportunities where id='evidence-deal' for share",
+          );
+          assert.equal((await getWorkbench(actor, "evidence-deal")).title, "Synthetic pumper");
+        } finally {
+          await db.query("rollback");
+        }
+      });
       const source = (name: string, text: string, kind = "document", shareable = true) =>
         addSource(actor, "evidence-deal", {
           name,

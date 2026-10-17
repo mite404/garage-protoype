@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseQuietProse } from "../../../../packages/catalog/src/markdown";
+import { parseQuietProse } from "./markdown";
 
 test("conversation prose preserves authored hierarchy without inventing emphasis or unsafe links", () => {
   assert.deepEqual(

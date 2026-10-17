@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cardCall, routeQuestion, inquiryInput } from "@signal-desk/contracts/assistance-schema";
+import { cardCall, routeQuestion, inquiryInput } from "./assistance-schema";
 
 test("bounded questions never interpret ambiguous prose as offers or unrelated facts", () => {
   assert.equal(routeQuestion("What is the tank capacity?"), "tankCapacity");

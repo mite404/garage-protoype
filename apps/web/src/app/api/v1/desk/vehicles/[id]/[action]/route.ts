@@ -1,7 +1,8 @@
 import { requireHttpActor } from "@/server/auth";
 import { requireOpportunity, requireSession, requireWrite, requireSpending } from "@/server/access";
 import { AppError, failure, success } from "@/server/errors";
-import { addSource, parseEvidence, reviewEvidence } from "@/server/evidence";
+import { addSource, reviewEvidence } from "@/server/evidence";
+import { parseInput } from "@/server/validation";
 import { queueImport, loadSavedEvidence } from "@/server/imports";
 import { boundedBody, sourceUpload } from "@/server/evidence-http";
 import { z } from "zod";
@@ -17,7 +18,7 @@ export async function POST(
     if (action === "reviews") requireSession(actor);
     await requireWrite(actor);
     if (action === "imports") await requireSpending(actor);
-    const opportunityId = parseEvidence(
+    const opportunityId = parseInput(
       z.string().min(1).max(200),
       new URL(request.url).searchParams.get("opportunityId"),
     );
@@ -37,11 +38,11 @@ export async function POST(
           "NOT_CONFIGURED",
           "Arbitrary extraction is unavailable. No evidence model is configured.",
         );
-      const input = parseEvidence(
+      const input = parseInput(
         z.object({ sourceIds: z.array(z.string()).min(1).max(20) }).strict(),
         body,
       );
-      const key = parseEvidence(z.string().min(1).max(150), request.headers.get("Idempotency-Key"));
+      const key = parseInput(z.string().min(1).max(150), request.headers.get("Idempotency-Key"));
       return success(await queueImport(actor, opportunityId, { ...input, model, key }));
     }
     if (action === "reviews") {

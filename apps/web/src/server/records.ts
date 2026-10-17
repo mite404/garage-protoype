@@ -1,17 +1,29 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { database } from "./db";
+import { and, desc, eq, exists, isNotNull, ne, or, sql } from "drizzle-orm";
+import { orm } from "./db";
+import {
+  opportunities,
+  opportunityMembers,
+  photoReviews,
+  publicFacts,
+  sources,
+  vehicles,
+} from "./db-schema";
 import { refreshActor, type Actor } from "./access";
 import { AppError } from "./errors";
 import { photoView, photoCoverage } from "@signal-desk/contracts/photo-schema";
 
-const publishedPhotos = `select distinct on(s.sha256) s.id,s.sha256,r.view,r.revision
-  from signal_desk.sources s join signal_desk.opportunities o on o.id=s.opportunity_id
-  join lateral (select * from signal_desk.photo_reviews where source_id=s.id order by revision desc limit 1) r on true
-  where o.vehicle_id=v.id and s.kind='photo' and s.shareable and s.audience='sales'
-  and r.approved and r.readable and r.view<>'unknown'
-  order by s.sha256,r.revision desc,s.id`;
+function latestReview(db: ReturnType<typeof orm>) {
+  return db
+    .select()
+    .from(photoReviews)
+    .where(eq(photoReviews.source_id, sources.id))
+    .orderBy(desc(photoReviews.revision))
+    .limit(1)
+    .as("latest_review");
+}
 
 const publicSchema = z.object({
   id: z.string(),
@@ -41,18 +53,59 @@ const sourceSchema = z.object({
  * @throws {AppError} If the vehicle has not been published.
  */
 export async function getPublicVehicle(id: string, client?: PoolClient) {
-  const result = await database(client).query(
-    `select v.id,v.title,coalesce(
-    (select jsonb_agg(jsonb_build_object('field',f.field,'value',f.value,'citation',
-      jsonb_build_object('sourceLabel',f.source_label,'excerpt',f.citation_excerpt)) order by f.field)
-    from signal_desk.public_facts f where f.vehicle_id=v.id and f.approved_at is not null and f.shareable),
-    '[]'::jsonb) as facts,
-    coalesce((select jsonb_agg(p) from (${publishedPhotos}) p),'[]'::jsonb) as photos
-    from signal_desk.vehicles v where v.id=$1 and v.published_at is not null`,
-    [id],
-  );
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Vehicle not found.");
-  const vehicle = publicSchema.parse(result.rows[0]);
+  const db = orm(client);
+  const r = latestReview(db);
+  const photos = db
+    .selectDistinctOn([sources.sha256], {
+      id: sources.id,
+      sha256: sources.sha256,
+      view: r.view,
+      revision: r.revision,
+    })
+    .from(sources)
+    .innerJoin(opportunities, eq(opportunities.id, sources.opportunity_id))
+    .innerJoinLateral(r, sql`true`)
+    .where(
+      and(
+        eq(opportunities.vehicle_id, vehicles.id),
+        eq(sources.kind, "photo"),
+        eq(sources.shareable, true),
+        eq(sources.audience, "sales"),
+        eq(r.approved, true),
+        eq(r.readable, true),
+        ne(r.view, "unknown"),
+      ),
+    )
+    .orderBy(sources.sha256, desc(r.revision), sources.id)
+    .as("published_photos");
+  const facts = db
+    .select({
+      value:
+        sql`jsonb_build_object('field',${publicFacts.field},'value',${publicFacts.value},'citation',jsonb_build_object('sourceLabel',${publicFacts.source_label},'excerpt',${publicFacts.citation_excerpt}))`.as(
+          "value",
+        ),
+      field: publicFacts.field,
+    })
+    .from(publicFacts)
+    .where(
+      and(
+        eq(publicFacts.vehicle_id, vehicles.id),
+        isNotNull(publicFacts.approved_at),
+        eq(publicFacts.shareable, true),
+      ),
+    )
+    .as("published_facts");
+  const result = await db
+    .select({
+      id: vehicles.id,
+      title: vehicles.title,
+      facts: sql`coalesce((${db.select({ value: sql`jsonb_agg(${facts.value} order by ${facts.field})` }).from(facts)}),'[]'::jsonb)`,
+      photos: sql`coalesce((${db.select({ value: sql`jsonb_agg(${sql.identifier("published_photos")})` }).from(photos)}),'[]'::jsonb)`,
+    })
+    .from(vehicles)
+    .where(and(eq(vehicles.id, id), isNotNull(vehicles.published_at)));
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Vehicle not found.");
+  const vehicle = publicSchema.parse(result[0]);
   const coverage = photoCoverage(
     vehicle.photos.map((p) => ({
       sourceId: p.id,
@@ -76,18 +129,30 @@ export async function getPublicVehicle(id: string, client?: PoolClient) {
  * @throws {AppError} For private, unapproved, unreadable or unpublished media.
  */
 export async function getPublicPhoto(id: string) {
-  const result = await database().query(
-    `select s.content,s.media_type from signal_desk.sources s
-    join signal_desk.opportunities o on o.id=s.opportunity_id
-    join signal_desk.vehicles v on v.id=o.vehicle_id
-    join lateral(select * from signal_desk.photo_reviews where source_id=s.id order by revision desc limit 1) r on true
-    where s.id=$1 and s.kind='photo' and s.audience='sales' and s.shareable and v.published_at is not null and r.approved and r.readable and r.view<>'unknown'`,
-    [id],
-  );
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Photo not found.");
+  const db = orm();
+  const r = latestReview(db);
+  const result = await db
+    .select({ content: sources.content, media_type: sources.media_type })
+    .from(sources)
+    .innerJoin(opportunities, eq(opportunities.id, sources.opportunity_id))
+    .innerJoin(vehicles, eq(vehicles.id, opportunities.vehicle_id))
+    .innerJoinLateral(r, sql`true`)
+    .where(
+      and(
+        eq(sources.id, id),
+        eq(sources.kind, "photo"),
+        eq(sources.audience, "sales"),
+        eq(sources.shareable, true),
+        isNotNull(vehicles.published_at),
+        eq(r.approved, true),
+        eq(r.readable, true),
+        ne(r.view, "unknown"),
+      ),
+    );
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Photo not found.");
   return z
     .object({ content: z.instanceof(Buffer), media_type: z.enum(["image/png", "image/jpeg"]) })
-    .parse(result.rows[0]);
+    .parse(result[0]);
 }
 
 /** Retrieves private source bytes only for their owner or an assigned sales reader.
@@ -95,14 +160,41 @@ export async function getPublicPhoto(id: string) {
  */
 export async function getSource(actor: Actor, id: string, client?: PoolClient) {
   const current = await refreshActor(actor, client);
-  const result = await database(client).query(
-    `select s.id,s.opportunity_id,s.owner_id,s.audience,s.name,s.media_type,s.content
-    from signal_desk.sources s join signal_desk.opportunities o on o.id=s.opportunity_id
-    where s.id=$1 and (s.owner_id=$2 or (s.audience='sales' and $3='specialist')) and
-    (($3='buyer' and o.buyer_id=$2) or ($3='specialist' and exists
-      (select 1 from signal_desk.opportunity_members m where m.opportunity_id=o.id and m.user_id=$2)))`,
-    [id, current.userId, current.role],
-  );
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Source not found.");
-  return sourceSchema.parse(result.rows[0]);
+  const db = orm(client);
+  const result = await db
+    .select({
+      id: sources.id,
+      opportunity_id: sources.opportunity_id,
+      owner_id: sources.owner_id,
+      audience: sources.audience,
+      name: sources.name,
+      media_type: sources.media_type,
+      content: sources.content,
+    })
+    .from(sources)
+    .innerJoin(opportunities, eq(opportunities.id, sources.opportunity_id))
+    .where(
+      and(
+        eq(sources.id, id),
+        or(
+          eq(sources.owner_id, current.userId),
+          and(eq(sources.audience, "sales"), sql`${current.role} = 'specialist'`),
+        ),
+        current.role === "buyer"
+          ? eq(opportunities.buyer_id, current.userId)
+          : exists(
+              db
+                .select({ id: opportunityMembers.opportunity_id })
+                .from(opportunityMembers)
+                .where(
+                  and(
+                    eq(opportunityMembers.opportunity_id, opportunities.id),
+                    eq(opportunityMembers.user_id, current.userId),
+                  ),
+                ),
+            ),
+      ),
+    );
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Source not found.");
+  return sourceSchema.parse(result[0]);
 }

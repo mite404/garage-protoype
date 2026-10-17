@@ -7,7 +7,36 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { database } from "./db";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import { database, orm } from "./db";
+import {
+  claims as claimTable,
+  evidenceBlockers,
+  evidenceReviews,
+  identities,
+  importJobs,
+  importSources,
+  opportunities,
+  opportunityMembers,
+  publicFacts,
+  sourceClassifications,
+  sources as sourceTable,
+  vehicles,
+} from "./db-schema";
 import {
   refreshActor,
   requireOpportunity,
@@ -18,6 +47,7 @@ import {
 } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
+import { parseInput } from "./validation";
 import { appendPhotoReview, readPhotos, refreshPhotoBlockers } from "./photos";
 import { photoCoverage, suggestPhotoRequest } from "@signal-desk/contracts/photo-schema";
 import {
@@ -108,6 +138,15 @@ const blockerView = z.object({
   nextAction: z.string(),
   state: z.enum(["needs_review", "resolved"]),
 });
+const blockerProjection = {
+  id: evidenceBlockers.id,
+  key: evidenceBlockers.blocker_key,
+  question: evidenceBlockers.question,
+  field: evidenceBlockers.field,
+  assigneeId: evidenceBlockers.assignee_id,
+  nextAction: evidenceBlockers.next_action,
+  state: evidenceBlockers.state,
+};
 type Claim = z.infer<typeof claimView>;
 type Decision = z.infer<typeof reviewView>;
 type Fact = { field: z.infer<typeof fieldSchema>; basis: string } & (
@@ -122,15 +161,6 @@ type Fact = { field: z.infer<typeof fieldSchema>; basis: string } & (
     }
 );
 
-/** Validates untrusted operation input without leaking schema or source contents.
- * @throws {AppError} For malformed input.
- */
-export function parseEvidence<T>(schema: z.ZodType<T>, raw: unknown): T {
-  const parsed = schema.safeParse(raw);
-  if (!parsed.success) throw new AppError(422, "INVALID_INPUT", "Evidence input is invalid.");
-  return parsed.data;
-}
-
 /** Serializes evidence changes with fresh access and the vehicle revision.
  * @throws {AppError} For denied access; rolls back on any failure.
  */
@@ -143,23 +173,27 @@ export async function evidenceTransaction<T>(
 ) {
   const db = await database().connect();
   try {
-    await db.query("begin");
-    await db.query("set local lock_timeout='5s'");
-    await db.query("select signal_desk.lock_evidence_access()");
+    await orm(db).execute(sql`begin`);
+    await orm(db).execute(sql`set local lock_timeout='5s'`);
+    await orm(db).execute(sql`select signal_desk.lock_evidence_access()`);
     if (permission === "write") await requireWrite(actor, db);
     const opportunity = await requireOpportunity(actor, opportunityId, role, db);
-    await db.query("select id from signal_desk.vehicles where id=$1 for update", [
-      opportunity.vehicle_id,
-    ]);
-    await db.query("select id from signal_desk.opportunities where id=$1 for update", [
-      opportunityId,
-    ]);
+    await orm(db)
+      .select({ id: vehicles.id })
+      .from(vehicles)
+      .where(eq(vehicles.id, opportunity.vehicle_id))
+      .for(permission === "read" ? "share" : "update");
+    await orm(db)
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(eq(opportunities.id, opportunityId))
+      .for(permission === "read" ? "share" : "update");
     await requireOpportunity(actor, opportunityId, role, db);
     const result = await action(db, opportunity.vehicle_id);
-    await db.query("commit");
+    await orm(db).execute(sql`commit`);
     return result;
   } catch (error) {
-    await db.query("rollback");
+    await orm(db).execute(sql`rollback`);
     throw error;
   } finally {
     db.release();
@@ -216,7 +250,7 @@ async function extractPages(content: Buffer, mediaType: string) {
  */
 export async function addSource(actor: Actor, opportunityId: string, raw: unknown) {
   await requireOpportunity(actor, opportunityId, "specialist");
-  const input = parseEvidence(sourceInput, raw);
+  const input = parseInput(sourceInput, raw);
   if (
     input.shareable &&
     (input.audience !== "sales" || ["private_note", "inquiry"].includes(input.kind))
@@ -244,62 +278,80 @@ export async function addSource(actor: Actor, opportunityId: string, raw: unknow
   const pages = image ? [] : await extractPages(input.content, input.mediaType);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     if (input.blockerId) {
-      const blocker = await db.query(
-        "select id from signal_desk.evidence_blockers where id=$1 and opportunity_id=$2",
-        [input.blockerId, opportunityId],
-      );
-      if (!blocker.rowCount) throw new AppError(404, "NOT_FOUND", "Blocker not found.");
+      const blocker = await orm(db)
+        .select({ id: evidenceBlockers.id })
+        .from(evidenceBlockers)
+        .where(
+          and(
+            eq(evidenceBlockers.id, input.blockerId),
+            eq(evidenceBlockers.opportunity_id, opportunityId),
+          ),
+        );
+      if (!blocker.length) throw new AppError(404, "NOT_FOUND", "Blocker not found.");
     }
     const hash = createHash("sha256").update(input.content).digest("hex");
-    const prior = await db.query<{ id: string }>(
-      `select id from signal_desk.sources where opportunity_id=$1 and sha256=$2 and owner_id=$3
-      and kind=$4 and audience=$5 and shareable=$6 and blocker_id is not distinct from $7 and provenance=$8 and permission=$9 and media_type=$10`,
-      [
-        opportunityId,
-        hash,
-        actor.userId,
-        input.kind,
-        input.audience,
-        input.shareable,
-        input.blockerId ?? null,
-        input.provenance,
-        input.permission,
-        input.mediaType,
-      ],
-    );
-    if (prior.rows[0]) return { id: prior.rows[0].id, sha256: hash };
-    const id = randomUUID();
-    await db.query(
-      `insert into signal_desk.sources(id,opportunity_id,owner_id,audience,name,media_type,content,kind,pages,shareable,permission,provenance,blocker_id)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [
-        id,
-        opportunityId,
-        actor.userId,
-        input.audience,
-        input.name,
-        input.mediaType,
-        input.content,
-        input.kind,
-        JSON.stringify(pages),
-        input.shareable,
-        input.permission,
-        input.provenance,
-        input.blockerId ?? null,
-      ],
-    );
-    await db.query("update signal_desk.vehicles set revision=revision+1 where id=$1", [vehicleId]);
-    if (!["private_note", "inquiry", "photo"].includes(input.kind)) {
-      await db.query("delete from signal_desk.public_facts where vehicle_id=$1", [vehicleId]);
-      await db.query(
-        "update signal_desk.evidence_blockers set state='needs_review' where opportunity_id in (select id from signal_desk.opportunities where vehicle_id=$1)",
-        [vehicleId],
+    const prior = await orm(db)
+      .select({ id: sourceTable.id })
+      .from(sourceTable)
+      .where(
+        and(
+          eq(sourceTable.opportunity_id, opportunityId),
+          eq(sourceTable.sha256, hash),
+          eq(sourceTable.owner_id, actor.userId),
+          eq(sourceTable.kind, input.kind),
+          eq(sourceTable.audience, input.audience),
+          eq(sourceTable.shareable, input.shareable),
+          input.blockerId
+            ? eq(sourceTable.blocker_id, input.blockerId)
+            : isNull(sourceTable.blocker_id),
+          eq(sourceTable.provenance, input.provenance),
+          eq(sourceTable.permission, input.permission),
+          eq(sourceTable.media_type, input.mediaType),
+        ),
       );
+    if (prior[0]) return { id: prior[0].id, sha256: hash };
+    const id = randomUUID();
+    await orm(db)
+      .insert(sourceTable)
+      .values({
+        id,
+        opportunity_id: opportunityId,
+        owner_id: actor.userId,
+        audience: input.audience,
+        name: input.name,
+        media_type: input.mediaType,
+        content: input.content,
+        kind: input.kind,
+        pages,
+        shareable: input.shareable,
+        permission: input.permission,
+        provenance: input.provenance,
+        blocker_id: input.blockerId ?? null,
+      });
+    await orm(db)
+      .update(vehicles)
+      .set({ revision: sql`${vehicles.revision}+1` })
+      .where(eq(vehicles.id, vehicleId));
+    if (!["private_note", "inquiry", "photo"].includes(input.kind)) {
+      await orm(db).delete(publicFacts).where(eq(publicFacts.vehicle_id, vehicleId));
+      await orm(db)
+        .update(evidenceBlockers)
+        .set({ state: "needs_review" })
+        .where(
+          inArray(
+            evidenceBlockers.opportunity_id,
+            orm(db)
+              .select({ id: opportunities.id })
+              .from(opportunities)
+              .where(eq(opportunities.vehicle_id, vehicleId)),
+          ),
+        );
     }
     if (input.blockerId)
-      await db.query("update signal_desk.evidence_blockers set state='needs_review' where id=$1", [
-        input.blockerId,
-      ]);
+      await orm(db)
+        .update(evidenceBlockers)
+        .set({ state: "needs_review" })
+        .where(eq(evidenceBlockers.id, input.blockerId));
     if (image) await refreshPhotoBlockers(db, actor, opportunityId);
     return { id, sha256: hash };
   });
@@ -358,38 +410,101 @@ function factsFor(claims: Claim[], reviews: Decision[], pending: boolean): Fact[
 }
 
 async function packet(db: PoolClient, actor: Actor, opportunityId: string, vehicleId: string) {
-  const sourceRows = await db.query(
-    `select s.id,s.name,s.kind,s.audience,s.sha256,s.shareable,s.permission,s.provenance,s.blocker_id as "blockerId",s.pages,
-    exists(select 1 from signal_desk.import_sources js join signal_desk.import_jobs j on j.id=js.job_id where js.source_id=s.id and j.state='ready') as processed
-    from signal_desk.sources s where s.opportunity_id=$1 and (s.owner_id=$2 or s.audience='sales') order by s.created_at,s.id`,
-    [opportunityId, actor.userId],
+  const store = orm(db);
+  const processed = store
+    .select({ id: importSources.source_id })
+    .from(importSources)
+    .innerJoin(importJobs, eq(importJobs.id, importSources.job_id))
+    .where(and(eq(importSources.source_id, sourceTable.id), eq(importJobs.state, "ready")));
+  const visible = and(
+    eq(sourceTable.opportunity_id, opportunityId),
+    or(eq(sourceTable.owner_id, actor.userId), eq(sourceTable.audience, "sales")),
   );
-  const sources = z.array(sourceView).parse(sourceRows.rows);
-  const result = await db.query(
-    `select c.id,c.source_id as "sourceId",c.field,c.value,c.unit,c.page,c.start_offset as start,c.end_offset as end,c.excerpt,
-    s.name as "sourceName",s.kind as "sourceKind",s.shareable,
-    (s.opportunity_id=$2 and (s.owner_id=$3 or s.audience='sales')) as visible
-    from signal_desk.claims c join signal_desk.sources s on s.id=c.source_id where c.vehicle_id=$1 order by c.id`,
-    [vehicleId, opportunityId, actor.userId],
-  );
-  const claims = z.array(claimView).parse(result.rows);
-  const decisions = await db.query(
-    `select id,field,kind,claim_id as "claimId",value,unit,reason,basis,shareable,revision,actor_id as "actorId"
-    from signal_desk.evidence_reviews where vehicle_id=$1 and (kind<>'unknown' or opportunity_id=$2) order by revision desc`,
-    [vehicleId, opportunityId],
-  );
-  const reviews = z.array(reviewView).parse(decisions.rows);
-  const pending = await db.query<{ pending: boolean }>(
-    `select exists(select 1 from signal_desk.sources s join signal_desk.opportunities o on o.id=s.opportunity_id
-    where o.vehicle_id=$1 and s.kind not in ('private_note','inquiry','photo') and not exists
-    (select 1 from signal_desk.import_sources js join signal_desk.import_jobs j on j.id=js.job_id where js.source_id=s.id and j.state='ready')) as pending`,
-    [vehicleId],
-  );
+  const sourceRows = await store
+    .select({
+      id: sourceTable.id,
+      name: sourceTable.name,
+      kind: sourceTable.kind,
+      audience: sourceTable.audience,
+      sha256: sourceTable.sha256,
+      shareable: sourceTable.shareable,
+      permission: sourceTable.permission,
+      provenance: sourceTable.provenance,
+      blockerId: sourceTable.blocker_id,
+      pages: sourceTable.pages,
+      processed: exists(processed),
+    })
+    .from(sourceTable)
+    .where(visible)
+    .orderBy(sourceTable.created_at, sourceTable.id);
+  const sources = z.array(sourceView).parse(sourceRows);
+  const result = await store
+    .select({
+      id: claimTable.id,
+      sourceId: claimTable.source_id,
+      field: claimTable.field,
+      value: claimTable.value,
+      unit: claimTable.unit,
+      page: claimTable.page,
+      start: claimTable.start_offset,
+      end: claimTable.end_offset,
+      excerpt: claimTable.excerpt,
+      sourceName: sourceTable.name,
+      sourceKind: sourceTable.kind,
+      shareable: sourceTable.shareable,
+      visible: sql<boolean>`${visible}`,
+    })
+    .from(claimTable)
+    .innerJoin(sourceTable, eq(sourceTable.id, claimTable.source_id))
+    .where(eq(claimTable.vehicle_id, vehicleId))
+    .orderBy(claimTable.id);
+  const claims = z.array(claimView).parse(result);
+  const decisions = await store
+    .select({
+      id: evidenceReviews.id,
+      field: evidenceReviews.field,
+      kind: evidenceReviews.kind,
+      claimId: evidenceReviews.claim_id,
+      value: evidenceReviews.value,
+      unit: evidenceReviews.unit,
+      reason: evidenceReviews.reason,
+      basis: evidenceReviews.basis,
+      shareable: evidenceReviews.shareable,
+      revision: evidenceReviews.revision,
+      actorId: evidenceReviews.actor_id,
+    })
+    .from(evidenceReviews)
+    .where(
+      and(
+        eq(evidenceReviews.vehicle_id, vehicleId),
+        or(ne(evidenceReviews.kind, "unknown"), eq(evidenceReviews.opportunity_id, opportunityId)),
+      ),
+    )
+    .orderBy(desc(evidenceReviews.revision));
+  const reviews = z.array(reviewView).parse(decisions);
+  const pending = await store
+    .select({
+      pending: exists(
+        store
+          .select({ id: sourceTable.id })
+          .from(sourceTable)
+          .innerJoin(opportunities, eq(opportunities.id, sourceTable.opportunity_id))
+          .where(
+            and(
+              eq(opportunities.vehicle_id, vehicleId),
+              notInArray(sourceTable.kind, ["private_note", "inquiry", "photo"]),
+              notExists(processed),
+            ),
+          ),
+      ),
+    })
+    .from(vehicles)
+    .where(eq(vehicles.id, vehicleId));
   return {
     sources,
     claims,
     reviews,
-    facts: factsFor(claims, reviews, pending.rows[0]?.pending ?? true),
+    facts: factsFor(claims, reviews, z.boolean().parse(pending[0]?.pending ?? true)),
   };
 }
 
@@ -413,39 +528,81 @@ export async function getWorkbench(actor: Actor, opportunityId: string) {
         })
         .parse(
           (
-            await db.query(
-              `select v.title,v.revision,o.next_action as "nextAction",o.assignee_id as "assigneeId" from signal_desk.vehicles v join signal_desk.opportunities o on o.vehicle_id=v.id where o.id=$1`,
-              [opportunityId],
-            )
-          ).rows[0],
+            await orm(db)
+              .select({
+                title: vehicles.title,
+                revision: vehicles.revision,
+                nextAction: opportunities.next_action,
+                assigneeId: opportunities.assignee_id,
+              })
+              .from(vehicles)
+              .innerJoin(opportunities, eq(opportunities.vehicle_id, vehicles.id))
+              .where(eq(opportunities.id, opportunityId))
+          )[0],
         );
       const jobs = z.array(jobView).parse(
-        (
-          await db.query(
-            `select j.id,j.state,j.error,j.attempt,j.mode,j.model from signal_desk.import_jobs j where j.opportunity_id=$1
-      and not exists(select 1 from signal_desk.import_sources js join signal_desk.sources s on s.id=js.source_id where js.job_id=j.id and s.owner_id<>$2 and s.audience='private') order by j.created_at desc`,
-            [opportunityId, actor.userId],
+        await orm(db)
+          .select({
+            id: importJobs.id,
+            state: importJobs.state,
+            error: importJobs.error,
+            attempt: importJobs.attempt,
+            mode: importJobs.mode,
+            model: importJobs.model,
+          })
+          .from(importJobs)
+          .where(
+            and(
+              eq(importJobs.opportunity_id, opportunityId),
+              notExists(
+                orm(db)
+                  .select({ id: importSources.source_id })
+                  .from(importSources)
+                  .innerJoin(sourceTable, eq(sourceTable.id, importSources.source_id))
+                  .where(
+                    and(
+                      eq(importSources.job_id, importJobs.id),
+                      ne(sourceTable.owner_id, actor.userId),
+                      eq(sourceTable.audience, "private"),
+                    ),
+                  ),
+              ),
+            ),
           )
-        ).rows,
+          .orderBy(desc(importJobs.created_at)),
       );
       const blockers = z
         .array(blockerView)
         .parse(
-          (
-            await db.query(
-              `select id,blocker_key as key,question,field,assignee_id as "assigneeId",next_action as "nextAction",state from signal_desk.evidence_blockers where opportunity_id=$1 order by id`,
-              [opportunityId],
-            )
-          ).rows,
+          await orm(db)
+            .select(blockerProjection)
+            .from(evidenceBlockers)
+            .where(eq(evidenceBlockers.opportunity_id, opportunityId))
+            .orderBy(evidenceBlockers.id),
         );
       const classifications = z.array(classificationView).parse(
-        (
-          await db.query(
-            `select c.id,c.source_id as "sourceId",c.kind,c.basis,c.next_action as "nextAction",c.revision,(c.actor_id is not null) as reviewed
-      from signal_desk.source_classifications c where c.source_id=any($1::text[]) order by (c.actor_id is not null) desc,c.revision desc,c.id`,
-            [evidence.sources.map((s) => s.id)],
+        await orm(db)
+          .select({
+            id: sourceClassifications.id,
+            sourceId: sourceClassifications.source_id,
+            kind: sourceClassifications.kind,
+            basis: sourceClassifications.basis,
+            nextAction: sourceClassifications.next_action,
+            revision: sourceClassifications.revision,
+            reviewed: isNotNull(sourceClassifications.actor_id),
+          })
+          .from(sourceClassifications)
+          .where(
+            inArray(
+              sourceClassifications.source_id,
+              evidence.sources.map((s) => s.id),
+            ),
           )
-        ).rows,
+          .orderBy(
+            desc(isNotNull(sourceClassifications.actor_id)),
+            desc(sourceClassifications.revision),
+            sourceClassifications.id,
+          ),
       );
       return {
         opportunityId,
@@ -492,7 +649,7 @@ export async function refreshEvidenceProjection(
   vehicleId: string,
 ) {
   const evidence = await packet(db, actor, opportunityId, vehicleId);
-  await db.query("delete from signal_desk.public_facts where vehicle_id=$1", [vehicleId]);
+  await orm(db).delete(publicFacts).where(eq(publicFacts.vehicle_id, vehicleId));
   for (const fact of evidence.facts) {
     if (fact.kind !== "reviewed" || !fact.shareable) continue;
     const claim = evidence.claims.find((c) => c.id === fact.claimId);
@@ -508,29 +665,59 @@ export async function refreshEvidenceProjection(
       review.kind === "correct"
         ? `Human correction: ${review.reason}. Original assertion: ${claim.excerpt}`
         : claim.excerpt;
-    await db.query(
-      `insert into signal_desk.public_facts(vehicle_id,field,value,citation_excerpt,source_label,approved_at,shareable,review_id)
-      values ($1,$2,$3,$4,$5,clock_timestamp(),true,$6)`,
-      [
-        vehicleId,
-        fact.field,
-        `${fact.value} ${fact.unit}`.trim(),
-        `Page ${claim.page}, characters ${claim.start}-${claim.end}: ${excerpt}`,
-        label,
-        review.id,
-      ],
-    );
+    await orm(db)
+      .insert(publicFacts)
+      .values({
+        vehicle_id: vehicleId,
+        field: fact.field,
+        value: `${fact.value} ${fact.unit}`.trim(),
+        citation_excerpt: `Page ${claim.page}, characters ${claim.start}-${claim.end}: ${excerpt}`,
+        source_label: label,
+        approved_at: sql`clock_timestamp()`,
+        shareable: true,
+        review_id: review.id,
+      });
   }
   // A response resolves only its linked question, never every blocker on the vehicle.
-  await db.query(
-    `update signal_desk.evidence_blockers b set state=case when exists(
-    select 1 from signal_desk.sources s join signal_desk.claims c on c.source_id=s.id
-    join signal_desk.public_facts f on f.vehicle_id=c.vehicle_id and f.field=c.field
-    join signal_desk.evidence_reviews r on r.id=f.review_id and r.claim_id=c.id
-    where s.blocker_id=b.id and c.field=b.field) then 'resolved' else 'needs_review' end
-    where b.field is not null and b.opportunity_id in (select id from signal_desk.opportunities where vehicle_id=$1)`,
-    [vehicleId],
-  );
+  const resolved = orm(db)
+    .select({ id: sourceTable.id })
+    .from(sourceTable)
+    .innerJoin(claimTable, eq(claimTable.source_id, sourceTable.id))
+    .innerJoin(
+      publicFacts,
+      and(
+        eq(publicFacts.vehicle_id, claimTable.vehicle_id),
+        eq(publicFacts.field, claimTable.field),
+      ),
+    )
+    .innerJoin(
+      evidenceReviews,
+      and(
+        eq(evidenceReviews.id, publicFacts.review_id),
+        eq(evidenceReviews.claim_id, claimTable.id),
+      ),
+    )
+    .where(
+      and(
+        eq(sourceTable.blocker_id, evidenceBlockers.id),
+        eq(claimTable.field, evidenceBlockers.field),
+      ),
+    );
+  await orm(db)
+    .update(evidenceBlockers)
+    .set({ state: sql`case when ${exists(resolved)} then 'resolved' else 'needs_review' end` })
+    .where(
+      and(
+        isNotNull(evidenceBlockers.field),
+        inArray(
+          evidenceBlockers.opportunity_id,
+          orm(db)
+            .select({ id: opportunities.id })
+            .from(opportunities)
+            .where(eq(opportunities.vehicle_id, vehicleId)),
+        ),
+      ),
+    );
 }
 
 function factDecision(
@@ -589,13 +776,13 @@ export async function reviewEvidence(
   raw: unknown,
 ) {
   requireSession(actor);
-  const command = parseEvidence(reviewSchema, raw);
+  const command = parseInput(reviewSchema, raw);
   await evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
-    const current = await db.query<{ revision: number }>(
-      "select revision from signal_desk.vehicles where id=$1",
-      [vehicleId],
-    );
-    if (current.rows[0]?.revision !== revision)
+    const current = await orm(db)
+      .select({ revision: vehicles.revision })
+      .from(vehicles)
+      .where(eq(vehicles.id, vehicleId));
+    if (current[0]?.revision !== revision)
       throw new AppError(412, "STALE_REVIEW", "Evidence changed. Reload before reviewing.");
     const evidence = await packet(db, actor, opportunityId, vehicleId);
     if (command.kind === "reviewPhoto") {
@@ -604,62 +791,63 @@ export async function reviewEvidence(
     } else if (command.kind === "classify") {
       const source = evidence.sources.find((s) => s.id === command.sourceId);
       if (!source) throw new AppError(404, "NOT_FOUND", "Source not found.");
-      await db.query(
-        `insert into signal_desk.source_classifications(id,source_id,actor_id,kind,basis,next_action,revision)
-        values ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          randomUUID(),
-          command.sourceId,
-          actor.userId,
-          command.classification,
-          command.reason,
-          command.nextAction,
-          revision + 1,
-        ],
-      );
+      await orm(db)
+        .insert(sourceClassifications)
+        .values({
+          id: randomUUID(),
+          source_id: command.sourceId,
+          actor_id: actor.userId,
+          kind: command.classification,
+          basis: command.reason,
+          next_action: command.nextAction,
+          revision: revision + 1,
+        });
       // Private classification text stays with its source, never in shared routing fields.
       if (source.audience === "sales") {
-        await db.query(
-          "update signal_desk.opportunities set assignee_id=$2,next_action=$3 where id=$1",
-          [opportunityId, actor.userId, command.nextAction],
-        );
-        await db.query(
-          `update signal_desk.evidence_blockers set assignee_id=$3,next_action=$4,state=$5
-          where opportunity_id=$1 and blocker_key=$2`,
-          [
-            opportunityId,
-            `classification:${source.id}`,
-            actor.userId,
-            command.nextAction,
-            ["supported", "private_context"].includes(command.classification)
+        await orm(db)
+          .update(opportunities)
+          .set({ assignee_id: actor.userId, next_action: command.nextAction })
+          .where(eq(opportunities.id, opportunityId));
+        await orm(db)
+          .update(evidenceBlockers)
+          .set({
+            assignee_id: actor.userId,
+            next_action: command.nextAction,
+            state: ["supported", "private_context"].includes(command.classification)
               ? "resolved"
               : "needs_review",
-          ],
-        );
+          })
+          .where(
+            and(
+              eq(evidenceBlockers.opportunity_id, opportunityId),
+              eq(evidenceBlockers.blocker_key, `classification:${source.id}`),
+            ),
+          );
       }
     } else {
       const decision = factDecision(command, evidence);
-      await db.query(
-        `insert into signal_desk.evidence_reviews(id,vehicle_id,actor_id,field,kind,claim_id,value,unit,reason,basis,shareable,revision,opportunity_id)
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [
-          randomUUID(),
-          vehicleId,
-          actor.userId,
-          command.field,
-          command.kind,
-          decision.claimId,
-          decision.value,
-          decision.unit,
-          decision.reason,
-          decision.basis,
-          decision.shareable,
-          revision + 1,
-          opportunityId,
-        ],
-      );
+      await orm(db)
+        .insert(evidenceReviews)
+        .values({
+          id: randomUUID(),
+          vehicle_id: vehicleId,
+          actor_id: actor.userId,
+          field: command.field,
+          kind: command.kind,
+          claim_id: decision.claimId,
+          value: decision.value,
+          unit: decision.unit,
+          reason: decision.reason,
+          basis: decision.basis,
+          shareable: decision.shareable,
+          revision: revision + 1,
+          opportunity_id: opportunityId,
+        });
     }
-    await db.query("update signal_desk.vehicles set revision=revision+1 where id=$1", [vehicleId]);
+    await orm(db)
+      .update(vehicles)
+      .set({ revision: sql`${vehicles.revision}+1` })
+      .where(eq(vehicles.id, vehicleId));
     await refreshEvidenceProjection(db, actor, opportunityId, vehicleId);
   });
   return getWorkbench(actor, opportunityId);
@@ -670,7 +858,7 @@ export async function reviewEvidence(
  * @throws {AppError} For denied access, key conflicts, or an ineligible assignee.
  */
 export async function recordEvidenceBlocker(actor: Actor, opportunityId: string, raw: unknown) {
-  const input = parseEvidence(
+  const input = parseInput(
     z
       .object({
         key: z.string().min(1).max(200),
@@ -683,19 +871,31 @@ export async function recordEvidenceBlocker(actor: Actor, opportunityId: string,
     raw,
   );
   return evidenceTransaction(actor, opportunityId, async (db) => {
-    const eligible = await db.query(
-      `select m.user_id from signal_desk.opportunity_members m join signal_desk.identities i on i.user_id=m.user_id
-      where m.opportunity_id=$1 and m.user_id=$2 and i.role='specialist' and i.revoked_at is null`,
-      [opportunityId, input.assigneeId],
-    );
-    if (!eligible.rowCount)
+    const eligible = await orm(db)
+      .select({ user_id: opportunityMembers.user_id })
+      .from(opportunityMembers)
+      .innerJoin(identities, eq(identities.userId, opportunityMembers.user_id))
+      .where(
+        and(
+          eq(opportunityMembers.opportunity_id, opportunityId),
+          eq(opportunityMembers.user_id, input.assigneeId),
+          eq(identities.role, "specialist"),
+          isNull(identities.revokedAt),
+        ),
+      );
+    if (!eligible.length)
       throw new AppError(422, "INVALID_ASSIGNEE", "Assign a current opportunity specialist.");
-    const prior = await db.query(
-      `select id,blocker_key as key,question,field,assignee_id as "assigneeId",next_action as "nextAction",state from signal_desk.evidence_blockers where opportunity_id=$1 and blocker_key=$2`,
-      [opportunityId, input.key],
-    );
-    if (prior.rowCount) {
-      const blocker = blockerView.parse(prior.rows[0]);
+    const prior = await orm(db)
+      .select(blockerProjection)
+      .from(evidenceBlockers)
+      .where(
+        and(
+          eq(evidenceBlockers.opportunity_id, opportunityId),
+          eq(evidenceBlockers.blocker_key, input.key),
+        ),
+      );
+    if (prior.length) {
+      const blocker = blockerView.parse(prior[0]);
       if (
         blocker.question !== input.question ||
         blocker.field !== input.field ||
@@ -709,22 +909,19 @@ export async function recordEvidenceBlocker(actor: Actor, opportunityId: string,
       return blocker;
     }
     const id = randomUUID();
-    await db.query(
-      `insert into signal_desk.evidence_blockers(id,opportunity_id,blocker_key,question,field,assignee_id,next_action) values ($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        id,
-        opportunityId,
-        input.key,
-        input.question,
-        input.field,
-        input.assigneeId,
-        input.nextAction,
-      ],
-    );
-    await db.query(
-      "update signal_desk.opportunities set assignee_id=$2,next_action=$3 where id=$1",
-      [opportunityId, input.assigneeId, input.nextAction],
-    );
+    await orm(db).insert(evidenceBlockers).values({
+      id,
+      opportunity_id: opportunityId,
+      blocker_key: input.key,
+      question: input.question,
+      field: input.field,
+      assignee_id: input.assigneeId,
+      next_action: input.nextAction,
+    });
+    await orm(db)
+      .update(opportunities)
+      .set({ assignee_id: input.assigneeId, next_action: input.nextAction })
+      .where(eq(opportunities.id, opportunityId));
     return { id, ...input, state: "needs_review" as const };
   });
 }
@@ -737,14 +934,15 @@ export type Workbench = Awaited<ReturnType<typeof getWorkbench>>;
 export async function listEvidenceOpportunities(actor: Actor, cursor = "") {
   const current = await refreshActor(actor);
   if (current.role !== "specialist") return [];
-  const result = await database().query(
-    `select o.id,v.title,o.next_action as "nextAction" from signal_desk.opportunities o
-    join signal_desk.vehicles v on v.id=o.vehicle_id
-    join signal_desk.opportunity_members m on m.opportunity_id=o.id
-    where m.user_id=$1 and o.id>$2 order by o.id limit 100`,
-    [current.userId, cursor],
-  );
+  const result = await orm()
+    .select({ id: opportunities.id, title: vehicles.title, nextAction: opportunities.next_action })
+    .from(opportunities)
+    .innerJoin(vehicles, eq(vehicles.id, opportunities.vehicle_id))
+    .innerJoin(opportunityMembers, eq(opportunityMembers.opportunity_id, opportunities.id))
+    .where(and(eq(opportunityMembers.user_id, current.userId), gt(opportunities.id, cursor)))
+    .orderBy(opportunities.id)
+    .limit(100);
   return z
     .array(z.object({ id: z.string(), title: z.string(), nextAction: z.string() }))
-    .parse(result.rows);
+    .parse(result);
 }

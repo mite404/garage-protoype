@@ -4,8 +4,26 @@ import { isDeepStrictEqual } from "node:util";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { refreshActor, type Actor } from "./access";
-import { database } from "./db";
-import { evidenceTransaction, getWorkbench, parseEvidence } from "./evidence";
+import { and, desc, eq, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import { orm } from "./db";
+import {
+  assistanceDrafts,
+  cardCalls,
+  chatTurns,
+  claims,
+  evidenceBlockers,
+  evidenceReviews,
+  identities,
+  inquiries as inquiryTable,
+  inquiryRouting,
+  opportunities,
+  opportunityMembers,
+  publicFacts,
+  sources,
+  vehicles,
+} from "./db-schema";
+import { evidenceTransaction, getWorkbench } from "./evidence";
+import { parseInput } from "./validation";
 import { fieldSchema } from "@signal-desk/contracts/evidence-schema";
 import { getPublicVehicle, getSource } from "./records";
 import { AppError } from "./errors";
@@ -13,9 +31,10 @@ import {
   inquiryInput,
   routeQuestion,
   draftCommand,
+  cardCall,
+  inlineCard,
   type InlineCard,
 } from "@signal-desk/contracts/assistance-schema";
-import { cardCall, inlineCard } from "@signal-desk/catalog/schema";
 
 const keySchema = z.string().trim().min(1).max(160);
 const inquiryRow = z.object({ id: z.string(), input: inquiryInput });
@@ -39,6 +58,12 @@ const draftRow = z.object({
   basisRevision: z.number(),
 });
 const turnRow = z.object({ id: z.string(), inquiryId: z.string(), message: z.string() });
+const blockerProjection = {
+  id: evidenceBlockers.id,
+  question: evidenceBlockers.question,
+  assigneeId: evidenceBlockers.assignee_id,
+  nextAction: evidenceBlockers.next_action,
+};
 const correction = z
   .object({
     field: fieldSchema.nullable(),
@@ -54,27 +79,35 @@ function sameInput(a: unknown, b: unknown) {
 }
 
 async function header(db: PoolClient, opportunityId: string) {
-  const result = await db.query(
-    `select v.revision,o.assignee_id as "assigneeId" from signal_desk.opportunities o
-    join signal_desk.vehicles v on v.id=o.vehicle_id where o.id=$1`,
-    [opportunityId],
-  );
-  return z
-    .object({ revision: z.number(), assigneeId: z.string().nullable() })
-    .parse(result.rows[0]);
+  const result = await orm(db)
+    .select({ revision: vehicles.revision, assigneeId: opportunities.assignee_id })
+    .from(opportunities)
+    .innerJoin(vehicles, eq(vehicles.id, opportunities.vehicle_id))
+    .where(eq(opportunities.id, opportunityId));
+  return z.object({ revision: z.number(), assigneeId: z.string().nullable() }).parse(result[0]);
 }
 
 async function assignee(db: PoolClient, opportunityId: string) {
-  const result = await db.query(
-    `select m.user_id as id from signal_desk.opportunity_members m
-    join signal_desk.identities i on i.user_id=m.user_id join signal_desk.opportunities o on o.id=m.opportunity_id
-    where m.opportunity_id=$1 and i.role='specialist' and i.revoked_at is null
-    order by (m.user_id=o.assignee_id) desc nulls last,m.user_id limit 1`,
-    [opportunityId],
-  );
-  if (!result.rowCount)
+  const result = await orm(db)
+    .select({ id: opportunityMembers.user_id })
+    .from(opportunityMembers)
+    .innerJoin(identities, eq(identities.userId, opportunityMembers.user_id))
+    .innerJoin(opportunities, eq(opportunities.id, opportunityMembers.opportunity_id))
+    .where(
+      and(
+        eq(opportunityMembers.opportunity_id, opportunityId),
+        eq(identities.role, "specialist"),
+        isNull(identities.revokedAt),
+      ),
+    )
+    .orderBy(
+      sql`${eq(opportunityMembers.user_id, opportunities.assignee_id)} desc nulls last`,
+      opportunityMembers.user_id,
+    )
+    .limit(1);
+  if (!result.length)
     throw new AppError(409, "ASSIGNEE_REQUIRED", "Assign a current opportunity specialist first.");
-  return z.object({ id: z.string() }).parse(result.rows[0]).id;
+  return z.object({ id: z.string() }).parse(result[0]).id;
 }
 
 async function answerState(
@@ -86,13 +119,20 @@ async function answerState(
   const published = await getPublicVehicle(vehicleId, db);
   const fact = published.facts.find((f) => f.field === field);
   if (fact) return { kind: "supported" as const, fact };
-  const result = await db.query(
-    `select count(distinct (c.value,c.unit))::int as n from signal_desk.claims c
-    join signal_desk.sources s on s.id=c.source_id where c.vehicle_id=$1 and c.field=$2
-    and s.audience='sales' and s.shareable and s.kind not in ('private_note','inquiry')`,
-    [vehicleId, field],
-  );
-  const count = z.object({ n: z.number() }).parse(result.rows[0]).n;
+  const result = await orm(db)
+    .select({ n: sql<number>`count(distinct (${claims.value},${claims.unit}))::int` })
+    .from(claims)
+    .innerJoin(sources, eq(sources.id, claims.source_id))
+    .where(
+      and(
+        eq(claims.vehicle_id, vehicleId),
+        eq(claims.field, field),
+        eq(sources.audience, "sales"),
+        eq(sources.shareable, true),
+        notInArray(sources.kind, ["private_note", "inquiry"]),
+      ),
+    );
+  const count = z.object({ n: z.number() }).parse(result[0]).n;
   return { kind: count > 1 ? ("conflict" as const) : ("missing_evidence" as const) };
 }
 
@@ -105,37 +145,53 @@ async function ensureBlocker(
   nextAction: string,
 ) {
   const owner = await assignee(db, opportunityId);
-  await db.query(
-    `insert into signal_desk.evidence_blockers(id,opportunity_id,blocker_key,question,field,assignee_id,next_action)
-    values ($1,$2,$3,$4,$5,$6,$7) on conflict(opportunity_id,blocker_key) do nothing`,
-    [randomUUID(), opportunityId, `inquiry:${inquiryId}`, question, field, owner, nextAction],
-  );
+  await orm(db)
+    .insert(evidenceBlockers)
+    .values({
+      id: randomUUID(),
+      opportunity_id: opportunityId,
+      blocker_key: `inquiry:${inquiryId}`,
+      question,
+      field,
+      assignee_id: owner,
+      next_action: nextAction,
+    })
+    .onConflictDoNothing({
+      target: [evidenceBlockers.opportunity_id, evidenceBlockers.blocker_key],
+    });
   return blockerRow.parse(
     (
-      await db.query(
-        `select id,question,assignee_id as "assigneeId",next_action as "nextAction"
-    from signal_desk.evidence_blockers where opportunity_id=$1 and blocker_key=$2`,
-        [opportunityId, `inquiry:${inquiryId}`],
-      )
-    ).rows[0],
+      await orm(db)
+        .select(blockerProjection)
+        .from(evidenceBlockers)
+        .where(
+          and(
+            eq(evidenceBlockers.opportunity_id, opportunityId),
+            eq(evidenceBlockers.blocker_key, `inquiry:${inquiryId}`),
+          ),
+        )
+    )[0],
   );
 }
 
 async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: string, id: string) {
-  const result = await db.query(
-    "select id,input from signal_desk.inquiries where id=$1 and opportunity_id=$2",
-    [id, opportunityId],
-  );
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Inquiry not found.");
-  const inquiry = inquiryRow.parse(result.rows[0]);
+  const result = await orm(db)
+    .select({ id: inquiryTable.id, input: inquiryTable.input })
+    .from(inquiryTable)
+    .where(and(eq(inquiryTable.id, id), eq(inquiryTable.opportunity_id, opportunityId)));
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Inquiry not found.");
+  const inquiry = inquiryRow.parse(result[0]);
   const history = z.array(routingRow).parse(
-    (
-      await db.query(
-        `select kind,field,basis,revision from signal_desk.inquiry_routing
-    where inquiry_id=$1 order by revision desc`,
-        [id],
-      )
-    ).rows,
+    await orm(db)
+      .select({
+        kind: inquiryRouting.kind,
+        field: inquiryRouting.field,
+        basis: inquiryRouting.basis,
+        revision: inquiryRouting.revision,
+      })
+      .from(inquiryRouting)
+      .where(eq(inquiryRouting.inquiry_id, id))
+      .orderBy(desc(inquiryRouting.revision)),
   );
   const routing = history[0];
   if (!routing) throw new AppError(409, "REVIEW_REQUIRED", "Inquiry requires review.");
@@ -154,10 +210,13 @@ async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: str
     routing.field,
     nextAction,
   );
-  await db.query("update signal_desk.evidence_blockers set state=$2 where id=$1", [
-    blocker.id,
-    state.kind === "supported" && inquiry.input.kind !== "offer" ? "resolved" : "needs_review",
-  ]);
+  await orm(db)
+    .update(evidenceBlockers)
+    .set({
+      state:
+        state.kind === "supported" && inquiry.input.kind !== "offer" ? "resolved" : "needs_review",
+    })
+    .where(eq(evidenceBlockers.id, blocker.id));
   let card: InlineCard;
   if (inquiry.input.kind === "offer") {
     card = {
@@ -205,17 +264,21 @@ async function insertInquiry(
   input: z.infer<typeof inquiryInput>,
   key: string,
 ) {
-  await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-    `inquiry:${actor.userId}:${key}`,
-  ]);
-  const prior = await db.query(
-    "select id,input,opportunity_id from signal_desk.inquiries where actor_id=$1 and request_key=$2",
-    [actor.userId, key],
+  await orm(db).execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`inquiry:${actor.userId}:${key}`},0))`,
   );
-  if (prior.rowCount) {
+  const prior = await orm(db)
+    .select({
+      id: inquiryTable.id,
+      input: inquiryTable.input,
+      opportunity_id: inquiryTable.opportunity_id,
+    })
+    .from(inquiryTable)
+    .where(and(eq(inquiryTable.actor_id, actor.userId), eq(inquiryTable.request_key, key)));
+  if (prior.length) {
     const row = z
       .object({ id: z.string(), input: inquiryInput, opportunity_id: z.string() })
-      .parse(prior.rows[0]);
+      .parse(prior[0]);
     sameInput({ input, opportunityId }, { input: row.input, opportunityId: row.opportunity_id });
     return row.id;
   }
@@ -227,25 +290,25 @@ async function insertInquiry(
         ? routeQuestion(input.text)
         : null;
   const state = await answerState(db, vehicleId, field);
-  await db.query(
-    "insert into signal_desk.inquiries(id,opportunity_id,actor_id,request_key,input) values ($1,$2,$3,$4,$5)",
-    [id, opportunityId, actor.userId, key, JSON.stringify(input)],
-  );
-  await db.query(
-    `insert into signal_desk.inquiry_routing(id,inquiry_id,actor_id,kind,field,basis,revision) values ($1,$2,$3,$4,$5,$6,0)`,
-    [
-      randomUUID(),
-      id,
-      actor.userId,
-      input.kind === "offer" ? "conditional_offer" : state.kind,
+  await orm(db)
+    .insert(inquiryTable)
+    .values({ id, opportunity_id: opportunityId, actor_id: actor.userId, request_key: key, input });
+  await orm(db)
+    .insert(inquiryRouting)
+    .values({
+      id: randomUUID(),
+      inquiry_id: id,
+      actor_id: actor.userId,
+      kind: input.kind === "offer" ? "conditional_offer" : state.kind,
       field,
-      input.kind === "offer"
-        ? "Buyer explicitly supplied structured offer terms; recorded, not accepted."
-        : field
-          ? "Exact single-field request; answer checked against current approved public evidence."
-          : "Intent is outside the bounded question catalog. Human interpretation required.",
-    ],
-  );
+      revision: 0,
+      basis:
+        input.kind === "offer"
+          ? "Buyer explicitly supplied structured offer terms; recorded, not accepted."
+          : field
+            ? "Exact single-field request; answer checked against current approved public evidence."
+            : "Intent is outside the bounded question catalog. Human interpretation required.",
+    });
   return id;
 }
 
@@ -258,26 +321,26 @@ export async function submitInquiry(
   raw: unknown,
   requestKey: string,
 ) {
-  const input = parseEvidence(inquiryInput, raw);
-  const key = parseEvidence(keySchema, requestKey);
+  const input = parseInput(inquiryInput, raw);
+  const key = parseInput(keySchema, requestKey);
   return evidenceTransaction(
     actor,
     opportunityId,
     async (db, vehicleId) => {
       const id = await insertInquiry(db, actor, opportunityId, vehicleId, input, key);
       const inquiry = await readInquiry(db, opportunityId, vehicleId, id);
-      await db.query(
-        "update signal_desk.opportunities set assignee_id=$2,next_action=$3 where id=$1",
-        [
-          opportunityId,
-          await assignee(db, opportunityId),
-          inquiry.card.kind === "answer"
-            ? "Review the cited answer. No message has been sent."
-            : "nextAction" in inquiry.card
-              ? inquiry.card.nextAction
-              : "Review inquiry",
-        ],
-      );
+      await orm(db)
+        .update(opportunities)
+        .set({
+          assignee_id: await assignee(db, opportunityId),
+          next_action:
+            inquiry.card.kind === "answer"
+              ? "Review the cited answer. No message has been sent."
+              : "nextAction" in inquiry.card
+                ? inquiry.card.nextAction
+                : "Review inquiry",
+        })
+        .where(eq(opportunities.id, opportunityId));
       return actor.role === "buyer" ? buyerInquiry(inquiry) : inquiry;
     },
     actor.role,
@@ -286,13 +349,17 @@ export async function submitInquiry(
 
 async function readDrafts(db: PoolClient, opportunityId: string, revision: number) {
   const drafts = z.array(draftRow).parse(
-    (
-      await db.query(
-        `select id,purpose,recipient_label as "recipientLabel",body,basis_revision as "basisRevision"
-    from signal_desk.assistance_drafts where opportunity_id=$1 order by created_at,id`,
-        [opportunityId],
-      )
-    ).rows,
+    await orm(db)
+      .select({
+        id: assistanceDrafts.id,
+        purpose: assistanceDrafts.purpose,
+        recipientLabel: assistanceDrafts.recipient_label,
+        body: assistanceDrafts.body,
+        basisRevision: assistanceDrafts.basis_revision,
+      })
+      .from(assistanceDrafts)
+      .where(eq(assistanceDrafts.opportunity_id, opportunityId))
+      .orderBy(assistanceDrafts.created_at, assistanceDrafts.id),
   );
   return drafts.map((d) =>
     inlineCard.parse({
@@ -324,13 +391,11 @@ function buyerInquiry(inquiry: Awaited<ReturnType<typeof readInquiry>>) {
 
 async function readTurns(db: PoolClient, actor: Actor, opportunityId: string, vehicleId: string) {
   const turns = z.array(turnRow).parse(
-    (
-      await db.query(
-        `select id,inquiry_id as "inquiryId",message from signal_desk.chat_turns
-    where opportunity_id=$1 and actor_id=$2 order by created_at,id`,
-        [opportunityId, actor.userId],
-      )
-    ).rows,
+    await orm(db)
+      .select({ id: chatTurns.id, inquiryId: chatTurns.inquiry_id, message: chatTurns.message })
+      .from(chatTurns)
+      .where(and(eq(chatTurns.opportunity_id, opportunityId), eq(chatTurns.actor_id, actor.userId)))
+      .orderBy(chatTurns.created_at, chatTurns.id),
   );
   const resolved = [];
   for (const turn of turns) {
@@ -342,12 +407,11 @@ async function readTurns(db: PoolClient, actor: Actor, opportunityId: string, ve
         }),
       )
       .parse(
-        (
-          await db.query(
-            "select input,status from signal_desk.card_calls where turn_id=$1 order by call_id",
-            [turn.id],
-          )
-        ).rows,
+        await orm(db)
+          .select({ input: cardCalls.input, status: cardCalls.status })
+          .from(cardCalls)
+          .where(eq(cardCalls.turn_id, turn.id))
+          .orderBy(cardCalls.call_id),
       );
     const cards: InlineCard[] = [];
     for (const call of calls) {
@@ -369,13 +433,23 @@ export async function getAssistance(actor: Actor, opportunityId: string) {
     opportunityId,
     async (db, vehicleId) => {
       const ids = z.array(z.object({ id: z.string() })).parse(
-        (
-          await db.query(
-            `select q.id from signal_desk.inquiries q where q.opportunity_id=$1
-              and ($2='specialist' or not exists(select 1 from signal_desk.chat_turns t where t.inquiry_id=q.id)) order by q.created_at,q.id`,
-            [opportunityId, actor.role],
+        await orm(db)
+          .select({ id: inquiryTable.id })
+          .from(inquiryTable)
+          .where(
+            and(
+              eq(inquiryTable.opportunity_id, opportunityId),
+              actor.role === "specialist"
+                ? undefined
+                : notExists(
+                    orm(db)
+                      .select({ id: chatTurns.id })
+                      .from(chatTurns)
+                      .where(eq(chatTurns.inquiry_id, inquiryTable.id)),
+                  ),
+            ),
           )
-        ).rows,
+          .orderBy(inquiryTable.created_at, inquiryTable.id),
       );
       const inquiries = [];
       for (const i of ids) inquiries.push(await readInquiry(db, opportunityId, vehicleId, i.id));
@@ -405,7 +479,7 @@ export async function correctInquiry(
   id: string,
   raw: unknown,
 ) {
-  const input = parseEvidence(correction, raw);
+  const input = parseInput(correction, raw);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     const inquiry = await readInquiry(db, opportunityId, vehicleId, id);
     if (inquiry.history[0]?.revision !== input.revision)
@@ -417,20 +491,31 @@ export async function correctInquiry(
         "Preserve the explicit offer terms; request a new buyer clarification instead.",
       );
     const state = await answerState(db, vehicleId, input.field);
-    await db.query(
-      `insert into signal_desk.inquiry_routing(id,inquiry_id,actor_id,kind,field,basis,revision) values ($1,$2,$3,$4,$5,$6,$7)`,
-      [randomUUID(), id, actor.userId, state.kind, input.field, input.reason, input.revision + 1],
-    );
+    await orm(db)
+      .insert(inquiryRouting)
+      .values({
+        id: randomUUID(),
+        inquiry_id: id,
+        actor_id: actor.userId,
+        kind: state.kind,
+        field: input.field,
+        basis: input.reason,
+        revision: input.revision + 1,
+      });
     await ensureBlocker(db, opportunityId, id, inquiry.input.text, input.field, input.nextAction);
-    await db.query(
-      `update signal_desk.evidence_blockers set field=$3,next_action=$4
-      where opportunity_id=$1 and blocker_key=$2`,
-      [opportunityId, `inquiry:${id}`, input.field, input.nextAction],
-    );
-    await db.query("update signal_desk.opportunities set next_action=$2 where id=$1", [
-      opportunityId,
-      input.nextAction,
-    ]);
+    await orm(db)
+      .update(evidenceBlockers)
+      .set({ field: input.field, next_action: input.nextAction })
+      .where(
+        and(
+          eq(evidenceBlockers.opportunity_id, opportunityId),
+          eq(evidenceBlockers.blocker_key, `inquiry:${id}`),
+        ),
+      );
+    await orm(db)
+      .update(opportunities)
+      .set({ next_action: input.nextAction })
+      .where(eq(opportunities.id, opportunityId));
     return { id, revision: input.revision + 1 };
   });
 }
@@ -444,11 +529,16 @@ async function inquiryDraft(
   const inquiry = await readInquiry(db, opportunityId, vehicleId, input.inquiryId);
   const blocker = blockerRow.parse(
     (
-      await db.query(
-        `select id,question,assignee_id as "assigneeId",next_action as "nextAction" from signal_desk.evidence_blockers where opportunity_id=$1 and blocker_key=$2`,
-        [opportunityId, `inquiry:${inquiry.id}`],
-      )
-    ).rows[0],
+      await orm(db)
+        .select(blockerProjection)
+        .from(evidenceBlockers)
+        .where(
+          and(
+            eq(evidenceBlockers.opportunity_id, opportunityId),
+            eq(evidenceBlockers.blocker_key, `inquiry:${inquiry.id}`),
+          ),
+        )
+    )[0],
   );
   if (input.kind === "seller_request")
     return {
@@ -457,14 +547,23 @@ async function inquiryDraft(
       recipientLabel: "Vehicle seller (recipient to be confirmed)",
       body: `Please provide permissioned evidence for this buyer question:\n${inquiry.input.text}\nThe specialist will review any response before preparing a buyer reply. No delivery or commercial commitment is requested.`,
     };
-  const result = await db.query(
-    `select f.review_id from signal_desk.public_facts f
-    join signal_desk.evidence_reviews r on r.id=f.review_id join signal_desk.claims c on c.id=r.claim_id
-    join signal_desk.sources s on s.id=c.source_id
-    where f.vehicle_id=$1 and f.field=$2 and s.blocker_id=$3 and s.kind='seller_response' and s.shareable and s.audience='sales'`,
-    [vehicleId, inquiry.history[0]?.field, blocker.id],
-  );
-  if (inquiry.card.kind !== "answer" || !result.rowCount)
+  const result = await orm(db)
+    .select({ review_id: publicFacts.review_id })
+    .from(publicFacts)
+    .innerJoin(evidenceReviews, eq(evidenceReviews.id, publicFacts.review_id))
+    .innerJoin(claims, eq(claims.id, evidenceReviews.claim_id))
+    .innerJoin(sources, eq(sources.id, claims.source_id))
+    .where(
+      and(
+        eq(publicFacts.vehicle_id, vehicleId),
+        sql`${publicFacts.field} = ${inquiry.history[0]?.field ?? null}`,
+        eq(sources.blocker_id, blocker.id),
+        eq(sources.kind, "seller_response"),
+        eq(sources.shareable, true),
+        eq(sources.audience, "sales"),
+      ),
+    );
+  if (inquiry.card.kind !== "answer" || !result.length)
     throw new AppError(
       409,
       "REVIEW_REQUIRED",
@@ -472,7 +571,7 @@ async function inquiryDraft(
     );
   return {
     blockerId: blocker.id,
-    reviewId: z.object({ review_id: z.string() }).parse(result.rows[0]).review_id,
+    reviewId: z.object({ review_id: z.string() }).parse(result[0]).review_id,
     recipientLabel: "Opportunity buyer (recipient to be confirmed)",
     body: `Regarding: ${inquiry.input.text}\n${inquiry.card.value}\n${inquiry.card.citation.sourceLabel}: ${inquiry.card.citation.excerpt}\nUnsent draft for specialist review. Other offer conditions and timing remain unresolved.`,
   };
@@ -487,23 +586,29 @@ export async function createDraft(
   raw: unknown,
   requestKey: string,
 ) {
-  const input = parseEvidence(draftCommand, raw);
-  const key = parseEvidence(keySchema, requestKey);
+  const input = parseInput(draftCommand, raw);
+  const key = parseInput(keySchema, requestKey);
   const workbench =
     input.kind === "photo_request" ? await getWorkbench(actor, opportunityId) : null;
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     const h = await header(db, opportunityId);
-    await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-      `draft:${actor.userId}:${key}`,
-    ]);
-    const prior = await db.query(
-      `select id,input,opportunity_id from signal_desk.assistance_drafts where actor_id=$1 and request_key=$2`,
-      [actor.userId, key],
+    await orm(db).execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`draft:${actor.userId}:${key}`},0))`,
     );
-    if (prior.rowCount) {
+    const prior = await orm(db)
+      .select({
+        id: assistanceDrafts.id,
+        input: assistanceDrafts.input,
+        opportunity_id: assistanceDrafts.opportunity_id,
+      })
+      .from(assistanceDrafts)
+      .where(
+        and(eq(assistanceDrafts.actor_id, actor.userId), eq(assistanceDrafts.request_key, key)),
+      );
+    if (prior.length) {
       const row = z
         .object({ id: z.string(), input: z.unknown(), opportunity_id: z.string() })
-        .parse(prior.rows[0]);
+        .parse(prior[0]);
       sameInput({ input, opportunityId }, { input: row.input, opportunityId: row.opportunity_id });
       const drafts = await readDrafts(db, opportunityId, h.revision);
       return inlineCard.options[3].parse(
@@ -525,30 +630,26 @@ export async function createDraft(
           }
         : await inquiryDraft(db, opportunityId, vehicleId, input);
     const id = randomUUID();
-    await db.query(
-      `insert into signal_desk.assistance_drafts(id,opportunity_id,actor_id,request_key,input,purpose,recipient_label,body,basis_revision,blocker_id,review_id,evidence_basis)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [
+    await orm(db)
+      .insert(assistanceDrafts)
+      .values({
         id,
-        opportunityId,
-        actor.userId,
-        key,
-        JSON.stringify(input),
-        input.kind,
-        draft.recipientLabel,
-        draft.body,
-        h.revision,
-        draft.blockerId,
-        draft.reviewId,
-        JSON.stringify(
-          workbench?.photoRequest ?? {
-            inquiryId: input.kind !== "photo_request" ? input.inquiryId : null,
-            blockerId: draft.blockerId,
-            reviewId: draft.reviewId,
-          },
-        ),
-      ],
-    );
+        opportunity_id: opportunityId,
+        actor_id: actor.userId,
+        request_key: key,
+        input,
+        purpose: input.kind,
+        recipient_label: draft.recipientLabel,
+        body: draft.body,
+        basis_revision: h.revision,
+        blocker_id: draft.blockerId,
+        review_id: draft.reviewId,
+        evidence_basis: workbench?.photoRequest ?? {
+          inquiryId: input.kind !== "photo_request" ? input.inquiryId : null,
+          blockerId: draft.blockerId,
+          reviewId: draft.reviewId,
+        },
+      });
     return inlineCard.options[3].parse({
       kind: "draft",
       draftId: id,
@@ -571,18 +672,23 @@ export async function beginChatTurn(
   raw: unknown,
   requestKey: string,
 ) {
-  const message = parseEvidence(z.string().trim().min(1).max(2000), raw);
-  const key = parseEvidence(keySchema, requestKey);
+  const message = parseInput(z.string().trim().min(1).max(2000), raw);
+  const key = parseInput(keySchema, requestKey);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
-    await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
-      `turn:${actor.userId}:${key}`,
-    ]);
-    const prior = await db.query(
-      `select id,inquiry_id as "inquiryId",message,opportunity_id from signal_desk.chat_turns where actor_id=$1 and request_key=$2`,
-      [actor.userId, key],
+    await orm(db).execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`turn:${actor.userId}:${key}`},0))`,
     );
-    if (prior.rowCount) {
-      const turn = turnRow.extend({ opportunity_id: z.string() }).parse(prior.rows[0]);
+    const prior = await orm(db)
+      .select({
+        id: chatTurns.id,
+        inquiryId: chatTurns.inquiry_id,
+        message: chatTurns.message,
+        opportunity_id: chatTurns.opportunity_id,
+      })
+      .from(chatTurns)
+      .where(and(eq(chatTurns.actor_id, actor.userId), eq(chatTurns.request_key, key)));
+    if (prior.length) {
+      const turn = turnRow.extend({ opportunity_id: z.string() }).parse(prior[0]);
       sameInput(
         { message, opportunityId },
         { message: turn.message, opportunityId: turn.opportunity_id },
@@ -599,10 +705,14 @@ export async function beginChatTurn(
     );
     await readInquiry(db, opportunityId, vehicleId, inquiryId);
     const id = randomUUID();
-    await db.query(
-      "insert into signal_desk.chat_turns(id,opportunity_id,actor_id,request_key,message,inquiry_id) values ($1,$2,$3,$4,$5,$6)",
-      [id, opportunityId, actor.userId, key, message, inquiryId],
-    );
+    await orm(db).insert(chatTurns).values({
+      id,
+      opportunity_id: opportunityId,
+      actor_id: actor.userId,
+      request_key: key,
+      message,
+      inquiry_id: inquiryId,
+    });
     return { id, inquiryId, message };
   });
 }
@@ -621,11 +731,16 @@ async function resolveCard(
       ) ?? null
     );
   }
-  const exists = await db.query(
-    "select id from signal_desk.inquiries where id=$1 and opportunity_id=$2",
-    [call.props.inquiryId, opportunityId],
-  );
-  if (!exists.rowCount) return null;
+  const exists = await orm(db)
+    .select({ id: inquiryTable.id })
+    .from(inquiryTable)
+    .where(
+      and(
+        eq(inquiryTable.id, call.props.inquiryId),
+        eq(inquiryTable.opportunity_id, opportunityId),
+      ),
+    );
+  if (!exists.length) return null;
   const inquiry = await readInquiry(db, opportunityId, vehicleId, call.props.inquiryId);
   return inquiry.card.kind === call.tool ? inquiry.card : null;
 }
@@ -641,26 +756,32 @@ export async function renderCardCall(
   rawCallId: string,
   raw: unknown,
 ) {
-  const callId = parseEvidence(keySchema, rawCallId);
-  const envelope = parseEvidence(z.object({ tool: z.string().min(1).max(80) }).passthrough(), raw);
+  const callId = parseInput(keySchema, rawCallId);
+  const envelope = parseInput(z.object({ tool: z.string().min(1).max(80) }).passthrough(), raw);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
-    const turn = await db.query(
-      "select id from signal_desk.chat_turns where id=$1 and opportunity_id=$2 and actor_id=$3",
-      [turnId, opportunityId, actor.userId],
-    );
-    if (!turn.rowCount) throw new AppError(404, "NOT_FOUND", "Turn not found.");
-    const prior = await db.query(
-      "select input,status from signal_desk.card_calls where turn_id=$1 and call_id=$2",
-      [turnId, callId],
-    );
+    const turn = await orm(db)
+      .select({ id: chatTurns.id })
+      .from(chatTurns)
+      .where(
+        and(
+          eq(chatTurns.id, turnId),
+          eq(chatTurns.opportunity_id, opportunityId),
+          eq(chatTurns.actor_id, actor.userId),
+        ),
+      );
+    if (!turn.length) throw new AppError(404, "NOT_FOUND", "Turn not found.");
+    const prior = await orm(db)
+      .select({ input: cardCalls.input, status: cardCalls.status })
+      .from(cardCalls)
+      .where(and(eq(cardCalls.turn_id, turnId), eq(cardCalls.call_id, callId)));
     const parsed = cardCall.safeParse(envelope);
-    if (prior.rowCount) {
+    if (prior.length) {
       const row = z
         .object({
           input: z.unknown(),
           status: z.enum(["accepted", "malformed", "retired", "unavailable"]),
         })
-        .parse(prior.rows[0]);
+        .parse(prior[0]);
       sameInput(row.input, envelope);
       const card =
         row.status === "accepted" && parsed.success
@@ -668,16 +789,20 @@ export async function renderCardCall(
           : null;
       return { status: row.status, card };
     }
-    const count = z
-      .object({ n: z.number() })
-      .parse(
-        (
-          await db.query(
-            "select count(*)::int as n from signal_desk.card_calls where turn_id=$1 and tool=$2 and status='malformed'",
-            [turnId, envelope.tool],
+    const count = z.object({ n: z.number() }).parse(
+      (
+        await orm(db)
+          .select({ n: sql<number>`count(*)::int` })
+          .from(cardCalls)
+          .where(
+            and(
+              eq(cardCalls.turn_id, turnId),
+              eq(cardCalls.tool, envelope.tool),
+              eq(cardCalls.status, "malformed"),
+            ),
           )
-        ).rows[0],
-      ).n;
+      )[0],
+    ).n;
     const card =
       count < 2 && parsed.success
         ? await resolveCard(db, opportunityId, vehicleId, parsed.data)
@@ -690,10 +815,9 @@ export async function renderCardCall(
           : card
             ? ("accepted" as const)
             : ("unavailable" as const);
-    await db.query(
-      "insert into signal_desk.card_calls(turn_id,call_id,tool,input,status) values ($1,$2,$3,$4,$5)",
-      [turnId, callId, envelope.tool, JSON.stringify(envelope), status],
-    );
+    await orm(db)
+      .insert(cardCalls)
+      .values({ turn_id: turnId, call_id: callId, tool: envelope.tool, input: envelope, status });
     return { status, card };
   });
 }
@@ -705,14 +829,13 @@ export async function listBuyerConversations(actor: Actor, vehicleId: string) {
   const current = await refreshActor(actor);
   if (current.role !== "buyer")
     throw new AppError(403, "FORBIDDEN", "Sign in with an invited buyer account.");
-  return z
-    .array(z.object({ id: z.string() }))
-    .parse(
-      (
-        await database().query(
-          "select id from signal_desk.opportunities where vehicle_id=$1 and buyer_id=$2 order by id",
-          [vehicleId, current.userId],
-        )
-      ).rows,
-    );
+  return z.array(z.object({ id: z.string() })).parse(
+    await orm()
+      .select({ id: opportunities.id })
+      .from(opportunities)
+      .where(
+        and(eq(opportunities.vehicle_id, vehicleId), eq(opportunities.buyer_id, current.userId)),
+      )
+      .orderBy(opportunities.id),
+  );
 }

@@ -1,5 +1,7 @@
 import "server-only";
 import { Pool, type PoolClient } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "./db-schema";
 import { AppError } from "./errors";
 
 let pool: Pool | undefined;
@@ -16,4 +18,9 @@ export function database(client?: PoolClient) {
     throw new AppError(503, "NOT_CONFIGURED", "Database is not configured.");
   pool ??= new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
   return pool;
+}
+
+/** Uses Drizzle's typed ORM over the existing pool or caller-owned transaction. */
+export function orm(client?: PoolClient) {
+  return drizzle(database(client), { schema });
 }

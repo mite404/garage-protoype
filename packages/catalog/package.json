@@ -7,8 +7,7 @@
     "./assistance-card": "./src/assistance-cards.tsx",
     "./prose": "./src/prose.tsx",
     "./workspace-shell": "./src/workspace-shell.tsx",
-    "./styles.css": "./src/dispatch.css",
-    "./schema": "./src/schema.ts"
+    "./styles.css": "./src/dispatch.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
