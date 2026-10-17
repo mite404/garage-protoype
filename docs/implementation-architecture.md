@@ -101,6 +101,72 @@ Photo coverage describes supplied views and readability, never mechanical condit
 Offers preserve amount, timing, conditions, and unanswered questions without accepting anything.
 External messages, payments, and commercial commitments remain disabled.
 
+## Streaming response boundaries
+
+Stream specialist assistant responses from the first live-model implementation. This is required
+behavior, not a claim about the current implementation. Revealing a completed answer with timers
+is playback, not streaming. Deterministic and saved examples stay labeled.
+
+- Provider to server: consume text deltas and tool calls as they arrive. Admit spending before each
+  provider request and settle usage afterward. Retain uncertain reservations after interruption;
+  streaming does not bypass shared budgets or authorize an automatic paid retry.
+- Server to dashboard: send application events through a streaming `fetch` response. Grow the
+  current answer as events arrive instead of awaiting a completed response and refreshing the page.
+  Parse event framing independently of network chunks, which can split UTF-8 text and event data.
+- Rendering: reuse the adapted prose components with Yaklabs' handling of incomplete Markdown.
+  Authored answer text uses restricted Markdown; user messages, source excerpts, offers, and drafts
+  remain literal. Render cards only after complete arguments pass validation and server-side
+  evidence checks. Never render partial tool arguments as cards.
+- Interruption: retain partial output and distinguish interrupted, cancelled, and completed turns.
+  Reload persisted content through the same rendering model. Reconnecting must not silently start
+  another paid request. For the Flue trial below, disconnect only detaches the viewer; explicit
+  cancellation is separate. Verify recovery before promising resumable progress.
+
+Label streamed model prose in the specialist dashboard as an in-progress assistant draft.
+Buyer-visible answers still require evidence and citation checks before disclosure; an in-progress
+label does not authorize unsupported claims or private content. Streaming never grants publication,
+message-delivery, or commercial authority.
+
+Streaming is required independently of the runtime choice. Flue is approved for the bounded trial
+below, not full adoption. Pi Durable, Mastra, and Temporal remain unapproved alternatives.
+
+The [product plan][plan] owns requirement R13 and acceptance example AE9. Hold a controlled provider
+stream open and verify text and a validated card appear before generation finishes. Test split
+Markdown, fragmented tool arguments, interruption, and reconnect without another paid request.
+
+## Trial Flue without transferring sales authority
+
+ADR-020 approves [ticket 008][flue-trial] for one specialist conversation using Dispatch components
+and existing sales operations. This is a trial decision, not implemented functionality or approval
+for a full runtime migration. Flue's documented durable conversations, PostgreSQL integration, and
+separate submission and observation fit the experiment; verify them in this application.
+
+Use Kimi K3 through OpenRouter for the initial trial, as Ethan selected on October 16, 2026.
+OpenRouter's model catalog lists `moonshotai/kimi-k3` with tool calling and structured outputs.
+Keep `OPENROUTER_API_KEY` server-only. Catalog availability is not a verified live integration.
+
+Next.js authenticates submission, observation, and cancellation. One Node execution owner runs the
+conversation, as required by [Flue's database guidance][flue-database]. Flue persists conversation
+progress; application PostgreSQL records remain authoritative for permissions, evidence revisions,
+human approvals, inference reservations, and idempotent drafts. Do not copy those rules into prompts
+or let framework tools write around the existing sales operations.
+
+Use stable logical-turn identifiers for submission. Flue's `send()` admits a message and `observe()`
+reads progress, per its [client documentation][flue-client]. Reconnect observes the existing turn
+rather than sending again. Detaching the browser does not cancel execution; an explicit stop
+request does. Recheck current access for observation and protected operations, including recovered
+tools, and stop disclosure when access is revoked.
+
+All provider requests, including framework retries and compaction, must pass shared spending
+admission. Unknown charges remain reserved until reconciled. Tool replay must retain operation-level
+idempotency and current-evidence checks; framework durability alone cannot guarantee one draft after
+a crash. If Flue cannot support these boundaries, reject the integration rather than weaken them.
+
+Keep import jobs, buyer publication, and MCP operations unchanged except for shared contracts that
+the trial proves necessary. Do not add shell tools, sandbox agents, subagent swarms, or a second
+framework stack. Ticket 008 owns failure scenarios and the adopt-or-reject report, including
+observed streaming latency, provider usage, recovery evidence, and unresolved limits.
+
 ## MCP exposes operations, not a second sales agent
 
 Start with a small local stdio MCP adapter for Claude Code and compatible clients. The adapter
@@ -150,3 +216,6 @@ decorative dashboard charts or navigation to workflows the slice does not implem
 [engineering]: https://www.ycombinator.com/companies/garage-2/jobs/8YNROco-software-engineer
 [linear]: https://linear.app/mite404-workspace/project/garage-prototype-baf1d9b8985d
 [bundle]: https://www.shopgarage.com/_next/static/chunks/pages/_app-2bf824e172349a0a.js
+[flue-trial]: plans/008-flue-specialist-trial.md
+[flue-database]: https://flueframework.com/docs/guide/database/
+[flue-client]: https://flueframework.com/docs/sdk/flue-client/

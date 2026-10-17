@@ -28,6 +28,8 @@ implemented functionality, and proposed entries remain open for review.
   boundaries.
 - ADR-019: Adapt Yaklabs' semantic prose and card reading hierarchy because explicit emphasis and
   separated actions improve scanning without changing source evidence or agent permissions.
+- ADR-020: Trial Flue on [one streamed specialist conversation][flue-trial] before deciding adoption
+  because reconnect and crash recovery must preserve sales, evidence, and spending controls.
 
 ## Proposed
 
@@ -47,3 +49,5 @@ implemented functionality, and proposed entries remain open for review.
   bounded source packet already has known record ownership.
 - ADR-011: Keep external delivery simulated and labeled because the interview demo must not contact
   real customers or create commercial obligations.
+
+[flue-trial]: plans/008-flue-specialist-trial.md

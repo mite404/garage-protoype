@@ -122,6 +122,10 @@ customer-facing view, not a separate product owner invented for the demo.
   users can reload the page without losing reviewed records or outstanding work.
 - R11. Record model version, processing duration, usage, and review outcomes for evaluation without
   exposing secrets or private buyer information in the demo.
+- R13. Stream specialist assistant responses during generation from the first live-model
+  implementation. Show incremental prose and validated cards without waiting for the full response
+  or refreshing the page. Follow the
+  [streaming boundaries](../implementation-architecture.md#streaming-response-boundaries).
 
 ### Key flows
 
@@ -176,6 +180,11 @@ exploration; this plan does not prescribe a dashboard template.
   Classification preserves their sources and separates evidence, private context, and human-review
   work. A specialist can correct the routing without changing original text. An explicit offer
   follows AE4 instead; neither case invents contacts or creates duplicate opportunities. Covers R12.
+- AE9. Hold a controlled provider stream open after emitting text and a complete valid card. Both
+  appear in the specialist dashboard before generation finishes. Split Markdown and tool arguments
+  across chunks; incomplete or invalid cards never appear. Interrupt the stream and verify partial
+  output remains labeled interrupted, not completed. Reconnecting does not start another paid
+  request. Controlled streams test behavior, not live provider performance. Covers R6, R11, and R13.
 
 ### Model responsibilities and technical basis
 
@@ -213,8 +222,10 @@ corner rounding. Use these as visual references while creating original componen
 Implementation ownership stays in the existing feature tickets rather than a separate AI project:
 
 - [003: Evidence review](003-evidence-review.md) owns source classification and reviewed responses.
-- [005: Buyer assistance](005-buyer-handoff.md) owns Q&A, routing, and seller handoff drafts.
-- [007: Evaluation](007-evaluate-and-polish.md) verifies classification and the handoff loop.
+- [005: Buyer assistance](005-buyer-handoff.md) owns Q&A, routing, seller handoff drafts, and R13's
+  streaming implementation.
+- [007: Evaluation](007-evaluate-and-polish.md) verifies classification, the handoff loop, and AE9's
+  streaming and interruption behavior.
 
 Classification is required; Jev is not. Reuse the planned extraction and answer pipeline plus
 ordinary code for explicit structured inputs. Resolve labels and persisted result schemas against
