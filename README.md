@@ -11,6 +11,41 @@ The repository includes access controls, atomic inference budgets, durable impor
 review. The explicitly selected saved example uses synthetic results without a paid call.
 Live extraction remains unavailable without a server-owned provider, model policy, and budget.
 
+## Current code organization
+
+This is one Next.js App Router application with separate Node worker processes, not a separate
+API service. Supabase Auth verifies identities. Drizzle provides typed application queries over
+PostgreSQL, with `pg` retaining connection and transaction ownership. Ordered SQL migrations remain
+the database history. The bounded Flue specialist-streaming trial uses the same sales operations.
+
+```text
+apps/web/src/
+  app/              App Router pages, route-local components, and HTTP adapters
+  server/           Authentication, permissions, sales operations, and Drizzle schema
+  agents/           Flue specialist agent using the existing operations
+  worker.ts         Import and photo-processing process entry point
+  streaming-worker.ts  Durable specialist-conversation process entry point
+  mcp.ts            Stdio MCP adapter calling the application's authenticated HTTP API
+apps/storybook/     Independent browser catalog, not a second product application
+packages/ui/        Shared Base UI primitives and theme
+packages/catalog/   Product cards, prose, workspace chrome, and colocated stories/tests
+packages/contracts/ React-free Zod contracts shared by browser and server, with their tests
+packages/config/    Shared TypeScript configuration
+db/                 Ordered SQL migrations and synthetic demo seed
+scripts/            Operator commands and repository checks
+```
+
+Web and Storybook consume the shared presentation packages. Catalog consumes UI and contracts;
+server operations consume contracts directly, never the presentation catalog. Authentication and
+database code stay application-owned because there is no independently released consumer.
+Worker processes share that application code and database lifecycle. MCP calls HTTP, not the DB.
+
+The workspace layout was adapted from Better T Stack 3.44.1. Its unchanged generator metadata is
+[archived as provenance](docs/reference/bts-3.44.1.jsonc), not current generator configuration.
+The later 3.47.0 Supabase/Drizzle/Better Auth reference separates `db` and `auth` packages; this app
+retains Supabase Auth and its existing application boundaries rather than matching that template.
+See [development checks](docs/development.md) for the reference command and runtime setup.
+
 ## Run the prototype
 
 Use Node 22 LTS and npm. Dependency versions are exact and the lockfile is committed.
@@ -41,9 +76,10 @@ npm run build
 npm run check
 ```
 
-The native Node test runner loads TypeScript through `tsx`. Its recursive glob includes
-nested tests. Set `TEST_DATABASE_URL` to an operator connection for a disposable PostgreSQL database
-whose name ends in `_test` to run integration checks. Tests bootstrap the schema and clean up their
+The native Node test runner loads TypeScript through `tsx`. Its recursive globs include application
+and shared-package tests. Set `TEST_DATABASE_URL` to an operator connection for a disposable
+PostgreSQL database whose name ends in `_test` to run integration checks.
+Tests bootstrap the schema and clean up their
 fixtures. A minimal local `auth.sessions` table supports permission checks.
 The HTTP review regression launches the production build with a loopback-only controlled identity
 provider, not live Supabase. `CI=true` requires the database configuration.

@@ -32,6 +32,11 @@ not trigger another paid request or duplicate a draft when it reconnects.
   Its documented conversation storage and reconnect behavior fit this bounded test.
 * Keep PostgreSQL sales records authoritative for access, evidence, approvals, budgets, and drafts.
   Flue stores execution progress, not a second authoritative copy of those business records.
+* Use Drizzle for application database access, following the existing Zod contracts in
+  `packages/contracts`. Preserve runtime validation and the existing transaction guarantees.
+  The prototype Supabase project is `garage-prototype` (`iyjdwksmwccwslcioutd`); developer tooling
+  and authentication are described in
+  [development checks](../development.md#supabase-developer-access).
 * Route every provider request, including recovery and compaction, through shared spending
   admission. Keep uncertain charges reserved until reconciled. Stop the trial if Flue cannot
   preserve this rule.
@@ -103,3 +108,96 @@ not trigger another paid request or duplicate a draft when it reconnects.
   [durability](https://flueframework.com/docs/guide/durability/),
   [database](https://flueframework.com/docs/guide/database/), and
   [client](https://flueframework.com/docs/sdk/flue-client/).
+
+## Implementation evidence
+
+The local implementation uses Flue 2.3.0, its PostgreSQL adapter, and the pinned CLI. The agent is
+`apps/web/src/agents/specialist.ts`; the owner runs with `npm run streaming`. Application database
+operations use Drizzle ORM and retain Zod validation, transaction connections, PostgreSQL access
+locks, and the existing ordered migration history. Framework-owned Flue storage is not an
+application ORM model.
+
+Controlled checks use synthetic identities, a disposable local PostgreSQL database, the actual
+production Next app, Flue, and Pi's OpenAI-compatible SSE transport. No OpenRouter request or
+live Supabase authentication is implied by these results.
+
+| Scenario | Observed controlled result |
+| --- | --- |
+| Split UTF-8, Markdown, and tool JSON | Text appears early; partial cards stay hidden |
+| Validated card during generation | Current review card appears while the provider is held open |
+| HTTP detach, reconnect, and SSR reload | Same turn restored; provider request count remains two |
+| Provider failure and cancellation | Incomplete text retained; uncertain charges remain reserved |
+| SIGKILL after draft commit, before acknowledgement | Same draft ID recovered, not a second draft |
+| SIGKILL during inference | Restart marks uncertain outcome; no new provider request |
+| Buyer role and removed specialist membership | Observe, cancel, and submit denied |
+| Evidence changes before a pending card | Stale tool rejected; no subsequent paid admission |
+| Access revoked before recovered draft work | Live observer ends; no draft or provider request |
+
+The two-request synthetic successful turn reports 400 input and 80 output tokens. These fixture
+counts exercise accounting, not provider usage or invoices. The model policy in the fixture uses
+1 input and 12 output micro-USD per token, so its settled counter is 1,360 micro-USD. Recovery after
+a forced crash waits for Flue's default 30-second lease; the controlled streaming suite takes about
+57 seconds including that wait. This is not a live model latency benchmark.
+
+The browser walkthrough uses the production app with controlled authentication and provider
+responses. It checks visible prose and cards before completion, reload without another model
+request, explicit stop, failure labels, and a narrow layout. Review captures and recordings are
+local verification artifacts, not checked-in product fixtures.
+
+## Permissioned live verification
+
+Ethan approved remote setup and a US$0.10 smoke test, then clarified that the project OpenRouter
+key has a US$25 budget. Migrations 001 through 008 and the pinned Flue tables were applied to
+`iyjdwksmwccwslcioutd`. All 27 application tables, seven Flue tables, and the public migration
+ledger have RLS enabled. Supabase-managed tables are not included in that application count.
+The runtime login cannot bypass RLS, create roles, create databases, or create application tables.
+
+Real OpenRouter Kimi K3 completed the loop from a specialist request to `prepare_draft`,
+`show_card`, and a final response. One unsent draft was persisted for the logical turn. The
+API observer saw text after 10,662 ms, the validated draft card after 21,616 ms while still
+running, and completion after 45,936 ms. The three admitted requests reported 3,752 input
+tokens and 381 output tokens, with a provider-reported estimated cost of US$0.005471648.
+The conservative integer-rate budget settled at US$0.008324 for that turn. These costs are
+usage estimates, not an invoice reconciliation.
+
+The first real model response asked for listing details instead of using the bound draft tool.
+Clarifying the tools' reference contracts resolved that observed failure in the successful trial.
+No provider fallback or automatic paid retry was enabled. Vehicle records and inquiry text remain
+synthetic even when authentication, database access, runtime execution, and inference are real.
+
+A production-browser walkthrough then signed in through real Supabase Auth, submitted another
+specialist request, displayed the persisted unsent draft card, and restored it after reload.
+The walkthrough exposed two integration gaps: the sign-in control needed explicit submit
+semantics, and the hosted operator could not grant runtime usage of Supabase's managed Auth
+schema. Migration 008 replaces direct session reads with a private, runtime-only predicate,
+preserving immediate session-revocation checks without granting broader Auth access (ADR-023).
+Regression checks reproduce both failures. Authenticated browser DOM checks confirm the complete
+draft, no remaining stop control, and no horizontal overflow.
+
+Recommendation: retain the bounded Flue integration, not a wholesale runtime migration. Real
+tool execution and streamed observation now work, and controlled tests cover the recovery and
+uncertain-spend cases. Hosted end-to-end latency remains a limitation: these measurements include
+database authorization, projection, and tool work, not just model generation time. No external
+message, payment, or commercial commitment was made. Source changes remain local until shipped.
+
+## Approved municipality workspace direction
+
+Ethan approved the municipality-page concept after reviewing the running evidence workbench.
+This is the next UI scope, not an implemented or browser-verified replacement yet (ADR-024).
+
+- One page represents one municipality or department, with its unit identity visible.
+- An active purchase card sits directly below the identity and shows the proposed amount,
+  deal stage, and explicit conditions. Escrow and payments remain simulated and labeled.
+- An interest list follows, showing favorites and seller-contact metadata, never message contents.
+- The organization's own listings follow, including an honest empty state when it has none.
+- A persistent, minimizable pop-up chat overlays the page without becoming another content section.
+  It uses the real Flue agent and streaming transport, retains conversation history, and keeps
+  responses contextual to the selected sale. Evidence administration is not the main chat UI.
+- Municipality, interest, and deal data need explicit contracts and authorized database reads;
+  the concept image is not evidence that these records or features already exist.
+
+The workspace-link investigation also reproduced a 12.4-second navigation and a database lock
+timeout. Evidence reads now take shared vehicle and opportunity locks while writes retain exclusive
+locks. The concurrency regression failed before the fix and passed afterward. Browser clicks opened
+all three demo records in approximately 3.0, 4.5, and 2.6 seconds. The reported minute-long delay
+was not reproduced. The full gate passed 99 tests with zero failures or skipped tests.

@@ -1,0 +1,99 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, within } from "storybook/test";
+import type { MunicipalityWorkspace as Workspace } from "@signal-desk/contracts/municipality-schema";
+import MunicipalityWorkspace from "./municipality-workspace";
+
+const workspace: Workspace = {
+  organization: {
+    id: "austin",
+    name: "Austin Fire Department",
+    city: "Austin",
+    region: "Texas",
+    unit: "Engine 001",
+    synthetic: true,
+  },
+  acquisitions: [
+    {
+      id: "synthetic-deal",
+      vehicleId: "pumper",
+      title: "2014 Pierce Pumper",
+      seller: "San Antonio Fire Department",
+      terms: {
+        amountCents: 8400000,
+        currency: "USD",
+        stage: "contingent",
+        conditions: ["Proceed only after pump-test evidence is reviewed."],
+      },
+    },
+  ],
+  activity: [
+    {
+      id: "contact",
+      vehicleId: "pumper",
+      title: "2014 Pierce Pumper",
+      seller: "San Antonio Fire Department",
+      kind: "contact",
+      occurredAt: new Date("2025-03-10T00:00:00Z"),
+    },
+    {
+      id: "favorite",
+      vehicleId: "rescue",
+      title: "2016 E-ONE Rescue",
+      seller: null,
+      kind: "favorite",
+      occurredAt: new Date("2025-03-08T00:00:00Z"),
+    },
+  ],
+  ownedListings: [
+    {
+      id: "tanker",
+      title: "2008 Freightliner Tanker",
+      publishedAt: new Date("2025-02-28T00:00:00Z"),
+    },
+  ],
+};
+
+const meta = {
+  title: "Municipal sales/Workspace",
+  component: MunicipalityWorkspace,
+  parameters: { layout: "fullscreen" },
+  decorators: [
+    (Story) => (
+      <main className="min-h-screen px-5 py-8">
+        <Story />
+      </main>
+    ),
+  ],
+} satisfies Meta<typeof MunicipalityWorkspace>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {
+  args: { workspace },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
+    await expect(canvas.getByText(/Contacted San Antonio Fire Department/)).toBeVisible();
+    await expect(canvas.getByText("$84,000 proposed")).toBeVisible();
+  },
+};
+export const EmptyActivityAndListings: Story = {
+  args: { workspace: { ...workspace, activity: [], ownedListings: [] } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText("No favorites or seller contact activity recorded."),
+    ).toBeVisible();
+    await expect(canvas.getByText("No owned listings recorded.")).toBeVisible();
+  },
+};
+export const NoDealTerms: Story = {
+  args: {
+    workspace: { ...workspace, acquisitions: [{ ...workspace.acquisitions[0], terms: null }] },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText("No proposed amount or conditions recorded."),
+    ).toBeVisible();
+  },
+};

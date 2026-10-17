@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireActor } from "@/server/auth";
 import { AppError } from "@/server/errors";
 import { listEvidenceOpportunities } from "@/server/evidence";
+import { listMunicipalities } from "@/server/municipalities";
 
 export const dynamic = "force-dynamic";
 
@@ -9,9 +10,11 @@ export const dynamic = "force-dynamic";
 export default async function Desk() {
   let actor;
   let opportunities;
+  let municipalities;
   try {
     actor = await requireActor();
     opportunities = await listEvidenceOpportunities(actor);
+    municipalities = await listMunicipalities(actor);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return (
@@ -30,27 +33,51 @@ export default async function Desk() {
   return (
     <section className="max-w-2xl">
       <p className="eyebrow mb-4">{actor.role} workspace</p>
-      <h1>Move the next decision forward.</h1>
+      <h1>Municipal sales.</h1>
       <p className="mt-6 text-stone-600">
-        Inspect original sources, resolve conflicting claims and keep the buyer's blocker in view.
-        Your record access is checked on every operation.
+        Open a department to review its acquisition, purchase conditions and next sale blocker.
       </p>
+      {municipalities.map((organization) => (
+        <Link
+          className="panel mt-6 block"
+          key={organization.id}
+          href={`/desk/municipalities/${encodeURIComponent(organization.id)}`}
+        >
+          <h2>{organization.name}</h2>
+          <p className="mt-2 text-sm text-stone-600">
+            {organization.city}, {organization.region} · {organization.unit}
+          </p>
+          {organization.synthetic && (
+            <p className="mt-3 text-xs text-stone-500">Synthetic demonstration</p>
+          )}
+        </Link>
+      ))}
+      {!municipalities.length && (
+        <p className="mt-6 text-sm text-stone-500">
+          No municipality profiles are linked to your assigned opportunities.
+        </p>
+      )}
       {opportunities.length === 0 && (
         <p className="panel mt-8">No specialist opportunities are assigned to this account.</p>
       )}
-      {opportunities.map((opportunity) => (
-        <Link
-          className="panel mt-6 block"
-          key={opportunity.id}
-          href={`/desk/opportunities/${encodeURIComponent(opportunity.id)}`}
-        >
-          <h2>{opportunity.title}</h2>
-          <p className="mt-2 text-sm text-stone-600">
-            {opportunity.nextAction || "Open evidence review"}
-          </p>
-          <p className="mt-4 text-sm font-semibold text-orange-800">Review source packet →</p>
-        </Link>
-      ))}
+      <details className="mt-8">
+        <summary className="cursor-pointer font-semibold">
+          Evidence workbench ({opportunities.length})
+        </summary>
+        {opportunities.map((opportunity) => (
+          <Link
+            className="panel mt-6 block"
+            key={opportunity.id}
+            href={`/desk/opportunities/${encodeURIComponent(opportunity.id)}`}
+          >
+            <h2>{opportunity.title}</h2>
+            <p className="mt-2 text-sm text-stone-600">
+              {opportunity.nextAction || "Open evidence review"}
+            </p>
+            <p className="mt-4 text-sm font-semibold text-orange-800">Review source packet →</p>
+          </Link>
+        ))}
+      </details>
       {actor.role === "specialist" && (
         <Link className="quiet-button mt-8" href="/desk/tokens">
           Manage local MCP tokens

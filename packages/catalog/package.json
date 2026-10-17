@@ -6,6 +6,8 @@
   "exports": {
     "./assistance-card": "./src/assistance-cards.tsx",
     "./prose": "./src/prose.tsx",
+    "./municipality-workspace": "./src/municipality-workspace.tsx",
+    "./sale-chat": "./src/sale-chat.tsx",
     "./workspace-shell": "./src/workspace-shell.tsx",
     "./styles.css": "./src/dispatch.css"
   },

@@ -22,12 +22,14 @@ Conversation typography adapts Yaklabs' Quiet prose (ADR-140): 15px/24px body, 1
 510px reading measure, bold authored findings, italic caveats, lists and inline code. Only authored
 response and next-action text uses the restricted Markdown parser. User messages, original source
 excerpts, offer conditions and draft bodies stay literal; HTML never executes and only HTTPS/mailto
-links become anchors. No live streaming, sharing, or Yaklabs runtime is imported.
+links become anchors. No Yaklabs runtime or sharing capability is imported.
 The [project verification skill](../.agents/skills/verifying-signal-desk/SKILL.md) owns browser
 recipes and the feature map. Use it before handing off UI changes; it complements the gate below.
 
-The monorepo layout was adapted from Better-T-Stack 3.44.1 with Turborepo. `bts.jsonc` preserves
-the generator metadata unchanged. To reproduce the reference in `/tmp` using npm 11.16.0, run:
+The monorepo layout was adapted from Better-T-Stack 3.44.1 with Turborepo.
+The [archived generator metadata](reference/bts-3.44.1.jsonc) is unchanged historical provenance,
+not current project configuration. Do not run the generator's `add`
+command against it. To reproduce that original reference in `/tmp` using npm 11.16.0, run:
 
 ```sh
 npm exec --yes --package npm@11.16.0 -- npm exec --yes --package \
@@ -42,9 +44,10 @@ TypeScript base. This repo keeps its existing Node 22, TypeScript 5.9, Next 16.4
 PostgreSQL, and Supabase integration. It does not use the template's varlock override, example
 primitives, or extra dependencies. `apps/web` owns the existing Next routes, API, worker, and MCP.
 `apps/storybook` hosts stories colocated in `packages/ui` and `packages/catalog`.
-`packages/contracts` owns React-free evidence, photo, and assistance schemas and the authoritative
-field labels. The catalog's `./schema` subpath exposes only the finite card calls and inline cards;
-the server imports that subpath without loading JSX. `packages/config` only owns the TS base.
+`packages/contracts` owns React-free evidence, photo, assistance, and token schemas and the
+authoritative field labels. Server operations import these contracts directly; the catalog owns
+product rendering, including cards, prose, and workspace chrome, not server schema re-exports.
+Pure package tests live beside their implementation. `packages/config` only owns the TS base.
 Root `db/` and operator `scripts/` stay together so migration paths and root CLI contracts remain
 unchanged. Root `.env.local` is never copied or overwritten. Next loads it alongside app-local env;
 the worker, MCP, and operator scripts load it from their own commands. Turbo passes runtime and test
@@ -62,6 +65,72 @@ No Claude, Codex, or Cursor MCP configuration is needed for Amp's CLI checks.
 
 Orb setup and CI install `poppler-utils` for ETH-75's bounded text-PDF extraction. Other development
 and deployment environments need `pdftotext` on PATH. This is not OCR support for scanned documents.
+
+## Supabase developer access
+
+The prototype project is `garage-prototype`, reference `iyjdwksmwccwslcioutd`.
+`npm ci` installs the pinned Supabase CLI, including in fresh orbs through `.agents/setup`.
+Run `npm exec -- supabase --version` to check it and `npm exec -- supabase --help` for commands.
+CLI installation does not authenticate, link the checkout, or apply database migrations.
+
+The root `.mcp.json` configures the hosted Supabase MCP server for clients that support that file.
+Amp uses the equivalent project-scoped remote definition in its MCP settings, not `.mcp.json`.
+Both connections restrict access to this project and use read-only database, documentation,
+debugging, and development tools. Each person authenticates through their client's OAuth flow;
+the shared configuration does not share their credentials. In Amp, connect Supabase in the
+[MCP server settings](https://ampcode.com/settings/mcp-servers), then reload MCP tools in the
+thread.
+Other clients may require importing the URL from `.mcp.json` into their own settings.
+
+CLI authentication is separate from MCP OAuth. For unattended CLI access, configure a project-scoped
+`SUPABASE_ACCESS_TOKEN` through private agent secrets, never in tracked files or chat.
+Do not grant write permissions merely to inspect the database. Installing these tools does not
+authorize remote migrations, identity provisioning, or spending.
+
+For ETH-80, use Drizzle for application database access and retain the existing Zod contracts in
+`packages/contracts` for runtime validation. Drizzle's inferred row types do not replace Zod parsing
+of untrusted input or stored JSON. Application reads and writes now use Drizzle's typed query
+builders in `apps/web/src/server/db-schema.ts`. `pg` remains the driver and transaction connection;
+PostgreSQL locks, session commands, DDL, and Flue's framework-owned storage still use SQL.
+Preserve transaction, authorization, evidence, spending, and idempotency guarantees. Keep the
+ordered operator-owned `db/` migration history rather than adding a competing Supabase or
+Drizzle Kit history over existing tables. Do not use schema push against the prototype.
+
+## Specialist streaming trial
+
+Flue runtime, PostgreSQL adapter, and CLI are pinned to 2.3.0. The Node config was folded in from
+`flue init --target node` without overwriting the existing Next application. Inspect the installed
+version's documentation with `npm exec -- flue docs read guide/tools`.
+`apps/web/src/agents/specialist.ts` defines the durable `SpecialistStream` agent. Its tools resolve
+current evidence cards or prepare unsent drafts through existing sales operations. Flue requires
+Valibot for tool schemas; Zod remains the authoritative application input and stored-JSON contract.
+
+After an operator has approved and applied `npm run db:migrate`, run `npm run streaming` alongside
+the Next app. Exactly one Node owner holds a PostgreSQL advisory lease. Use a direct or
+session-pooler database connection, not transaction pooling, for this long-lived lease.
+The web process submits logical turns or observes their saved progress; viewer disconnects never
+cancel execution. Cancellation is explicit. Flue tables live in the private `signal_desk_flue`
+schema and are installed only by the operator migration command, not at application startup.
+
+The only registered provider is the admitted OpenRouter `moonshotai/kimi-k3` adapter. Configure
+server-only `OPENROUTER_API_KEY`; missing credentials stop before budget reservation. Operators
+must separately provision the enabled model policy, installation and user budgets, membership,
+and spending permission. No defaults grant spending. The existing integer micro-USD rate policy
+must conservatively bound the provider's current pricing. Retries, fallback providers, and
+compaction are disabled; every subsequent tool-loop request still needs spending admission.
+Uncertain outcomes retain reservations until operator reconciliation.
+
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are accepted aliases for
+the existing unprefixed names. The unprefixed values take precedence. `NEXT_PUBLIC_` is a Next.js
+browser-exposure convention, not an App Router requirement. Never apply it to database passwords,
+secret/service-role keys, or the OpenRouter key.
+
+Submit and observe this agent through the authenticated opportunity conversation, not a standalone
+`flue run` that lacks the application-owned turn, credential, and budget context. The controlled
+`streaming.test.ts` runs real Flue/PostgreSQL, the production Next HTTP app, and Pi's actual SSE
+transport against a synthetic local provider. It does not spend tokens or verify live Supabase
+authentication. See the [trial result](plans/008-flue-specialist-trial.md#implementation-evidence)
+for the remaining permissioned live-provider check.
 
 ## One gate, separate responsibilities
 
@@ -98,8 +167,9 @@ or debt baseline is installed. Next.js route entry points are detected by Fallow
 `fallow-plugin-node-test.json` declares the same native test roots as `npm test`. Fallow's default
 test-reachability estimate is not measured execution coverage or proof of live authentication.
 The worker and MCP CLIs have explicit `npm run worker` and `npm run mcp` entry points.
-`scripts/test.mjs` clears `coverage/`, then runs the recursive `apps/web/src/` application and
-root tooling tests with `NODE_V8_COVERAGE`. It then normalizes file
+`scripts/test.mjs` clears `coverage/`, then runs the recursive `apps/web/src/` application,
+`packages/*/src/` shared-package, and root tooling tests with `NODE_V8_COVERAGE`.
+It then normalizes file
 source-map URLs and cache keys so escaped dynamic-route names match V8's literal script URLs.
 Execution ranges and hit counts remain unchanged. Fallow reads that newly generated directory at
 unchanged thresholds. Never substitute captured coverage from another checkout.

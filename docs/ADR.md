@@ -30,6 +30,16 @@ implemented functionality, and proposed entries remain open for review.
   separated actions improve scanning without changing source evidence or agent permissions.
 - ADR-020: Trial Flue on [one streamed specialist conversation][flue-trial] before deciding adoption
   because reconnect and crash recovery must preserve sales, evidence, and spending controls.
+- ADR-021: Use Drizzle ORM with the existing Zod contracts and ordered SQL migration history because
+  typed queries must preserve runtime validation, applied history, and PostgreSQL transaction locks.
+- ADR-022: Disable automatic model retries, provider fallback, and compaction in the Flue trial
+  because an ambiguous provider outcome must retain its reservation rather than trigger more
+  spending.
+- ADR-023: Check session revocation through a private, runtime-only PostgreSQL predicate because
+  hosted Supabase does not permit operators to grant custom roles usage of its managed Auth schema.
+- ADR-024: Make the municipality profile the primary workspace with a persistent pop-up sale
+  assistant because specialists need deal conditions and organization activity in context, not an
+  evidence workbench presented as chat.
 
 ## Proposed
 
