@@ -2,6 +2,9 @@ import { z } from "zod";
 import { fieldSchema, fieldLabels } from "@signal-desk/contracts/evidence-schema";
 
 const text = z.string().trim().min(1).max(2000);
+/** Only these sales capabilities may be exposed to or executed by the specialist agent. */
+export const approvedSalesTool = z.enum(["show_card", "prepare_draft"]);
+
 /** Unsent drafts reference current evidence and inquiries; clients cannot fabricate a cited answer. */
 export const draftCommand = z.discriminatedUnion("kind", [
   z
@@ -91,6 +94,18 @@ export const inlineCard = z.discriminatedUnion("kind", [
   }),
 ]);
 export type InlineCard = z.infer<typeof inlineCard>;
+
+/** Observation snapshots replace previous snapshots, so reconnect cannot append duplicate deltas. */
+export const streamView = z.object({
+  id: z.string(),
+  inquiryId: z.string(),
+  message: z.string(),
+  state: z.enum(["queued", "running", "completed", "interrupted", "cancelling", "cancelled"]),
+  text: z.string(),
+  cards: z.array(inlineCard),
+  errorCode: z.string().nullable(),
+});
+export type StreamView = z.infer<typeof streamView>;
 
 /** Recognizes only whole, single-field questions. Other prose requires human interpretation. */
 export function routeQuestion(question: string): z.infer<typeof fieldSchema> | null {

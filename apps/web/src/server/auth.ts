@@ -8,15 +8,19 @@ import { AppError } from "./errors";
 
 /** Reports configuration only, never credentials. */
 export function authConfigured() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY);
+  return Boolean(
+    (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
+  );
 }
 
 /** Creates a request-scoped Supabase SSR client; privileged keys are never used here.
  * @throws {AppError} If prototype authentication is not configured.
  */
 export async function authClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key)
     throw new AppError(503, "NOT_CONFIGURED", "Prototype sign-in is not configured.");
   const jar = await cookies();

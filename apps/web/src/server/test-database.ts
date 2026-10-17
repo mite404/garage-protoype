@@ -42,4 +42,24 @@ export async function prepareTestDatabase(db: PoolClient) {
     await db.query(
       await readFile(new URL("../../../../db/006-app-tokens.sql", import.meta.url), "utf8"),
     );
+  const streaming = await db.query("select to_regclass('signal_desk.stream_turns') as name");
+  if (!streaming.rows[0]?.name)
+    await db.query(
+      await readFile(new URL("../../../../db/007-streaming.sql", import.meta.url), "utf8"),
+    );
+  const sessionAccess = await db.query(
+    "select to_regprocedure('signal_desk.session_is_active(uuid,uuid)') as name",
+  );
+  if (!sessionAccess.rows[0]?.name)
+    await db.query(
+      await readFile(new URL("../../../../db/008-session-access.sql", import.meta.url), "utf8"),
+    );
+  const municipality = await db.query("select to_regclass('signal_desk.organizations') as name");
+  if (!municipality.rows[0]?.name)
+    await db.query(
+      await readFile(
+        new URL("../../../../db/009-municipality-workspace.sql", import.meta.url),
+        "utf8",
+      ),
+    );
 }

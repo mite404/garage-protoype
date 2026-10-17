@@ -103,6 +103,8 @@ test(
       });
       await assert.rejects(getPublicVehicle("hidden", db), { status: 404 });
       assert.doesNotMatch(JSON.stringify(vehicle), /PRIVATE|Unreviewed/);
+      // Hosted Supabase does not let the operator grant custom roles auth-schema usage.
+      await db.query("revoke usage on schema auth from signal_desk_runtime");
       await db.query("set local role signal_desk_runtime");
       assert.equal((await requireOpportunity(actor, "deal-a", undefined, db)).id, "deal-a");
       assert.equal((await getPublicVehicle("truck", db)).title, "Synthetic pumper");

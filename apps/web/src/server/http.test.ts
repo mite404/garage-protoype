@@ -4,6 +4,15 @@ import { test } from "node:test";
 const origin = process.env.TEST_APP_URL;
 if (process.env.CI && !origin) throw new Error("CI requires TEST_APP_URL.");
 
+test("invited sign-in renders a submit button", { skip: !origin }, async () => {
+  const response = await fetch(new URL("/sign-in", origin));
+  assert.equal(response.status, 200);
+  assert.match(
+    await response.text(),
+    /<form[^>]*action="\/auth\/sign-in"[\s\S]*?<button(?=[^>]*type="submit")[^>]*>[\s\S]*?Sign in/,
+  );
+});
+
 test(
   "anonymous HTTP callers cannot read private records or initiate processing",
   { skip: !origin },

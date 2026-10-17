@@ -213,9 +213,39 @@ export const appTokens = privateSchema.table("app_tokens", {
 export const vehicles = privateSchema.table("vehicles", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
+  ownerOrganizationId: text("owner_organization_id"),
   internal_notes: text("internal_notes").notNull().default(""),
   published_at: timestamp("published_at", { withTimezone: true }),
   revision: integer("revision").notNull().default(0),
+});
+
+/** Organization metadata, without a separate access membership. */
+export const organizations = privateSchema.table("organizations", {
+  id: text("id").primaryKey(),
+  buyerId: uuid("buyer_id"),
+  name: text("name").notNull(),
+  city: text("city").notNull(),
+  region: text("region").notNull(),
+  unit: text("unit").notNull(),
+  synthetic: boolean("synthetic").notNull(),
+});
+
+/** Proposed terms are distinct from reviewed vehicle evidence. */
+export const opportunityDealTerms = privateSchema.table("opportunity_deal_terms", {
+  opportunityId: text("opportunity_id").primaryKey(),
+  amountCents: integer("amount_cents").notNull(),
+  currency: text("currency").notNull(),
+  stage: text("stage").notNull(),
+  conditions: text("conditions").array().notNull(),
+});
+
+/** Interest events deliberately have no message body or contact address. */
+export const municipalityInterests = privateSchema.table("municipality_interests", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  vehicleId: text("vehicle_id").notNull(),
+  kind: text("kind").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
 });
 
 /** Sale opportunities and their explicitly assigned specialists. */
@@ -334,6 +364,22 @@ export const photoReviews = privateSchema.table("photo_reviews", {
   revision: integer("revision").notNull(),
 });
 
+/** Persisted credential references never contain plaintext tokens or passwords. */
+export const credentialSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("supabase-session"), sessionId: z.uuid() }).strict(),
+  z.object({ kind: z.literal("app-token"), tokenId: z.uuid() }).strict(),
+]);
+
+/** Stream execution states are independent of whether a viewer is connected. */
+export const streamState = z.enum([
+  "queued",
+  "running",
+  "completed",
+  "interrupted",
+  "cancelling",
+  "cancelled",
+]);
+
 /** Drizzle mapping of the existing private identity records; migrations remain in db/. */
 export const identities = privateSchema.table("identities", {
   userId: uuid("user_id").primaryKey(),
@@ -341,4 +387,20 @@ export const identities = privateSchema.table("identities", {
   canSpend: boolean("can_spend").notNull().default(false),
   invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
+/** Application-owned admission and read projection; Flue retains its canonical execution log. */
+export const streamTurns = privateSchema.table("stream_turns", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  actorId: uuid("actor_id").notNull(),
+  credential: jsonb("credential").$type<z.infer<typeof credentialSchema>>().notNull(),
+  inquiryId: text("inquiry_id").notNull(),
+  message: text("message").notNull(),
+  revision: integer("revision").notNull(),
+  state: text("state").$type<z.infer<typeof streamState>>().notNull(),
+  text: text("text").notNull(),
+  submissionId: text("submission_id"),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });

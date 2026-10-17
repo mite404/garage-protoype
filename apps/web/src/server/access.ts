@@ -2,7 +2,9 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { database } from "./db";
+import { and, eq, exists, gt, isNull, sql } from "drizzle-orm";
+import { orm } from "./db";
+import { appTokens, identities, opportunities, opportunityMembers } from "./db-schema";
 import { AppError } from "./errors";
 
 const roleSchema = z.enum(["buyer", "specialist"]);
@@ -41,15 +43,27 @@ const tokenAccess = identitySchema.extend({
  * @throws {AppError} For expired, revoked, unknown tokens or revoked specialist access.
  */
 export async function resolveToken(tokenId: string, client?: PoolClient): Promise<Actor> {
-  const result = await database(client).query(
-    `select t.id,t.scopes,i.user_id,i.role,i.can_spend,i.revoked_at
-    from signal_desk.app_tokens t join signal_desk.identities i on i.user_id=t.user_id
-    where t.id=$1 and t.revoked_at is null and t.expires_at>clock_timestamp()`,
-    [tokenId],
-  );
-  if (!result.rowCount)
+  const result = await orm(client)
+    .select({
+      id: appTokens.id,
+      scopes: appTokens.scopes,
+      user_id: identities.userId,
+      role: identities.role,
+      can_spend: identities.canSpend,
+      revoked_at: identities.revokedAt,
+    })
+    .from(appTokens)
+    .innerJoin(identities, eq(identities.userId, appTokens.user_id))
+    .where(
+      and(
+        eq(appTokens.id, tokenId),
+        isNull(appTokens.revoked_at),
+        gt(appTokens.expires_at, sql`clock_timestamp()`),
+      ),
+    );
+  if (!result.length)
     throw new AppError(401, "UNAUTHENTICATED", "Application token has expired or ended.");
-  const row = tokenAccess.parse(result.rows[0]);
+  const row = tokenAccess.parse(result[0]);
   if (row.revoked_at || row.role !== "specialist")
     throw new AppError(403, "ACCESS_REVOKED", "Specialist access is not available.");
   if (!row.scopes.includes("read"))
@@ -68,12 +82,12 @@ export async function resolveToken(tokenId: string, client?: PoolClient): Promis
 export async function authenticateToken(secret: string) {
   if (!/^sd_[A-Za-z0-9_-]{43}$/.test(secret))
     throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
-  const result = await database().query(
-    "select id from signal_desk.app_tokens where token_hash=$1",
-    [createHash("sha256").update(secret).digest("hex")],
-  );
-  if (!result.rowCount) throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
-  return resolveToken(z.object({ id: z.uuid() }).parse(result.rows[0]).id);
+  const result = await orm()
+    .select({ id: appTokens.id })
+    .from(appTokens)
+    .where(eq(appTokens.token_hash, createHash("sha256").update(secret).digest("hex")));
+  if (!result.length) throw new AppError(401, "UNAUTHENTICATED", "Application token is invalid.");
+  return resolveToken(z.object({ id: z.uuid() }).parse(result[0]).id);
 }
 
 /** Requires an interactive session for token management and human review.
@@ -94,14 +108,14 @@ export function requireSession(actor: Actor) {
 export async function requireWrite(actor: Actor, client?: PoolClient) {
   const current = await refreshActor(actor, client);
   if (current.credential.kind === "app-token") {
-    const result = await database(client).query(
-      "select scopes from signal_desk.app_tokens where id=$1",
-      [current.credential.tokenId],
-    );
+    const result = await orm(client)
+      .select({ scopes: appTokens.scopes })
+      .from(appTokens)
+      .where(eq(appTokens.id, current.credential.tokenId));
     if (
       !z
         .object({ scopes: z.array(z.string()) })
-        .parse(result.rows[0])
+        .parse(result[0])
         .scopes.includes("write")
     )
       throw new AppError(403, "SCOPE_DENIED", "Write permission is required.");
@@ -121,19 +135,22 @@ export async function resolveActor(
     !z.uuid().safeParse(reference.sessionId).success
   )
     throw new AppError(401, "UNAUTHENTICATED", "Sign in with an invited account.");
-  const db = database(client);
-  const session = await db.query(
-    `select id from auth.sessions where id=$1 and user_id=$2
-    and (not_after is null or not_after > clock_timestamp())`,
-    [reference.sessionId, reference.userId],
+  const db = orm(client);
+  const session = await db.execute<{ active: boolean }>(
+    sql`select signal_desk.session_is_active(${reference.sessionId}::uuid,${reference.userId}::uuid) as active`,
   );
-  if (!session.rowCount)
+  if (!session.rows[0]?.active)
     throw new AppError(401, "UNAUTHENTICATED", "Session has expired or ended.");
-  const result = await db.query(
-    "select user_id,role,can_spend,revoked_at from signal_desk.identities where user_id=$1",
-    [reference.userId],
-  );
-  const identity = identitySchema.nullable().parse(result.rows[0] ?? null);
+  const result = await db
+    .select({
+      user_id: identities.userId,
+      role: identities.role,
+      can_spend: identities.canSpend,
+      revoked_at: identities.revokedAt,
+    })
+    .from(identities)
+    .where(eq(identities.userId, reference.userId));
+  const identity = identitySchema.nullable().parse(result[0] ?? null);
   if (!identity || identity.revoked_at)
     throw new AppError(403, "ACCESS_REVOKED", "Application access is not available.");
   return {
@@ -175,13 +192,28 @@ export async function requireOpportunity(
   const current = await refreshActor(actor, client);
   if (role && current.role !== role)
     throw new AppError(403, "FORBIDDEN", "This action is not permitted.");
-  const result = await database(client).query(
-    `select o.id,o.vehicle_id,o.buyer_id,o.internal_notes,o.next_action
-    from signal_desk.opportunities o where o.id=$1 and
-    (($3='buyer' and o.buyer_id=$2) or ($3='specialist' and exists
-      (select 1 from signal_desk.opportunity_members m where m.opportunity_id=o.id and m.user_id=$2)))`,
-    [id, current.userId, current.role],
-  );
-  if (!result.rowCount) throw new AppError(404, "NOT_FOUND", "Record not found.");
-  return opportunitySchema.parse(result.rows[0]);
+  const db = orm(client);
+  const result = await db
+    .select()
+    .from(opportunities)
+    .where(
+      and(
+        eq(opportunities.id, id),
+        current.role === "buyer"
+          ? eq(opportunities.buyer_id, current.userId)
+          : exists(
+              db
+                .select({ id: opportunityMembers.opportunity_id })
+                .from(opportunityMembers)
+                .where(
+                  and(
+                    eq(opportunityMembers.opportunity_id, opportunities.id),
+                    eq(opportunityMembers.user_id, current.userId),
+                  ),
+                ),
+            ),
+      ),
+    );
+  if (!result.length) throw new AppError(404, "NOT_FOUND", "Record not found.");
+  return opportunitySchema.parse(result[0]);
 }

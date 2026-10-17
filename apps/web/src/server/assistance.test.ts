@@ -438,7 +438,7 @@ test(
             await fetch(`${app.origin}/desk/opportunities/assist-deal`, { headers })
           ).text();
           assert.match(html, /Specialist conversation/);
-          assert.match(html, /No live language model/);
+          assert.match(html, /Live assistant drafts require human review/);
           assert.match(html, /What is the mileage/);
           assert.match(html, /A malformed card was rejected/);
           const publicHtml = await (await fetch(`${app.origin}/vehicles/assist-truck`)).text();

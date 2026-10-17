@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { Pool } from "pg";
+import { migrateFlue } from "../apps/web/src/server/flue-storage";
 
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url) throw new Error("MIGRATION_DATABASE_URL is required.");
@@ -26,6 +27,7 @@ try {
     }
   }
   await client.query("commit");
+  await migrateFlue(url);
   process.stdout.write("Ordered migrations applied or already current.\n");
 } catch (error) {
   await client.query("rollback");

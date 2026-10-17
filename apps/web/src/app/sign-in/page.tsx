@@ -57,7 +57,7 @@ export default async function SignIn({
               disabled={!configured}
             />
           </div>
-          <Button className="min-h-11 w-full" disabled={!configured}>
+          <Button type="submit" className="min-h-11 w-full" disabled={!configured}>
             Sign in
           </Button>
         </form>

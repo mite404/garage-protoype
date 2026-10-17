@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { getAssistance } from "@/server/assistance";
 import type { Workbench } from "@/server/evidence";
@@ -7,22 +7,66 @@ import { fieldSchema, fieldLabels } from "@signal-desk/contracts/evidence-schema
 import AssistanceCard from "@signal-desk/catalog/assistance-card";
 import { ConversationTurn, Prose } from "@signal-desk/catalog/prose";
 import { postPrototypeCommand } from "@/app/prototype-command";
+import { streamView, type StreamView } from "@signal-desk/contracts/assistance-schema";
 
 type View = Awaited<ReturnType<typeof getAssistance>>;
+
+const streamLabels = {
+  queued: "Queued for generation",
+  running: "Streaming · Review required",
+  cancelling: "Stopping…",
+  completed: "Assistant draft · Review required",
+  interrupted: "Incomplete · interrupted",
+  cancelled: "Incomplete · cancelled",
+} satisfies Record<StreamView["state"], string>;
 
 /** Specialist conversation and human handoff controls call the shared authorized operations only. */
 export default function Conversation({
   view,
   photoRequest,
+  initialStreams,
 }: {
   view: View;
   photoRequest: Workbench["photoRequest"];
+  initialStreams: StreamView[];
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [streams, setStreams] = useState(initialStreams);
+  const [connection, setConnection] = useState("Connecting to saved progress…");
+  const [denied, setDenied] = useState(false);
+  useEffect(() => {
+    const observer = new EventSource(
+      `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/stream`,
+    );
+    observer.onmessage = (event) => {
+      const parsed = streamView.array().safeParse(JSON.parse(event.data));
+      if (parsed.success) {
+        setStreams(parsed.data);
+        setConnection("Connected · Progress saved automatically");
+      }
+    };
+    observer.onerror = async () => {
+      setConnection("Connection interrupted. Reconnecting to saved progress…");
+      const check = await fetch(
+        `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/stream?view=snapshot`,
+      ).catch(() => null);
+      if (check && [401, 403, 404].includes(check.status)) {
+        setDenied(true);
+        setStreams([]);
+        observer.close();
+      }
+    };
+    observer.addEventListener("denied", () => {
+      setDenied(true);
+      setStreams([]);
+      observer.close();
+    });
+    return () => observer.close();
+  }, [view.opportunityId]);
   const retry = useRef({ body: "", key: "" });
-  async function save(body: unknown) {
+  async function save(body: unknown, endpoint: "assistance" | "stream" = "assistance") {
     if (pending) return;
     const serialized = JSON.stringify(body);
     if (retry.current.body !== serialized)
@@ -31,12 +75,14 @@ export default function Conversation({
     setMessage("");
     try {
       await postPrototypeCommand(
-        `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/assistance`,
+        `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/${endpoint}`,
         serialized,
         retry.current.key,
       );
       retry.current = { body: "", key: "" };
-      setMessage("Saved inside this prototype. Nothing was sent.");
+      setMessage(
+        "Saved inside this prototype. You can return without resubmitting. Nothing was sent.",
+      );
       router.refresh();
     } catch (error) {
       setMessage(String(error));
@@ -47,8 +93,14 @@ export default function Conversation({
   function chat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    void save({ kind: "chat", message: form.get("message") });
+    void save({ kind: "chat", message: form.get("message") }, "stream");
   }
+  if (denied)
+    return (
+      <section className="panel my-7" role="alert">
+        Conversation access ended. No further private content is shown. Reload to sign in again.
+      </section>
+    );
   return (
     <section className="panel my-7" aria-labelledby="conversation-heading" aria-busy={pending}>
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -61,34 +113,66 @@ export default function Conversation({
       <div className="mt-4">
         <Prose
           text={
-            'Ask a single-field question such as "What is the tank capacity?" or "What was the pump-test result?"\n\n**No live language model is installed.** Other wording becomes an assigned human-review item, never a guessed answer.'
+            "Ask about the blocker to this sale. **Live assistant drafts require human review.** Cards use current evidence; missing facts remain unknown. No messages, payments or commitments leave this prototype."
           }
         />
       </div>
+      <output className="mt-3 block text-xs text-stone-500">{connection}</output>
       <div className="my-5 space-y-5" aria-label="Conversation history">
-        {!view.turns.length && (
+        {!view.turns.length && !streams.length && (
           <p className="rounded-md bg-stone-50 p-5 text-sm text-stone-500">
             Start with the question blocking this sale. Answers use only reviewed, shareable
             evidence.
           </p>
         )}
-        {view.turns.map((turn) => (
+        {view.turns
+          .filter((turn) => !streams.some((stream) => stream.id === turn.id))
+          .map((turn) => (
+            <ConversationTurn key={turn.id} request={turn.message}>
+              {turn.cards.map((card, i) => (
+                <AssistanceCard card={card} key={i} />
+              ))}
+              {!turn.cards.length && (
+                <p className="text-sm text-stone-600">
+                  No current card is available. Evidence may have changed. Retry the question as a
+                  new turn or review its task below.
+                </p>
+              )}
+              {turn.statuses.some((s) => s === "malformed" || s === "retired") && (
+                <output className="mt-2 block text-sm text-red-800">
+                  A malformed card was rejected. A tool retires after two malformed calls for this
+                  turn only.
+                </output>
+              )}
+            </ConversationTurn>
+          ))}
+        {streams.map((turn) => (
           <ConversationTurn key={turn.id} request={turn.message}>
-            {turn.cards.map((card, i) => (
-              <AssistanceCard card={card} key={i} />
-            ))}
-            {!turn.cards.length && (
-              <p className="text-sm text-stone-600">
-                No current card is available. Evidence may have changed. Retry the question as a new
-                turn or review its task below.
-              </p>
-            )}
-            {turn.statuses.some((s) => s === "malformed" || s === "retired") && (
-              <output className="mt-2 block text-sm text-red-800">
-                A malformed card was rejected. A tool retires after two malformed calls for this
-                turn only.
-              </output>
-            )}
+            {turn.text && <Prose text={turn.text} />}
+            <div className="mt-4 space-y-4">
+              {turn.cards.map((card, i) => (
+                <AssistanceCard card={card} key={i} />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span className="state state-unknown">{streamLabels[turn.state]}</span>
+              {(turn.state === "queued" || turn.state === "running") && (
+                <button
+                  className="quiet-button"
+                  disabled={pending}
+                  onClick={() => void save({ kind: "cancel", turnId: turn.id }, "stream")}
+                >
+                  Stop generation
+                </button>
+              )}
+              {turn.errorCode && (
+                <p className="text-sm text-red-800">
+                  {turn.errorCode === "SPEND_UNCERTAIN"
+                    ? "Provider outcome uncertain. Budget remains reserved; no automatic paid retry."
+                    : "Generation stopped. Review current evidence before starting a new turn."}
+                </p>
+              )}
+            </div>
           </ConversationTurn>
         ))}
       </div>

@@ -5,6 +5,7 @@ import { getAssistance } from "@/server/assistance";
 import { AppError } from "@/server/errors";
 import EvidenceWorkbench from "./workbench";
 import Conversation from "./conversation";
+import { readStreams } from "@/server/streaming";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,13 @@ export const dynamic = "force-dynamic";
 export default async function EvidencePage({ params }: { params: Promise<{ id: string }> }) {
   let view;
   let assistance;
+  let streams;
   try {
     const actor = await requireActor();
     const { id } = await params;
     assistance = await getAssistance(actor, id);
     view = await getWorkbench(actor, id);
+    streams = await readStreams(actor, id);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return (
@@ -33,7 +36,9 @@ export default async function EvidencePage({ params }: { params: Promise<{ id: s
   return (
     <EvidenceWorkbench
       view={view}
-      conversation={<Conversation view={assistance} photoRequest={view.photoRequest} />}
+      conversation={
+        <Conversation view={assistance} photoRequest={view.photoRequest} initialStreams={streams} />
+      }
     />
   );
 }

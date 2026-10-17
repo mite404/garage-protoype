@@ -27,7 +27,9 @@
     "worker": "npm run worker -w @signal-desk/web",
     "mcp": "npm run mcp -w @signal-desk/web",
     "db:migrate": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/migrate.ts",
-    "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts"
+    "db:seed:municipality": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/seed-municipality.ts",
+    "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts",
+    "streaming": "npm run streaming -w @signal-desk/web"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",
@@ -36,6 +38,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@flue/cli": "2.3.0",
     "@signal-desk/config": "0.1.0",
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
@@ -49,6 +52,11 @@
     "tsx": "4.23.15",
     "turbo": "2.11.7",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "valibot": "1.5.0"
   },
   "engines": {
     "node": "22.x"
