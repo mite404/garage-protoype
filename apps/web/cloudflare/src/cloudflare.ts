@@ -1,4 +1,4 @@
-import { DurableObject, env } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { eq, and, inArray } from "drizzle-orm";
 import { init } from "@flue/runtime";
 import { orm } from "../../src/server/db";
@@ -128,6 +128,23 @@ export class TurnSweeper extends DurableObject<Env> {
         .where(inArray(streamTurns.state, ["queued", "running", "cancelling"]));
       for (const row of rows) await kickTurn(row.id);
     });
+  }
+}
+
+/** The web Worker's service binding. It is unreachable from the internet, so it needs no token,
+ * and like the HTTP adapter it never reads or returns conversation content.
+ */
+export class StreamOwner extends WorkerEntrypoint<Env> {
+  /** Wakes the object that owns one logical turn. */
+  async kickTurn(turnId: string) {
+    await kickTurn(turnId);
+  }
+
+  /** Asks the turn's object to stop it.
+   * @returns Whether the stop is acknowledged; otherwise the object keeps retrying on its own.
+   */
+  async cancelTurn(turnId: string) {
+    return cancelTurn(turnId);
   }
 }
 

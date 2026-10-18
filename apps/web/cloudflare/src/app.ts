@@ -23,7 +23,8 @@ function authorized(header: string | undefined, token: string | undefined) {
 
 const app = new Hono();
 
-// Internal adapter for the web app. It never reads or returns conversation content.
+// Internal adapter for a Node web app; the web Worker uses the StreamOwner service binding
+// instead. It never reads or returns conversation content.
 app.use("/internal/*", async (c, next) => {
   if (!authorized(c.req.header("authorization"), env.STREAM_WORKER_TOKEN))
     return c.json({ error: "unauthorized" }, 401);
