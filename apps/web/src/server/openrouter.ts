@@ -137,8 +137,11 @@ function report(response: z.infer<typeof responseSchema>): Report {
   return { kind: "completed", output: choice.message.content, ...usage };
 }
 
-// Null when the input is not a frozen extraction snapshot or has an unsupported attachment.
-function openRouterChatRequest(
+/** Builds the chat-completions body for one admitted request, or null when the input is not a
+ * frozen extraction snapshot or carries an attachment type the adapter cannot send.
+ * Sources travel as untrusted user data, separate from the system instruction.
+ */
+export function openRouterChatRequest(
   request: Pick<ProviderRequest, "model" | "input" | "photos" | "maxOutputTokens">,
   options: Pick<Options, "reasoningEffort" | "sort"> = {},
 ) {
@@ -160,8 +163,10 @@ function openRouterChatRequest(
   };
 }
 
-// Throws when the body lacks choices or provider-reported usage, so spend is unknown.
-function openRouterOutcome(raw: unknown, latencyMs: number) {
+/** Maps an accepted chat completion to a spend report and its provider receipt.
+ * @throws When the body lacks choices or provider-reported usage and cost, so spend is unknown.
+ */
+export function openRouterOutcome(raw: unknown, latencyMs: number) {
   const parsed = responseSchema.parse(raw);
   const receipt: OpenRouterReceipt = {
     generationId: parsed.id,
