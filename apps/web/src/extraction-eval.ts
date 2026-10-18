@@ -94,6 +94,7 @@ const completedBatch = z.object({
 const errorCode = z.object({ code: z.string() });
 const terminal = new Set(["completed", "failed", "expired", "cancelled"]);
 const exactly = "quote excerpts exactly as printed";
+const settleMs = 10 * 60_000;
 const probes = {
   scanned: {
     corpus: "synthetic",
@@ -220,7 +221,9 @@ async function loadLedger(out: string): Promise<Ledger> {
 
 async function record(ctx: Context, tag: string, spend: { cost: number; uncertain: boolean }) {
   const entry = { tag, costUsd: spend.cost };
-  ctx.ledger.entries.push(spend.uncertain ? { ...entry, uncertain: true } : entry);
+  // A settled receipt replaces the worst case carried for the same call.
+  const others = ctx.ledger.entries.filter((e) => e.tag !== tag);
+  ctx.ledger.entries = [...others, spend.uncertain ? { ...entry, uncertain: true } : entry];
   await writeFile(`${ctx.out}/ledger.json`, JSON.stringify(ctx.ledger, null, 2));
 }
 
@@ -404,7 +407,7 @@ async function leaseImport(ctx: Context, tag: string, model: string, sourceIds: 
   return { lease, worst };
 }
 
-async function saveOutput(ctx: Context, tag: string, output: string) {
+async function saveOutput(ctx: Context, tag: string, output: string | null) {
   await writeFile(`${ctx.out}/raw/${tag}.json`, output || "(no completed output)");
 }
 
@@ -550,6 +553,8 @@ function batchProvider(model: string, state: BatchState) {
     const submitted = await submitBatch(batchBody(chat, model), model, request.attemptId);
     state.submit = submitted;
     if (!submitted.batch) return { kind: "not-billed", retryable: false };
+    // Recorded before polling so an admission timeout still settles this batch.
+    state.batch = submitted.batch;
     state.batch = await pollBatch(submitted.batch.id, request.signal);
     const outcome = batchOutcome(state.batch);
     if (!outcome) throw new Error(`Batch ${state.batch.status} without a usable result.`);
@@ -558,20 +563,27 @@ function batchProvider(model: string, state: BatchState) {
   return provider;
 }
 
-// Admission timed out first: keep polling for free, then settle with the batch receipt.
-async function settleLateBatch(ctx: Context, state: BatchState) {
-  if (!state.batch || !state.attemptId) return null;
-  state.batch = await pollBatch(state.batch.id);
-  const outcome = batchOutcome(state.batch);
+async function reconcileBatch(ctx: Context, attemptId: string, batch: Batch) {
+  const outcome = batchOutcome(batch);
   if (!outcome) return null;
   const operator = await ctx.pool.connect();
   try {
-    const receipt = `openrouter-batch:${state.batch.id}`;
-    await reconcileInference(state.attemptId, outcome.report, receipt, operator);
+    await reconcileInference(attemptId, outcome.report, `openrouter-batch:${batch.id}`, operator);
   } finally {
     operator.release();
   }
   return completedOutput(outcome.report);
+}
+
+// Admission timed out first: poll for a bounded time, then settle with the batch receipt.
+// A batch still queued stays uncertain for the batch-settle suite to resume.
+async function settleLateBatch(ctx: Context, state: BatchState) {
+  if (!state.batch || !state.attemptId) return null;
+  const id = state.batch.id;
+  const batch = await pollBatch(id, AbortSignal.timeout(settleMs)).catch(() => null);
+  if (!batch) return null;
+  state.batch = batch;
+  return reconcileBatch(ctx, state.attemptId, batch);
 }
 
 async function runBatch(ctx: Context, request: Parameters<typeof runInference>[1], model: string) {
@@ -635,6 +647,43 @@ async function batchProbe(ctx: Context, model: string) {
     value: raw.value,
     locators,
   };
+}
+
+async function batchAttempt(db: PoolClient, tag: string) {
+  const row = await db.query<{ id: string }>(
+    `select a.id from signal_desk.inference_attempts a
+     join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key=$1`,
+    [tag],
+  );
+  return row.rows[0]?.id;
+}
+
+function batchTag(row: Row) {
+  const model = String(row.model).replace(/:batch$/, "");
+  return `${String(row.runId)}-batch-${eth79Packet().id}-${slug(model)}`;
+}
+
+// Polls briefly; a batch still queued resolves to null and keeps its worst case.
+function finishedBatch(row: Row) {
+  const id = z.object({ batch: z.object({ id: z.string() }) }).parse(row.submit).batch.id;
+  return pollBatch(id, AbortSignal.timeout(20_000)).catch(() => null);
+}
+
+// Resumes batches left in flight: polls each once and settles finished ones from their receipt.
+async function settleBatch(ctx: Context, row: Row) {
+  const tag = batchTag(row);
+  const [batch, attemptId] = await Promise.all([finishedBatch(row), batchAttempt(ctx.db, tag)]);
+  if (!batch || !attemptId) return { ...row, settled: false };
+  const output = await reconcileBatch(ctx, attemptId, batch);
+  await record(ctx, tag, batchSpend(batch, 0));
+  await saveOutput(ctx, tag, output);
+  return { ...row, ...batchRow(batch), costUsd: batch.usage?.cost, settled: true, output };
+}
+
+async function settleBatches(ctx: Context, append: Append) {
+  const rows = await readRows(ctx.out, "batch");
+  const open = rows.filter((row) => row.submit && !terminal.has(String(row.batchStatus)));
+  for (const row of open) await append({ ...(await settleBatch(ctx, row)), suite: "batch-settle" });
 }
 
 async function readRows(out: string, suite: string) {
@@ -729,6 +778,7 @@ async function runSuite(ctx: Context, suite: string, models: string[], reps: num
     pdf: () => runProbes(ctx, "pdf", models, append),
     "public-image": () => runProbes(ctx, "public-image", models, append),
     rescore: () => rescore(ctx),
+    "batch-settle": () => settleBatches(ctx, append),
     batch: () => Promise.all(models.map(async (model) => append(await batchProbe(ctx, model)))),
   };
   const run = suites[suite];
