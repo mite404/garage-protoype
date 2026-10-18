@@ -118,6 +118,18 @@ export async function streamPrompt(id: string) {
   };
 }
 
+// Spike seam: wakes a Cloudflare turn driver when configured. Unset keeps the Node owner path.
+// A lost wake is not lost work; the Worker's cron sweep re-reads queued and cancelling turns.
+async function wakeStreamWorker(path: string) {
+  const origin = process.env.STREAM_WORKER_URL;
+  if (!origin) return;
+  await fetch(new URL(path, origin), {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.STREAM_WORKER_TOKEN ?? ""}` },
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+}
+
 /** Admits one logical turn; repeating its key never queues another Flue submission.
  * @throws {AppError} For invalid input, missing permissions, or conflicting idempotency keys.
  */
@@ -149,6 +161,7 @@ export async function submitStream(
       createdAt: new Date(),
     })
     .onConflictDoNothing({ target: streamTurns.id });
+  await wakeStreamWorker(`/internal/turns/${turn.id}`);
   return turn;
 }
 
@@ -195,6 +208,7 @@ export async function cancelStream(actor: Actor, opportunityId: string, id: stri
     .update(streamTurns)
     .set({ state: "cancelling" })
     .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
+  await wakeStreamWorker(`/internal/turns/${id}/cancel`);
 }
 
 /** Checks the revision again before each provider request or recovered protected tool.

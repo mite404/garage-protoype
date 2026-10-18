@@ -55,6 +55,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-029: Use Jev only to suggest an evidence field for unmatched specialist questions, behind
   spending admission and specialist acceptance, because routing is a consequential human
   decision and a confident wrong suggestion must not misroute a deal.
+- ADR-030: Run the specialist streaming owner as a Cloudflare Worker on the Workers Free plan, with
+  one Flue Durable Object per conversation reaching PostgreSQL through uncached Hyperdrive, because
+  it removes an always-on host while the same guarantee suite passes on Node and workerd.
 
 ## Proposed
 

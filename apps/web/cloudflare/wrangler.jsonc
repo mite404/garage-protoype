@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "signal-desk-streaming",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Replace with the id from `wrangler hyperdrive create --caching-disabled`; cached reads
+      // would let a revoked observer keep seeing a conversation for up to a minute.
+      "id": "00000000000000000000000000000000",
+      // Local dev; the guarantee suite overrides it with
+      // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE.
+      "localConnectionString": "postgresql://signal_desk_runtime@127.0.0.1:5432/signal_desk",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "TURN_DRIVER", "class_name": "TurnDriver" },
+      { "name": "TURN_SWEEPER", "class_name": "TurnSweeper" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FlueSpecialistStreamAgent", "TurnDriver", "TurnSweeper"],
+    },
+  ],
+  // Runs the kick handler near the database; Durable Objects take a location hint instead.
+  "placement": { "region": "aws:us-west-2" },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true },
+}

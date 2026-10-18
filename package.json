@@ -16,6 +16,7 @@
     "storybook": "turbo run dev --filter=@signal-desk/storybook",
     "build-storybook": "turbo run build --filter=@signal-desk/storybook",
     "test": "node scripts/test.mjs",
+    "test:cloudflare": "STREAMING_RUNTIME=cloudflare TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --conditions=react-server --import tsx --test apps/web/src/server/streaming.test.ts",
     "typecheck": "turbo run typecheck && tsc --noEmit",
     "prepare": "lefthook install",
     "format": "oxfmt .",
@@ -32,6 +33,7 @@
     "db:seed:municipality": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/seed-municipality.ts",
     "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts",
     "streaming": "npm run streaming -w @signal-desk/web",
+    "cloudflare:build": "npm run cloudflare:build -w @signal-desk/web",
     "eval:latency": "npm run eval:latency -w @signal-desk/web --",
     "eval:latency:control": "npm run eval:latency:control -w @signal-desk/web --"
   },

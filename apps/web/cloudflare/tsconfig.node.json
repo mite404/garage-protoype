@@ -1,0 +1,6 @@
+{
+  "extends": "@signal-desk/config/tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["vite.config.ts", "test/**/*.ts"],
+  "exclude": ["test/seams.ts"]
+}

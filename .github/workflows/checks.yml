@@ -40,6 +40,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: npm ci
       - run: npm run build
+      - name: Build the Cloudflare streaming Worker
+        run: npm run cloudflare:build
       - name: Check against the running application
         env:
           TEST_APP_URL: http://127.0.0.1:3000
@@ -53,3 +55,8 @@ jobs:
               exit 1
             }
           npm run check
+      - name: Check streaming guarantees on the Cloudflare Worker
+        run: npm run test:cloudflare
+      - name: Show Cloudflare Worker logs
+        if: failure()
+        run: cat apps/web/cloudflare/.wrangler/test-worker.log || true

@@ -2,21 +2,28 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import { Pool } from "pg";
-import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { resolveActor } from "./access";
 import { beginChatTurn, createDraft } from "./assistance";
 import { addSource, getWorkbench, reviewEvidence } from "./evidence";
 import { prepareTestDatabase } from "./test-database";
 import { submitStream, readStreams, cancelStream } from "./streaming";
-import { startStreamingOwner } from "./streaming-owner";
-import { migrateFlue } from "./flue-storage";
+import {
+  nodeRuntime,
+  type OwnerFault,
+  type OwnerProcess,
+  type StreamingTestRuntime,
+} from "./test-streaming-owner";
 import { startTestApp } from "./test-app";
 
 const url = process.env.TEST_DATABASE_URL;
 if (process.env.CI && !url) throw new Error("CI requires TEST_DATABASE_URL.");
+// The same guarantees hold for every owner; STREAMING_RUNTIME=cloudflare runs local workerd.
+const owners: StreamingTestRuntime =
+  process.env.STREAMING_RUNTIME === "cloudflare"
+    ? (await import("../../cloudflare/test/runtime")).cloudflareRuntime
+    : nodeRuntime;
 
 test(
   "streamed turns expose text and validated cards before completion without resubmission",
@@ -28,7 +35,7 @@ test(
     await db.query("begin");
     await prepareTestDatabase(db);
     await db.query("commit");
-    await migrateFlue(url);
+    await owners.prepare(url);
     const user = "80000000-0000-4000-8000-000000000001";
     const session = "80000000-0000-4000-8000-000000000002";
     const foreignUser = "80000000-0000-4000-8000-000000000003";
@@ -207,10 +214,10 @@ test(
     const address = provider.address();
     assert.ok(address && typeof address === "object");
     const providerPort = address.port;
-    let owner: Awaited<ReturnType<typeof startStreamingOwner>> | undefined;
+    let owner: Awaited<ReturnType<typeof owners.start>> | undefined;
     let app: Awaited<ReturnType<typeof startTestApp>> | undefined;
-    let child: ChildProcess | undefined;
-    const children = new Set<ChildProcess>();
+    let child: OwnerProcess | undefined;
+    const children = new Set<OwnerProcess>();
     let childLogs = "";
     try {
       await db.query(
@@ -257,13 +264,7 @@ test(
       await assert.rejects(submitStream(actor, "stream-deal", "different", "stream-key"), {
         code: "IDEMPOTENCY_CONFLICT",
       });
-      owner = await startStreamingOwner({
-        transport: (model, context, options) =>
-          streamSimple({ ...model, baseUrl: `http://127.0.0.1:${address.port}/v1` }, context, {
-            ...options,
-            apiKey: "synthetic",
-          }),
-      });
+      owner = await owners.start(providerPort);
       await partialArguments;
       assert.equal((await readStreams(actor, "stream-deal"))[0]?.cards.length, 0);
       finishArguments();
@@ -632,7 +633,7 @@ test(
         const key = process.env.OPENROUTER_API_KEY;
         delete process.env.OPENROUTER_API_KEY;
         try {
-          owner = await startStreamingOwner();
+          owner = await owners.start();
           const turn = await submitStream(
             actor,
             "stream-deal",
@@ -652,67 +653,23 @@ test(
           if (key !== undefined) process.env.OPENROUTER_API_KEY = key;
         }
       });
-      function spawnOwner(faultKey = "", settledTurn = "", pauseDispatch = false) {
-        const worker = spawn(
-          process.execPath,
-          [
-            "--conditions=react-server",
-            "--import",
-            "tsx",
-            "--input-type=module",
-            "-e",
-            `
-          import pg from 'pg';
-          import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
-          import { startStreamingOwner } from './apps/web/src/server/streaming-owner.ts';
-          const original = pg.Client.prototype.query;
-          const key = ${JSON.stringify(faultKey)};
-          const settled = ${JSON.stringify(settledTurn)};
-          const pause = ${JSON.stringify(pauseDispatch)};
-          if (key || settled || pause) pg.Client.prototype.query = async function(text, ...args) {
-            const statement = typeof text === 'string' ? text : text.text;
-            if (pause && /update.*stream_turns.*submission_id/i.test(statement)) {
-              process.stdout.write('dispatch-paused\\n');
-              await original.call(this, 'select pg_advisory_lock(80002)');
-              await original.call(this, 'select pg_advisory_unlock(80002)');
-            }
-            if ((key || settled) && /insert into flue_/i.test(statement)) {
-              const found = settled
-                ? await original.call(this, 'select a.id from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key like $1 and a.report is not null', ['flue:' + settled + ':%'])
-                : await original.call(this, 'select id from signal_desk.assistance_drafts where request_key=$1', [key]);
-              if (found.rowCount) process.kill(process.pid, 'SIGKILL');
-            }
-            return original.call(this, text, ...args);
-          };
-          await startStreamingOwner({ transport: (model, context, options) => streamSimple(
-            {...model, baseUrl: 'http://127.0.0.1:${providerPort}/v1'}, context, {...options, apiKey: 'synthetic'}) });
-          process.stdout.write('ready\\n');
-        `,
-          ],
-          {
-            cwd: new URL("../../../../", import.meta.url),
-            env: process.env,
-            stdio: ["ignore", "pipe", "pipe"],
+      async function spawnOwner(fault?: OwnerFault) {
+        const owner = await owners.spawn({
+          providerPort,
+          fault,
+          log: (text) => {
+            childLogs += text;
           },
-        );
-        children.add(worker);
-        worker.stderr?.on("data", (data) => {
-          childLogs += data;
         });
-        worker.stdout?.on("data", (data) => {
-          childLogs += data;
-        });
-        return worker;
+        children.add(owner);
+        return owner;
       }
       await t.test(
         "cancellation during dispatch aborts the transport before acknowledging stopped",
         async (t) => {
           t.after(async () => {
             await db.query("select pg_advisory_unlock(80002)");
-            if (child && child.exitCode === null && child.signalCode === null) {
-              child.kill("SIGKILL");
-              await once(child, "exit");
-            }
+            await child?.kill();
             child = undefined;
           });
           mode = "holding";
@@ -724,7 +681,7 @@ test(
             "Stop during dispatch",
             "dispatch-stop",
           );
-          child = spawnOwner("", "", true);
+          child = await spawnOwner({ kind: "pause-dispatch" });
           for (
             let i = 0;
             i < 200 && (!childLogs.includes("dispatch-paused") || calls === count);
@@ -759,10 +716,7 @@ test(
         "crash after paid settlement before Flue completion never buys a replacement response",
         async (t) => {
           t.after(async () => {
-            if (child && child.exitCode === null && child.signalCode === null) {
-              child.kill("SIGKILL");
-              await once(child, "exit");
-            }
+            await child?.kill();
             child = undefined;
           });
           mode = "normal";
@@ -772,8 +726,8 @@ test(
             "Summarize the missing evidence",
             "settled-crash",
           );
-          child = spawnOwner("", turn.id);
-          const [, signal] = await once(child, "exit");
+          child = await spawnOwner({ kind: "settled", turnId: turn.id });
+          const signal = await child.exited;
           assert.equal(signal, "SIGKILL");
           const before = await db.query(
             "select a.id,a.report from signal_desk.inference_attempts a join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key like $1",
@@ -782,7 +736,7 @@ test(
           assert.equal(before.rowCount, 1);
           assert.equal(before.rows[0].report.kind, "completed");
           const count = calls;
-          child = spawnOwner();
+          child = await spawnOwner();
           const result = await waitFor(
             (value) => ["completed", "interrupted"].includes(value.state),
             turn.id,
@@ -795,8 +749,7 @@ test(
             [`flue:${turn.id}:%`],
           );
           assert.deepEqual(after.rows, before.rows);
-          child.kill("SIGKILL");
-          await once(child, "exit");
+          await child.kill();
           child = undefined;
         },
       );
@@ -811,8 +764,8 @@ test(
             "draft-crash",
           );
           const key = `flue-draft:${turn.id}:seller_request`;
-          child = spawnOwner(key);
-          const [, signal] = await once(child, "exit");
+          child = await spawnOwner({ kind: "draft", requestKey: key });
+          const signal = await child.exited;
           assert.equal(
             signal,
             "SIGKILL",
@@ -823,15 +776,14 @@ test(
             [key],
           );
           assert.equal(before.rowCount, 1);
-          child = spawnOwner();
+          child = await spawnOwner();
           await waitFor((result) => result.state === "completed", turn.id);
           const after = await db.query(
             "select id from signal_desk.assistance_drafts where request_key=$1",
             [key],
           );
           assert.deepEqual(after.rows, before.rows);
-          child.kill("SIGKILL");
-          await once(child, "exit");
+          await child.kill();
           child = undefined;
         },
       );
@@ -845,12 +797,11 @@ test(
             "What is the body builder?",
             "inference-crash",
           );
-          child = spawnOwner();
+          child = await spawnOwner();
           await waitFor((result) => result.text.includes("Partial assistant draft"), turn.id);
-          child.kill("SIGKILL");
-          await once(child, "exit");
+          await child.kill();
           const count = calls;
-          child = spawnOwner();
+          child = await spawnOwner();
           const recovered = await waitFor((result) => result.state === "interrupted", turn.id);
           assert.equal(recovered.errorCode, "SPEND_UNCERTAIN");
           await setTimeout(300);
@@ -861,8 +812,7 @@ test(
           );
           assert.equal(attempt.rowCount, 1);
           assert.equal(attempt.rows[0].report, null);
-          child.kill("SIGKILL");
-          await once(child, "exit");
+          await child.kill();
           child = undefined;
         },
       );
@@ -883,7 +833,7 @@ test(
           await db.query("update signal_desk.identities set revoked_at=now() where user_id=$1", [
             user,
           ]);
-          child = spawnOwner();
+          child = await spawnOwner();
           let events = "";
           while (!events.includes("event: denied")) {
             const event = await reader.read();
@@ -916,12 +866,7 @@ test(
       finishArguments();
       releaseTool();
       release();
-      for (const worker of children) {
-        if (worker.exitCode === null && worker.signalCode === null) {
-          worker.kill("SIGKILL");
-          await once(worker, "exit");
-        }
-      }
+      for (const worker of children) await worker.kill();
       await owner?.stop();
       await app?.stop();
       provider.closeAllConnections();

@@ -5,20 +5,52 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./db-schema";
 import { AppError } from "./errors";
 
-let pool: Pool | undefined;
+/** Supplies connections for a runtime whose sockets cannot be shared process-wide. */
+export interface DatabaseRuntime {
+  /** Resolves the URL when a pool opens, so runtimes can defer binding access past module scope.
+   * @throws When the runtime has no database configured.
+   */
+  connectionString(): string;
+  /** Returns the object that owns sockets for the current call; each owner gets one pool. */
+  owner(): object;
+}
 
-/** Uses the caller's transaction when supplied; otherwise the server-only pool. */
+// Node shares one pool across the process; Workers bind sockets to the Durable Object that opened
+// them, so the worker installs a runtime keyed by object.
+const processOwner = {};
+const nodeRuntime: DatabaseRuntime = {
+  connectionString() {
+    if (!process.env.DATABASE_URL)
+      throw new AppError(503, "NOT_CONFIGURED", "Database is not configured.");
+    return process.env.DATABASE_URL;
+  },
+  owner: () => processOwner,
+};
+const pools = new WeakMap<object, Pool>();
+let runtime = nodeRuntime;
+
+/** Replaces where connections come from. Call once at startup, before any query. */
+export function configureDatabase(next: DatabaseRuntime) {
+  runtime = next;
+}
+
+function ownedPool() {
+  const owner = runtime.owner(); // → object
+  const existing = pools.get(owner); // → Pool | undefined
+  if (existing) return existing;
+  const pool = new Pool({ connectionString: runtime.connectionString(), max: 5 });
+  pools.set(owner, pool);
+  return pool;
+}
+
+/** Uses the caller's transaction when supplied; otherwise the current owner's pool. */
 export function database(): Pool;
 /** Reuses an existing transaction without opening a second connection. */
 export function database(client: PoolClient): PoolClient;
 /** Selects a transaction client or the default pool. */
 export function database(client: PoolClient | undefined): Pool | PoolClient;
 export function database(client?: PoolClient) {
-  if (client) return client;
-  if (!process.env.DATABASE_URL)
-    throw new AppError(503, "NOT_CONFIGURED", "Database is not configured.");
-  pool ??= new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
-  return pool;
+  return client ?? ownedPool();
 }
 
 /** Returns a database URL safe for a long-lived process that holds session state, such as

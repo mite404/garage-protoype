@@ -232,7 +232,7 @@ async function extractPages(content: Buffer, mediaType: string) {
   if (mediaType === "application/pdf") text = await pdfText(content);
   else {
     try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(content);
     } catch {
       throw new AppError(422, "INVALID_TEXT", "Provide UTF-8 text.");
     }
