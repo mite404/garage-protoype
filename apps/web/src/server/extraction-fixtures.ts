@@ -59,7 +59,8 @@ export async function documentBytes(doc: Doc) {
   return { content, mediaType: "application/pdf" };
 }
 
-/** Renders each page of a checksum-verified public image PDF as a JPEG for image input.
+/** Renders each page of a checksum-verified public image PDF as a JPEG for image input, small
+ * enough that a two-page brochure fits the 200 KB inference input limit.
  * @throws {Error} If the fixture differs from its frozen checksum or cannot be rendered.
  */
 export async function pageImages(doc: Doc) {
@@ -67,10 +68,10 @@ export async function pageImages(doc: Doc) {
   return inTemp(async (dir) => {
     await exec("pdftoppm", [
       "-r",
-      "100",
+      "72",
       "-jpeg",
       "-jpegopt",
-      "quality=80",
+      "quality=60",
       file.path,
       join(dir, "page"),
     ]);

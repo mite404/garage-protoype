@@ -271,12 +271,15 @@ async function seed(db: PoolClient, models: string[]) {
     session,
     specialist,
   ]);
+  // Policy edits apply to existing rows so later runs never test a stale limit.
   for (const id of models.flatMap((model) => [model, `${model}:batch`]))
     await db.query(
       `insert into signal_desk.inference_models
        (id,max_input_bytes,max_photos,photo_tokens,overhead_tokens,max_output_tokens,
         input_micro_usd,output_micro_usd,max_attempts,retry_ms,timeout_ms)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict (id) do nothing`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       on conflict (id) do update set max_input_bytes=excluded.max_input_bytes,
+         max_photos=excluded.max_photos,timeout_ms=excluded.timeout_ms`,
       [id, ...Object.values(policy)],
     );
   // The accounting ledger persists across runs; integer rates make it an overestimate.
@@ -491,7 +494,8 @@ async function probe(ctx: Context, kind: ProbeKind, model: string) {
   const { sourceId, request, bytes } = await probeRequest(ctx, kind, doc, tag);
   const worst = guard(ctx, model, bytes);
   const result = await probeInference(ctx, { ...request, model });
-  const dispatched = result.http.every((h) => h.status === 200);
+  // Admission can reject before any HTTP call; only an accepted request can bill.
+  const dispatched = result.http.some((h) => h.status === 200);
   await record(ctx, tag, charge(result.receipt, dispatched, worst));
   await saveOutput(ctx, tag, result.output);
   const claims = predictedClaims(result.output, new Map([[sourceId, doc.id]])).claims;
@@ -670,7 +674,9 @@ async function rescoreRow(ctx: Context, row: Row) {
     [tag],
   );
   const sources = new Map(stored.rows.flatMap((source) => sourceEntry(packet, source)));
-  const result = await jobResult(ctx.db, job.rows[0]?.id ?? "", sources);
+  // Rows from before run tagging have no stored job; their original scores stand.
+  if (!job.rows[0]) return row;
+  const result = await jobResult(ctx.db, job.rows[0].id, sources);
   return { ...row, ...scoreRun(packet, result.run) };
 }
 
