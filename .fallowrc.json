@@ -4,6 +4,7 @@
     "apps/web/src/worker.ts",
     "apps/web/src/streaming-worker.ts",
     "apps/web/src/mcp.ts",
+    "apps/web/src/e2e-stack.ts",
     "apps/web/flue.config.ts",
     "packages/**/*.stories.tsx",
     "apps/storybook/.storybook/main.ts",
