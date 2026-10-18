@@ -1,12 +1,72 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Pool } from "pg";
-import { resolveActor, requireOpportunity, requireSpending } from "./access";
+import {
+  grantedAccess,
+  resolveActor,
+  requireOpportunity,
+  requireSpending,
+  type AccessRow,
+} from "./access";
 import { getPublicVehicle, getSource } from "./records";
 import { prepareTestDatabase } from "./test-database";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 if (process.env.CI && !databaseUrl) throw new Error("CI requires TEST_DATABASE_URL.");
+
+test("one access row raises the same first error as the separate checks, in caller order", () => {
+  const user = "10000000-0000-4000-8000-000000000003";
+  const tokenId = "30000000-0000-4000-8000-000000000001";
+  const session = { kind: "supabase-session", sessionId: user } as const;
+  const token = { kind: "app-token", tokenId } as const;
+  const deal = {
+    id: "deal-a",
+    vehicle_id: "truck",
+    buyer_id: user,
+    internal_notes: "",
+    next_action: "",
+  };
+  const row: AccessRow = {
+    active: true,
+    token_id: null,
+    scopes: null,
+    user_id: user,
+    role: "specialist",
+    can_spend: true,
+    revoked: null,
+    opportunity: deal,
+  };
+  const tokenRow = { ...row, token_id: tokenId, scopes: ["read" as const] };
+  const fails = (code: string, run: () => unknown) => assert.throws(run, { code });
+  // An ended session is unauthenticated even when the identity is also revoked or missing.
+  fails("UNAUTHENTICATED", () =>
+    grantedAccess({ ...row, active: false, revoked: true }, session, []),
+  );
+  fails("ACCESS_REVOKED", () =>
+    grantedAccess({ ...row, user_id: null, role: null, can_spend: null }, session, []),
+  );
+  fails("UNAUTHENTICATED", () => grantedAccess({ ...tokenRow, active: false }, token, []));
+  fails("ACCESS_REVOKED", () => grantedAccess({ ...tokenRow, role: "buyer" }, token, []));
+  fails("SCOPE_DENIED", () => grantedAccess({ ...tokenRow, scopes: ["write"] }, token, []));
+  // Role is checked before visibility, and each caller's check order decides the first failure.
+  const hidden = { ...tokenRow, opportunity: null };
+  fails("FORBIDDEN", () => grantedAccess(hidden, token, ["opportunity"], "buyer"));
+  fails("SCOPE_DENIED", () => grantedAccess(hidden, token, ["write", "opportunity"]));
+  fails("NOT_FOUND", () => grantedAccess(hidden, token, ["opportunity", "write"]));
+  // A token spends only with both the identity permission and its own spend scope.
+  fails("SPENDING_DENIED", () => grantedAccess(tokenRow, token, ["spend"]));
+  const granted = grantedAccess(
+    { ...tokenRow, scopes: ["read", "write", "spend"] },
+    token,
+    ["opportunity", "spend", "write"],
+    "specialist",
+  );
+  assert.deepEqual(granted, {
+    actor: { userId: user, role: "specialist", canSpend: true, credential: token },
+    opportunity: deal,
+  });
+  assert.equal(grantedAccess({ ...row, can_spend: false }, session, []).actor.canSpend, false);
+});
 
 test(
   "fresh access, ownership, private bytes, and approved projection",

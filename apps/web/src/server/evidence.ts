@@ -38,12 +38,13 @@ import {
   vehicles,
 } from "./db-schema";
 import {
-  refreshActor,
-  requireOpportunity,
-  requireSession,
-  requireWrite,
+  type AccessCheck,
   type Actor,
   type Role,
+  refreshActor,
+  requireOpportunity,
+  requireOpportunityAccess,
+  requireSession,
 } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
@@ -176,8 +177,9 @@ export async function evidenceTransaction<T>(
     await orm(db).execute(sql`begin`);
     await orm(db).execute(sql`set local lock_timeout='5s'`);
     await orm(db).execute(sql`select signal_desk.lock_evidence_access()`);
-    if (permission === "write") await requireWrite(actor, db);
-    const opportunity = await requireOpportunity(actor, opportunityId, role, db);
+    const order: AccessCheck[] =
+      permission === "write" ? ["write", "opportunity"] : ["opportunity"];
+    const { opportunity } = await requireOpportunityAccess(actor, opportunityId, order, role, db);
     await orm(db)
       .select({ id: vehicles.id })
       .from(vehicles)
