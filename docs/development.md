@@ -108,8 +108,16 @@ current evidence cards or prepare unsent drafts through existing sales operation
 Valibot for tool schemas; Zod remains the authoritative application input and stored-JSON contract.
 
 After an operator has approved and applied `npm run db:migrate`, run `npm run streaming` alongside
-the Next app. Exactly one Node owner holds a PostgreSQL advisory lease. Use a direct or
-session-pooler database connection, not transaction pooling, for this long-lived lease.
+the Next app. Exactly one Node owner holds a PostgreSQL advisory lease.
+
+Next.js keeps Supabase's transaction pooler, `aws-1-us-west-2.pooler.supabase.com:6543`, for its
+short request queries. The streaming owner and the import worker are long-lived and hold session
+state, so they use the session pooler: the same host on port 5432. Both refuse a port 6543
+`DATABASE_URL` at startup. Do not use the direct `db.<ref>.supabase.co` host, which is IPv6-only
+without Supabase's IPv4 add-on. Everything deployed runs in `us-west-2` (Oregon), next to the
+database: the owner and the worker in AWS `us-west-2`, and Vercel functions in `pdx1` if Next.js is
+deployed there. Each turn makes hundreds of sequential queries, and about 25 ms per query from
+another region dominates turn latency.
 The web process submits logical turns or observes their saved progress; viewer disconnects never
 cancel execution. Cancellation is explicit. Flue tables live in the private `signal_desk_flue`
 schema and are installed only by the operator migration command, not at application startup.

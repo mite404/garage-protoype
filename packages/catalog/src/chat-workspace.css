@@ -554,3 +554,57 @@
     gap: 8px;
   }
 }
+
+/* Live turn progress: three bars rise in a staggered wave from the first frame after Send, so
+   feedback is immediate; the label then names the owner's real step. */
+.turn-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 16px;
+}
+.turn-progress-glyph {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.turn-progress-glyph span {
+  width: 3px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--primary);
+  transform-origin: bottom;
+  animation: turn-progress-wave 900ms ease-in-out infinite;
+}
+.turn-progress-glyph span:nth-child(2) {
+  animation-delay: 150ms;
+}
+.turn-progress-glyph span:nth-child(3) {
+  animation-delay: 300ms;
+}
+@keyframes turn-progress-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-progress-glyph span {
+    animation: none;
+    transform: scaleY(0.7);
+  }
+}
+.chat-bubble .turn-progress {
+  white-space: normal;
+}
+.turn-progress-spaced {
+  margin-top: 10px;
+}

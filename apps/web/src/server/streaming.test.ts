@@ -284,6 +284,8 @@ test(
         (turn) => turn.cards.length === 1 && turn.text.includes("Review the missing"),
       );
       assert.equal(live.state, "running");
+      // The second provider request is streaming, after the show_card tool step.
+      assert.equal(live.activity, "writing");
       assert.equal(live.cards[0]?.kind, "review");
       assert.equal(
         live.text,

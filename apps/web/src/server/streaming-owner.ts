@@ -4,14 +4,20 @@ import { eq, inArray, and, sql } from "drizzle-orm";
 import { init, instrument } from "@flue/runtime";
 import { start } from "@flue/runtime/node";
 import type { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
-import { approvedSalesTool } from "@signal-desk/contracts/assistance-schema";
-import { orm } from "./db";
+import { approvedSalesTool, type StreamActivity } from "@signal-desk/contracts/assistance-schema";
+import { orm, sessionDatabaseUrl } from "./db";
 import { streamTurns } from "./db-schema";
-import { streamActor, streamError, streamPrompt } from "./streaming";
+import { noteActivity, streamActor, streamError, streamPrompt } from "./streaming";
 import { flueStorage, lockStreamingOwner } from "./flue-storage";
 import { admittedProvider, modelExecution, requireModelCheckpoint } from "./streaming-provider";
 import { AppError } from "./errors";
 import { SpecialistStream } from "../agents/specialist";
+
+// Truthful progress labels for the approved sales tools.
+const toolActivity: Record<string, StreamActivity> = {
+  show_card: "checking_evidence",
+  prepare_draft: "preparing_draft",
+};
 
 async function execute(id: string) {
   const handle = init(SpecialistStream, { id });
@@ -27,8 +33,9 @@ async function execute(id: string) {
       .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])))
       .returning({ id: streamTurns.id });
     if (!claimed.length) return;
-    const { row } = await streamActor(id);
+    noteActivity(id, "reading_deal");
     const context = await streamPrompt(id);
+    const { row } = context;
     const receipt = await handle.dispatch({
       message: row.message,
       idempotencyKey: id,
@@ -116,13 +123,12 @@ Current evidence revision: ${context.revision}`,
  * @throws If storage is not migrated, another owner is active, or the database is unavailable.
  */
 export async function startStreamingOwner(options: { transport?: typeof streamSimple } = {}) {
+  const url = sessionDatabaseUrl("The streaming owner");
   const lease = await lockStreamingOwner();
   lease.client.on("error", () => {
     process.stderr.write("Streaming ownership connection lost; exiting.\n");
     process.exit(1);
   });
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
   const { adapter, pool } = flueStorage(url);
   const dispose = instrument({
     observe: () => {},
@@ -134,6 +140,8 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
         (operation.type === "agent" && operation.operationKind !== "prompt")
       )
         throw new AppError(403, "TOOL_NOT_ALLOWED", "This sales capability is not available.");
+      if (operation.type === "tool" && context.instanceId)
+        noteActivity(context.instanceId, toolActivity[operation.toolName] ?? "checking_evidence");
       if (operation.type !== "model") return next();
       if (!context.instanceId) throw new Error("Missing Flue instance identity");
       return modelExecution.run({ id: context.instanceId, requestId: operation.turnId }, next);

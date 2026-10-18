@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { z } from "zod";
-import { streamView } from "@signal-desk/contracts/assistance-schema";
+import { streamView, type StreamActivity } from "@signal-desk/contracts/assistance-schema";
 import { orm } from "./db";
 import {
   credentialSchema,
@@ -19,7 +19,6 @@ import {
   type Actor,
 } from "./access";
 import { beginChatTurn, getAssistance, getAssistanceRevision } from "./assistance";
-import { getWorkbench } from "./evidence";
 import { AppError } from "./errors";
 import { getMunicipalityWorkspace } from "./municipalities";
 
@@ -40,33 +39,40 @@ export async function streamActor(id: string) {
   return { actor, row };
 }
 
-/** Supplies bounded chronological conversation, never historical tool authority or evidence.
- * @throws {AppError} For stale evidence, ended credentials, or removed membership.
- */
-export async function streamPrompt(id: string) {
-  const { actor, row } = await streamContext(id);
-  const view = await getAssistance(actor, row.opportunityId);
-  if (view.revision !== row.revision)
-    throw new AppError(412, "STALE_REVIEW", "Evidence changed during generation.");
-  const opportunity = await requireOpportunity(actor, row.opportunityId, "specialist");
+// Runs independent reads concurrently but reports failures in argument order, so the error a
+// caller sees is the one the sequential checks would have raised.
+async function inOrder<T extends unknown[]>(work: [...{ [K in keyof T]: Promise<T[K]> }]) {
+  const settled: PromiseSettledResult<unknown>[] = await Promise.allSettled(work);
+  for (const result of settled) if (result.status === "rejected") throw result.reason;
+  return settled.map((result) => (result as PromiseFulfilledResult<unknown>).value) as T;
+}
+
+async function permittedDeal(actor: Actor, opportunityId: string) {
+  const opportunity = await requireOpportunity(actor, opportunityId, "specialist");
   const [organization] = await orm()
     .select({ id: organizations.id })
     .from(organizations)
     .where(eq(organizations.buyerId, opportunity.buyer_id));
   const workspace = organization ? await getMunicipalityWorkspace(actor, organization.id) : null;
-  const deal = workspace
+  return workspace
     ? {
         organization: workspace.organization,
-        acquisition: workspace.acquisitions.find((item) => item.id === row.opportunityId),
+        acquisition: workspace.acquisitions.find((item) => item.id === opportunityId),
       }
     : null;
+}
+
+async function historyBudget() {
   const [policy] = await orm()
     .select({ bytes: inferenceModels.max_input_bytes })
     .from(inferenceModels)
     .where(eq(inferenceModels.id, "moonshotai/kimi-k3"));
   // Leave admission room for current evidence, tools, user text and subsequent tool results.
-  const budget = Math.min(8000, Math.floor((policy?.bytes ?? 0) / 8));
-  const previous = await orm()
+  return Math.min(8000, Math.floor((policy?.bytes ?? 0) / 8));
+}
+
+async function priorTurns(actor: Actor, row: typeof streamTurns.$inferSelect) {
+  return orm()
     .select({
       message: sql<string>`left(${streamTurns.message},2000)`,
       assistant: sql<string>`left(${streamTurns.text},2000)`,
@@ -82,6 +88,23 @@ export async function streamPrompt(id: string) {
     )
     .orderBy(desc(streamTurns.createdAt), desc(streamTurns.id))
     .limit(6);
+}
+
+/** Supplies bounded chronological conversation, never historical tool authority or evidence.
+ * Returns the checked turn row alongside the prompt context.
+ * @throws {AppError} For stale evidence, ended credentials, or removed membership.
+ */
+export async function streamPrompt(id: string) {
+  const { actor, row } = await streamContext(id);
+  // Independent reads run concurrently; nothing is returned until every check has passed.
+  const [view, deal, budget, previous] = await inOrder([
+    getAssistance(actor, row.opportunityId),
+    permittedDeal(actor, row.opportunityId),
+    historyBudget(),
+    priorTurns(actor, row),
+  ]);
+  if (view.revision !== row.revision)
+    throw new AppError(412, "STALE_REVIEW", "Evidence changed during generation.");
   const history: typeof previous = [];
   for (const turn of previous) {
     if (Buffer.byteLength(JSON.stringify([turn, ...history]), "utf8") > budget) break;
@@ -89,6 +112,7 @@ export async function streamPrompt(id: string) {
   }
   await requireOpportunity(actor, row.opportunityId, "specialist");
   return {
+    row,
     history,
     deal,
     inquiry: view.inquiries.find((item) => item.id === row.inquiryId),
@@ -105,11 +129,14 @@ export async function submitStream(
   message: unknown,
   key: string,
 ) {
-  await requireOpportunity(actor, opportunityId, "specialist");
-  await requireSpending(actor);
-  await requireWrite(actor);
+  // Every check must pass before the turn is created; they are independent, so run together.
+  await inOrder([
+    requireOpportunity(actor, opportunityId, "specialist"),
+    requireSpending(actor),
+    requireWrite(actor),
+  ]);
   const turn = await beginChatTurn(actor, opportunityId, message, key);
-  const evidence = await getWorkbench(actor, opportunityId);
+  const revision = await getAssistanceRevision(actor, opportunityId);
   await orm()
     .insert(streamTurns)
     .values({
@@ -117,7 +144,7 @@ export async function submitStream(
       opportunityId,
       actorId: actor.userId,
       credential: actor.credential,
-      revision: evidence.revision,
+      revision,
       state: "queued",
       text: "",
       createdAt: new Date(),
@@ -196,6 +223,25 @@ export async function streamContext(id: string) {
   if (uncertain.length)
     throw new AppError(409, "SPEND_UNCERTAIN", "Prior provider request requires reconciliation.");
   return { actor, row };
+}
+
+const activityWrites = new Map<string, Promise<void>>();
+
+/** Records the owner's current real step for observers without delaying that step. Writes apply
+ * in call order per turn, only while it runs; a failed write never stops the turn.
+ */
+export function noteActivity(id: string, activity: StreamActivity) {
+  const write = async () => {
+    await orm()
+      .update(streamTurns)
+      .set({ activity })
+      .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
+  };
+  const next = (activityWrites.get(id) ?? Promise.resolve()).then(write).catch(() => {});
+  activityWrites.set(id, next);
+  void next.then(() => {
+    if (activityWrites.get(id) === next) activityWrites.delete(id);
+  });
 }
 
 /** Strict boundary for persisted model-call failures exposed in the UI. */

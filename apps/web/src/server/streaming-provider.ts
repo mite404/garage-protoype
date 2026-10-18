@@ -11,7 +11,7 @@ import type { ConversationStreamStore } from "@flue/runtime/adapter";
 import { z } from "zod";
 import { approvedSalesTool } from "@signal-desk/contracts/assistance-schema";
 import { runInference } from "./model";
-import { streamContext, streamError } from "./streaming";
+import { noteActivity, streamContext, streamError } from "./streaming";
 import { orm } from "./db";
 import { streamTurns, inferenceAttempts, inferenceOperations } from "./db-schema";
 import { eq, like } from "drizzle-orm";
@@ -151,6 +151,8 @@ export function admittedProvider(
     void (async () => {
       try {
         if (!execution) throw new Error("Missing model admission identity");
+        // Flue reenters its model interceptor per stream read; this runs once per request.
+        noteActivity(execution.id, "checking_evidence");
         if (transport === streamSimple && !process.env.OPENROUTER_API_KEY)
           throw new AppError(503, "NOT_CONFIGURED", "OpenRouter is not configured.");
         const { actor, row } = await streamContext(execution.id);
@@ -179,6 +181,7 @@ export function admittedProvider(
             photos: [],
           },
           async ({ signal, maxOutputTokens, inputMicroUsd, outputMicroUsd }) => {
+            noteActivity(row.id, "writing");
             const providerStream = transport(kimi, permittedContext, {
               apiKey: process.env.OPENROUTER_API_KEY,
               maxRetries: 0,
