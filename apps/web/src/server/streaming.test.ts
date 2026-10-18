@@ -941,6 +941,9 @@ test(
       await db.query("delete from signal_desk.sources where opportunity_id='stream-inject'");
       await db.query("delete from signal_desk.import_jobs where opportunity_id='stream-inject'");
       await db.query(
+        "delete from signal_desk.inquiry_suggestions where inquiry_id in (select id from signal_desk.inquiries where opportunity_id in ('stream-deal','stream-foreign','stream-inject'))",
+      );
+      await db.query(
         "delete from signal_desk.opportunities where id in ('stream-deal','stream-foreign','stream-inject')",
       );
       await db.query(

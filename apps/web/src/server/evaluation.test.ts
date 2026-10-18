@@ -118,6 +118,10 @@ async function cleanup({ db, pool }: Context) {
   await db.query("delete from signal_desk.opportunity_members where opportunity_id=$1", [
     opportunity,
   ]);
+  await db.query(
+    "delete from signal_desk.inquiry_suggestions where inquiry_id in (select id from signal_desk.inquiries where opportunity_id=$1)",
+    [opportunity],
+  );
   await db.query("delete from signal_desk.opportunities where vehicle_id=$1", [vehicle]);
   await db.query("delete from signal_desk.vehicles where id=$1", [vehicle]);
   await db.query("delete from signal_desk.inference_budgets where scope in ('installation',$1)", [

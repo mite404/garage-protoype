@@ -8,6 +8,7 @@ import {
   submitInquiry,
   createDraft,
   correctInquiry,
+  acceptSuggestion,
   renderCardCall,
 } from "@/server/assistance";
 import { requireOpportunity } from "@/server/access";
@@ -18,6 +19,13 @@ const command = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("inquiry"), input: z.unknown() }).strict(),
   z.object({ kind: z.literal("draft"), input: z.unknown() }).strict(),
   z.object({ kind: z.literal("correct"), inquiryId: z.string(), input: z.unknown() }).strict(),
+  z
+    .object({
+      kind: z.literal("accept_suggestion"),
+      inquiryId: z.string(),
+      revision: z.number().int().min(0),
+    })
+    .strict(),
   z
     .object({ kind: z.literal("card"), turnId: z.string(), callId: z.string(), call: z.unknown() })
     .strict(),
@@ -61,6 +69,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         return success(await createDraft(actor, id, input.input, key));
       case "correct":
         return success(await correctInquiry(actor, id, input.inquiryId, input.input));
+      case "accept_suggestion":
+        return success(await acceptSuggestion(actor, id, input.inquiryId, input.revision));
       case "card":
         return success(await renderCardCall(actor, id, input.turnId, input.callId, input.call));
     }

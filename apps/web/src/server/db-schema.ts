@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import type {
   draftCommand,
   inquiryInput,
+  RoutingSuggestion,
   StreamActivity,
 } from "@signal-desk/contracts/assistance-schema";
 import type { suggestPhotoRequest } from "@signal-desk/contracts/photo-schema";
@@ -33,6 +34,7 @@ export const inferenceModels = privateSchema.table("inference_models", {
   max_output_tokens: integer("max_output_tokens").notNull(),
   input_micro_usd: integer("input_micro_usd").notNull(),
   output_micro_usd: integer("output_micro_usd").notNull(),
+  rate_tokens: integer("rate_tokens").notNull().default(1),
   max_attempts: integer("max_attempts").notNull(),
   retry_ms: integer("retry_ms").notNull(),
   timeout_ms: integer("timeout_ms").notNull(),
@@ -68,6 +70,7 @@ export const inferenceAttempts = privateSchema.table("inference_attempts", {
   reserved_micro_usd: int8("reserved_micro_usd").notNull(),
   input_rate: integer("input_rate").notNull(),
   output_rate: integer("output_rate").notNull(),
+  rate_tokens: integer("rate_tokens").notNull().default(1),
   input_bound: integer("input_bound").notNull(),
   output_bound: integer("output_bound").notNull(),
   started_at: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
@@ -140,6 +143,13 @@ export const inquiries = privateSchema.table("inquiries", {
   actor_id: uuid("actor_id").notNull(),
   request_key: text("request_key").notNull(),
   input: jsonb("input").$type<z.infer<typeof inquiryInput>>().notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Append-only advisory suggestions, separate from human routing. */
+export const inquirySuggestions = privateSchema.table("inquiry_suggestions", {
+  inquiry_id: text("inquiry_id").primaryKey(),
+  suggestion: jsonb("suggestion").$type<RoutingSuggestion>().notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

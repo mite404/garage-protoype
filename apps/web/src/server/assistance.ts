@@ -16,6 +16,7 @@ import {
   identities,
   inquiries as inquiryTable,
   inquiryRouting,
+  inquirySuggestions,
   opportunities,
   opportunityMembers,
   publicFacts,
@@ -24,15 +25,19 @@ import {
 } from "./db-schema";
 import { evidenceTransaction, getWorkbench } from "./evidence";
 import { parseInput } from "./validation";
-import { fieldSchema } from "@signal-desk/contracts/evidence-schema";
+import { fieldLabels, fieldSchema } from "@signal-desk/contracts/evidence-schema";
 import { getPublicVehicle, getSource } from "./records";
 import { AppError } from "./errors";
+import { suggestRoute } from "./jev-routing";
+import type { Provider } from "./model";
 import {
   inquiryInput,
   routeQuestion,
   draftCommand,
   cardCall,
   inlineCard,
+  routingSuggestion,
+  type RoutingSuggestion,
   type InlineCard,
 } from "@signal-desk/contracts/assistance-schema";
 
@@ -195,6 +200,11 @@ async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: str
   );
   const routing = history[0];
   if (!routing) throw new AppError(409, "REVIEW_REQUIRED", "Inquiry requires review.");
+  const savedSuggestion = await orm(db)
+    .select({ suggestion: inquirySuggestions.suggestion })
+    .from(inquirySuggestions)
+    .where(eq(inquirySuggestions.inquiry_id, id));
+  const suggestion = routingSuggestion.optional().parse(savedSuggestion[0]?.suggestion);
   const state = await answerState(db, vehicleId, routing.field);
   const nextAction =
     inquiry.input.kind === "offer"
@@ -246,10 +256,13 @@ async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: str
       state: state.kind === "missing_evidence" ? "unknown" : state.kind,
       ...blocker,
       blockerId: blocker.id,
+      routingRevision: routing.revision,
+      suggestion: routing.field === null ? suggestion : undefined,
     };
   }
   return {
     ...inquiry,
+    suggestion,
     classification: inquiry.input.kind === "offer" ? "conditional_offer" : state.kind,
     history,
     card: inlineCard.parse(card),
@@ -263,6 +276,7 @@ async function insertInquiry(
   vehicleId: string,
   input: z.infer<typeof inquiryInput>,
   key: string,
+  suggestion: RoutingSuggestion | null,
 ) {
   await orm(db).execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`inquiry:${actor.userId}:${key}`},0))`,
@@ -293,6 +307,7 @@ async function insertInquiry(
   await orm(db)
     .insert(inquiryTable)
     .values({ id, opportunity_id: opportunityId, actor_id: actor.userId, request_key: key, input });
+  if (suggestion) await orm(db).insert(inquirySuggestions).values({ inquiry_id: id, suggestion });
   await orm(db)
     .insert(inquiryRouting)
     .values({
@@ -312,7 +327,7 @@ async function insertInquiry(
   return id;
 }
 
-/** Records a question or explicit offer on an existing permitted opportunity, without inference or sending.
+/** Records an inquiry; unmatched specialist questions may receive advisory routing, never sending.
  * @throws {AppError} For denied access, invalid terms, idempotency conflicts or missing assignee.
  */
 export async function submitInquiry(
@@ -320,14 +335,19 @@ export async function submitInquiry(
   opportunityId: string,
   raw: unknown,
   requestKey: string,
+  provider?: Provider,
 ) {
   const input = parseInput(inquiryInput, raw);
   const key = parseInput(keySchema, requestKey);
+  const suggestion =
+    input.kind === "question"
+      ? await suggestRoute(actor, opportunityId, input.text, key, provider)
+      : null;
   return evidenceTransaction(
     actor,
     opportunityId,
     async (db, vehicleId) => {
-      const id = await insertInquiry(db, actor, opportunityId, vehicleId, input, key);
+      const id = await insertInquiry(db, actor, opportunityId, vehicleId, input, key, suggestion);
       const inquiry = await readInquiry(db, opportunityId, vehicleId, id);
       await orm(db)
         .update(opportunities)
@@ -374,18 +394,25 @@ async function readDrafts(db: PoolClient, opportunityId: string, revision: numbe
   );
 }
 
-function buyerInquiry(inquiry: Awaited<ReturnType<typeof readInquiry>>) {
+function buyerInquiry(
+  inquiry: Awaited<ReturnType<typeof readInquiry>>,
+): Omit<Awaited<ReturnType<typeof readInquiry>>, "suggestion"> {
+  const { suggestion: _suggestion, ...visible } = inquiry;
+  const card =
+    inquiry.card.kind === "review"
+      ? (({ suggestion: _cardSuggestion, ...review }) => review)(inquiry.card)
+      : inquiry.card;
   return {
-    ...inquiry,
+    ...visible,
     history: [],
     card:
-      inquiry.card.kind === "review"
+      card.kind === "review"
         ? {
-            ...inquiry.card,
+            ...card,
             nextAction:
               "An assigned specialist will review the evidence and clarify the next step.",
           }
-        : inquiry.card,
+        : card,
   };
 }
 
@@ -470,6 +497,52 @@ export async function getAssistance(actor: Actor, opportunityId: string) {
   );
 }
 
+async function appendRouting(
+  db: PoolClient,
+  actor: Actor,
+  opportunityId: string,
+  vehicleId: string,
+  inquiry: Awaited<ReturnType<typeof readInquiry>>,
+  input: z.infer<typeof correction>,
+) {
+  const id = inquiry.id;
+  if (inquiry.history[0]?.revision !== input.revision)
+    throw new AppError(412, "STALE_REVIEW", "Routing changed. Reload before correcting.");
+  if (inquiry.input.kind === "offer")
+    throw new AppError(
+      409,
+      "REVIEW_REQUIRED",
+      "Preserve the explicit offer terms; request a new buyer clarification instead.",
+    );
+  const state = await answerState(db, vehicleId, input.field);
+  await orm(db)
+    .insert(inquiryRouting)
+    .values({
+      id: randomUUID(),
+      inquiry_id: id,
+      actor_id: actor.userId,
+      kind: state.kind,
+      field: input.field,
+      basis: input.reason,
+      revision: input.revision + 1,
+    });
+  await ensureBlocker(db, opportunityId, id, inquiry.input.text, input.field, input.nextAction);
+  await orm(db)
+    .update(evidenceBlockers)
+    .set({ field: input.field, next_action: input.nextAction })
+    .where(
+      and(
+        eq(evidenceBlockers.opportunity_id, opportunityId),
+        eq(evidenceBlockers.blocker_key, `inquiry:${id}`),
+      ),
+    );
+  await orm(db)
+    .update(opportunities)
+    .set({ next_action: input.nextAction })
+    .where(eq(opportunities.id, opportunityId));
+  return { id, revision: input.revision + 1 };
+}
+
 /** Reads only the current evidence revision, with the same access checks and shared locks as
  * getAssistance, for staleness checks that do not need inquiries, turns or drafts.
  * @throws {AppError} For revoked access or an inaccessible record.
@@ -484,7 +557,7 @@ export async function getAssistanceRevision(actor: Actor, opportunityId: string)
   );
 }
 
-/** Appends a specialist routing correction without rewriting input or converting ambiguous prose into an offer.
+/** Appends a specialist routing correction without rewriting input or converting prose into an offer.
  * @throws {AppError} For stale corrections, invalid fields or denied access.
  */
 export async function correctInquiry(
@@ -496,41 +569,33 @@ export async function correctInquiry(
   const input = parseInput(correction, raw);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     const inquiry = await readInquiry(db, opportunityId, vehicleId, id);
-    if (inquiry.history[0]?.revision !== input.revision)
-      throw new AppError(412, "STALE_REVIEW", "Routing changed. Reload before correcting.");
-    if (inquiry.input.kind === "offer")
-      throw new AppError(
-        409,
-        "REVIEW_REQUIRED",
-        "Preserve the explicit offer terms; request a new buyer clarification instead.",
-      );
-    const state = await answerState(db, vehicleId, input.field);
-    await orm(db)
-      .insert(inquiryRouting)
-      .values({
-        id: randomUUID(),
-        inquiry_id: id,
-        actor_id: actor.userId,
-        kind: state.kind,
-        field: input.field,
-        basis: input.reason,
-        revision: input.revision + 1,
-      });
-    await ensureBlocker(db, opportunityId, id, inquiry.input.text, input.field, input.nextAction);
-    await orm(db)
-      .update(evidenceBlockers)
-      .set({ field: input.field, next_action: input.nextAction })
-      .where(
-        and(
-          eq(evidenceBlockers.opportunity_id, opportunityId),
-          eq(evidenceBlockers.blocker_key, `inquiry:${id}`),
-        ),
-      );
-    await orm(db)
-      .update(opportunities)
-      .set({ next_action: input.nextAction })
-      .where(eq(opportunities.id, opportunityId));
-    return { id, revision: input.revision + 1 };
+    return appendRouting(db, actor, opportunityId, vehicleId, inquiry, input);
+  });
+}
+
+/** Records a specialist's acceptance of an advisory field without approving evidence.
+ * @throws {AppError} For stale routing, absent suggestions, already-routed inquiries or denied access.
+ */
+export async function acceptSuggestion(
+  actor: Actor,
+  opportunityId: string,
+  inquiryId: string,
+  revision: number,
+) {
+  const expected = parseInput(z.number().int().min(0), revision);
+  return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
+    const inquiry = await readInquiry(db, opportunityId, vehicleId, inquiryId);
+    if (inquiry.history[0]?.revision !== expected)
+      throw new AppError(412, "STALE_REVIEW", "Routing changed. Reload before accepting.");
+    const suggestion = inquiry.suggestion;
+    if (suggestion?.state !== "suggested" || inquiry.history[0]?.field !== null)
+      throw new AppError(409, "REVIEW_REQUIRED", "No pending field suggestion is available.");
+    return appendRouting(db, actor, opportunityId, vehicleId, inquiry, {
+      field: suggestion.field,
+      reason: `Specialist accepted Jev suggestion: ${fieldLabels[suggestion.field]} (confidence ${suggestion.confidence.toFixed(2)}, ${suggestion.modelVersion}).`,
+      nextAction: "Request and review shareable evidence before preparing a buyer reply.",
+      revision: expected,
+    });
   });
 }
 
@@ -676,8 +741,8 @@ export async function createDraft(
   });
 }
 
-/** Persists a bounded specialist-language turn atomically with its inquiry and review outcome.
- * No provider is installed or called. Disconnects retry with the same key and do not duplicate work.
+/** Persists a specialist turn with advisory routing computed before the inquiry transaction.
+ * Jev may suggest a field; routing awaits human acceptance. Retries reuse the inference report.
  * @throws {AppError} For denied access, invalid text or key conflicts.
  */
 export async function beginChatTurn(
@@ -685,9 +750,11 @@ export async function beginChatTurn(
   opportunityId: string,
   raw: unknown,
   requestKey: string,
+  provider?: Provider,
 ) {
   const message = parseInput(z.string().trim().min(1).max(2000), raw);
   const key = parseInput(keySchema, requestKey);
+  const suggestion = await suggestRoute(actor, opportunityId, message, `chat:${key}`, provider);
   return evidenceTransaction(actor, opportunityId, async (db, vehicleId) => {
     await orm(db).execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`turn:${actor.userId}:${key}`},0))`,
@@ -716,6 +783,7 @@ export async function beginChatTurn(
       vehicleId,
       { kind: "question", text: message },
       `chat:${key}`,
+      suggestion,
     );
     await readInquiry(db, opportunityId, vehicleId, inquiryId);
     const id = randomUUID();
