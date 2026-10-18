@@ -131,6 +131,8 @@ Current evidence revision: ${context.revision}`,
     // Prevent a completed turn from disclosing after revocation in the final observer read too.
     await streamActor(id);
   } catch (error) {
+    // Observers see only a code; keep the cause of anything but a deliberate refusal in logs.
+    if (!(error instanceof AppError)) console.error(`Stream turn ${id} failed`, error);
     await writes.catch(() => undefined);
     await orm()
       .update(streamTurns)
