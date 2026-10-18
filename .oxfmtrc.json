@@ -5,6 +5,7 @@
     "**/*.md",
     "docs/reference/bts-3.44.1.jsonc",
     "package-lock.json",
+    "db/migrations/meta/**",
     "storybook-static/**",
     ".turbo/**",
     "**/.next/**",

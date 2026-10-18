@@ -1,25 +1,22 @@
 import { readFile } from "node:fs/promises";
 import type { PoolClient } from "pg";
 
-// Each ordered migration with a probe that returns a null name until it has been applied.
-const migrations = [
-  ["001-foundation.sql", "select to_regclass('signal_desk.identities') as name"],
-  ["002-inference.sql", "select to_regclass('signal_desk.inference_models') as name"],
-  ["003-evidence.sql", "select to_regclass('signal_desk.claims') as name"],
-  ["004-photos.sql", "select to_regclass('signal_desk.photo_reviews') as name"],
-  ["005-assistance.sql", "select to_regclass('signal_desk.inquiries') as name"],
-  ["006-app-tokens.sql", "select to_regclass('signal_desk.app_tokens') as name"],
-  ["007-streaming.sql", "select to_regclass('signal_desk.stream_turns') as name"],
-  [
-    "008-session-access.sql",
+// A query per Drizzle Kit journal entry that returns a null name until that migration applies.
+const probes: Record<string, string> = {
+  "0000_foundation": "select to_regclass('signal_desk.identities') as name",
+  "0001_inference": "select to_regclass('signal_desk.inference_models') as name",
+  "0002_evidence": "select to_regclass('signal_desk.claims') as name",
+  "0003_photos": "select to_regclass('signal_desk.photo_reviews') as name",
+  "0004_assistance": "select to_regclass('signal_desk.inquiries') as name",
+  "0005_app-tokens": "select to_regclass('signal_desk.app_tokens') as name",
+  "0006_streaming": "select to_regclass('signal_desk.stream_turns') as name",
+  "0007_session-access":
     "select to_regprocedure('signal_desk.session_is_active(uuid,uuid)') as name",
-  ],
-  ["009-municipality-workspace.sql", "select to_regclass('signal_desk.organizations') as name"],
-  [
-    "010-stream-activity.sql",
+  "0008_municipality-workspace": "select to_regclass('signal_desk.organizations') as name",
+  "0009_stream-activity":
     "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='stream_turns' and column_name='activity') as name",
-  ],
-] as const;
+};
+const migrations = new URL("../../../../db/migrations/", import.meta.url);
 
 /** Initializes only a disposable *_test database, never a prototype or live database. */
 export async function prepareTestDatabase(db: PoolClient) {
@@ -32,9 +29,12 @@ export async function prepareTestDatabase(db: PoolClient) {
   await db.query(`create schema if not exists auth;
     create table if not exists auth.sessions (id uuid primary key,user_id uuid not null,not_after timestamptz);
     alter table auth.sessions enable row level security;`);
-  for (const [file, probe] of migrations) {
+  const journal = JSON.parse(await readFile(new URL("meta/_journal.json", migrations), "utf8"));
+  for (const { tag } of journal.entries as { tag: string }[]) {
+    const probe = probes[tag];
+    if (!probe) throw new Error(`Add an applied-state probe for migration ${tag}.`);
     const applied = await db.query<{ name: string | null }>(probe);
     if (!applied.rows[0]?.name)
-      await db.query(await readFile(new URL(`../../../../db/${file}`, import.meta.url), "utf8"));
+      await db.query(await readFile(new URL(`${tag}.sql`, migrations), "utf8"));
   }
 }

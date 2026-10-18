@@ -94,9 +94,16 @@ For ETH-80, use Drizzle for application database access and retain the existing 
 of untrusted input or stored JSON. Application reads and writes now use Drizzle's typed query
 builders in `apps/web/src/server/db-schema.ts`. `pg` remains the driver and transaction connection;
 PostgreSQL locks, session commands, DDL, and Flue's framework-owned storage still use SQL.
-Preserve transaction, authorization, evidence, spending, and idempotency guarantees. Keep the
-ordered operator-owned `db/` migration history rather than adding a competing Supabase or
-Drizzle Kit history over existing tables. Do not use schema push against the prototype.
+Preserve transaction, authorization, evidence, spending, and idempotency guarantees.
+
+Migrations are Drizzle Kit's: `db/migrations/` with its journal and snapshots, configured by
+`drizzle.config.ts`. To change a table, edit `db-schema.ts`, run `npm run db:generate`, review the
+generated SQL, and add an applied-state probe for it in `test-database.ts`. Functions, grants,
+row security, and data changes the schema cannot express go in `npm run db:generate -- --custom
+--name <name>` migrations. `npm run db:check` validates the snapshot history. An operator applies
+both kinds with `npm run db:migrate`. Never edit an applied migration, hand-edit `meta/`, or use
+`drizzle-kit push` against the prototype. The first ten migrations are the earlier ordered SQL
+files, unchanged; the runner adopts them on databases that recorded them under the old runner.
 
 ## Specialist streaming trial
 
