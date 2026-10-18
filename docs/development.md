@@ -134,6 +134,27 @@ transport against a synthetic local provider. It does not spend tokens or verify
 authentication. See the [trial result](plans/008-flue-specialist-trial.md#implementation-evidence)
 for the remaining permissioned live-provider check.
 
+## Browser e2e trial
+
+`npx e2e init --yes` (e2e 0.21.2, Apache-2.0) wrote `e2e.config.ts`, `tests/example.e2e.ts`, the
+generated `.agents/skills/e2e/` skill, and an `e2e mcp` entry in `.mcp.json` and
+`.cursor/mcp.json`. `npm run check:docs` skips that generated skill; rerunning init refreshes it.
+`e2e`, `@e2e-dev/web` and `ai` are pinned in `package.json` and the lockfile. No model provider
+package is installed and `e2e.config.ts` still names init's placeholder gateway model; both wait
+for the model choice for agent steps. Chromium downloads on first boot, or in CI through
+`npx @e2e-dev/web install chromium --with-deps`.
+
+The target starts `apps/web/src/e2e-stack.ts`, not the hosted services. It resets a local database
+whose name must end in `_test` (default `sd_e2e_test`), seeds the synthetic Austin workspace,
+serves a controlled identity provider and a gated synthetic model, starts the streaming owner, and
+runs `next dev` on 127.0.0.1:3406. The runner passes only the variables named in
+`e2e.config.ts`, so hosted `DATABASE_URL` and `OPENROUTER_API_KEY` never reach the stack.
+`tests/specialist-chat.e2e.ts` signs in through the real form, opens the municipality page, sends a
+message, observes the held partial reply, releases it, and checks it again after a reload. It uses
+exact locators and no agent steps, so it needs no model.
+Agent steps send the redacted accessibility tree, and screenshots when requested, to the chosen
+provider. Run them only on this synthetic stack. Turn telemetry off with `E2E_TELEMETRY_DISABLED=1`.
+
 ## One gate, separate responsibilities
 
 | Command | Checks |
