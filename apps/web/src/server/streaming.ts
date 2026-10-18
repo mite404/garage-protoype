@@ -11,13 +11,7 @@ import {
   organizations,
   streamTurns,
 } from "./db-schema";
-import {
-  refreshActor,
-  requireOpportunity,
-  requireSpending,
-  requireWrite,
-  type Actor,
-} from "./access";
+import { type Actor, requireOpportunity, requireOpportunityAccess } from "./access";
 import { beginChatTurn, getAssistance, getAssistanceRevision } from "./assistance";
 import { AppError } from "./errors";
 import { getMunicipalityWorkspace } from "./municipalities";
@@ -28,14 +22,18 @@ import { getMunicipalityWorkspace } from "./municipalities";
 export async function streamActor(id: string) {
   const row = await orm().query.streamTurns.findFirst({ where: eq(streamTurns.id, id) });
   if (!row) throw new AppError(404, "NOT_FOUND", "Stream not found.");
-  const actor = await refreshActor({
+  const original = {
     userId: row.actorId,
     credential: credentialSchema.parse(row.credential),
-    role: "specialist",
+    role: "specialist" as const,
     canSpend: false,
-  });
-  await requireOpportunity(actor, row.opportunityId, "specialist");
-  await requireWrite(actor);
+  };
+  const { actor } = await requireOpportunityAccess(
+    original,
+    row.opportunityId,
+    ["opportunity", "write"],
+    "specialist",
+  );
   return { actor, row };
 }
 
@@ -129,12 +127,13 @@ export async function submitStream(
   message: unknown,
   key: string,
 ) {
-  // Every check must pass before the turn is created; they are independent, so run together.
-  await inOrder([
-    requireOpportunity(actor, opportunityId, "specialist"),
-    requireSpending(actor),
-    requireWrite(actor),
-  ]);
+  // Every check must pass before the turn is created.
+  await requireOpportunityAccess(
+    actor,
+    opportunityId,
+    ["opportunity", "spend", "write"],
+    "specialist",
+  );
   const turn = await beginChatTurn(actor, opportunityId, message, key);
   const revision = await getAssistanceRevision(actor, opportunityId);
   await orm()
@@ -180,8 +179,7 @@ export async function readStreams(actor: Actor, opportunityId: string) {
  * @throws {AppError} For denied access or a turn owned by another specialist.
  */
 export async function cancelStream(actor: Actor, opportunityId: string, id: string) {
-  await requireOpportunity(actor, opportunityId, "specialist");
-  await requireWrite(actor);
+  await requireOpportunityAccess(actor, opportunityId, ["opportunity", "write"], "specialist");
   const [row] = await orm()
     .select()
     .from(streamTurns)
