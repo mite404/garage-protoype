@@ -43,6 +43,17 @@ function assertionCount(count: number) {
   return `${count} source ${count === 1 ? "assertion" : "assertions"}`;
 }
 
+function droppedClaimsNote(count: number) {
+  return count === 1
+    ? "1 suggested claim was not imported: its excerpt was not found exactly once on its page, or its value was invalid."
+    : `${count} suggested claims were not imported: their excerpts were not found exactly once on their pages, or their values were invalid.`;
+}
+
+function DroppedClaims({ count }: { count: number }) {
+  if (!count) return null;
+  return <p className="mt-2 text-xs text-muted-foreground">{droppedClaimsNote(count)}</p>;
+}
+
 /** Finite developer-authored review UI. All mutations return to authorized server operations. */
 export default function EvidenceWorkbench({
   view,
@@ -610,6 +621,7 @@ export default function EvidenceWorkbench({
                 <p className="mt-2 text-xs text-muted-foreground">
                   {job.mode === "saved_example" ? "Saved synthetic run" : "Provider extraction"}
                 </p>
+                <DroppedClaims count={job.droppedClaims} />
                 {job.error && (
                   <p className="mt-2 break-words text-xs text-destructive">
                     {job.error}.{" "}
