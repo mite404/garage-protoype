@@ -56,6 +56,12 @@ export const extractionSchema = z
       .max(20),
   })
   .strict();
+/** A provider claim cites a page and verbatim excerpt; the server derives its offsets. */
+export const providerClaim = extractedClaim.omit({ start: true, end: true });
+/** Provider output contract; the worker validates each claim and drops invalid ones alone. */
+export const providerExtractionSchema = extractionSchema.extend({
+  claims: z.array(providerClaim).max(200),
+});
 const selection = z.object({ field: fieldSchema, claimId: z.string(), shareable: z.boolean() });
 /** Human commands append decisions without modifying source assertions. */
 export const reviewSchema = z.discriminatedUnion("kind", [
@@ -108,11 +114,21 @@ const numericUnits: Record<string, readonly string[]> = {
   pumpCapacity: ["gpm", "L/min"],
 };
 
+const thousands = /^\d{1,3}(,\d{3})+(\.\d+)?$/;
+
+/** Removes thousands separators from numeric field values, so `48,210` becomes `48210`. Other
+ * values are returned unchanged; hedged text such as `about 85k` stays invalid.
+ */
+export function plainValue(field: string, value: string) {
+  return numericUnits[field] && thousands.test(value) ? value.replaceAll(",", "") : value;
+}
+
 /** Normalizes numeric formatting, preserving units instead of guessing conversions.
  * @throws {Error} For a value or unit incompatible with its field.
  */
-export function canonicalValue(field: string, value: string, unit: string) {
+export function canonicalValue(field: string, raw: string, unit: string) {
   const allowed = numericUnits[field];
+  const value = plainValue(field, raw);
   if (allowed) {
     if (!/^\d+(\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))
       throw new Error("Invalid numeric evidence");
@@ -120,5 +136,5 @@ export function canonicalValue(field: string, value: string, unit: string) {
     return `${Number(value)} ${unit}`.trim();
   }
   if (unit) throw new Error("Unexpected evidence unit");
-  return value.trim().toLowerCase();
+  return raw.trim().toLowerCase();
 }

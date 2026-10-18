@@ -1,0 +1,1 @@
+ALTER TABLE "signal_desk"."import_jobs" ADD COLUMN "dropped_claims" integer DEFAULT 0 NOT NULL;

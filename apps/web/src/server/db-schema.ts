@@ -338,6 +338,7 @@ export const importJobs = privateSchema.table("import_jobs", {
   fence: integer("fence").notNull().default(0),
   lease_until: timestamp("lease_until", { withTimezone: true }),
   error: text("error"),
+  dropped_claims: integer("dropped_claims").notNull().default(0),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

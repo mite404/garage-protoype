@@ -22,7 +22,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { database, orm } from "./db";
+import { beginLocked, database, orm } from "./db";
 import {
   claims as claimTable,
   evidenceBlockers,
@@ -129,6 +129,7 @@ const jobView = z.object({
   attempt: z.number(),
   mode: z.enum(["provider", "saved_example"]),
   model: z.string(),
+  droppedClaims: z.number(),
 });
 const blockerView = z.object({
   id: z.string(),
@@ -174,9 +175,7 @@ export async function evidenceTransaction<T>(
 ) {
   const db = await database().connect();
   try {
-    await orm(db).execute(sql`begin`);
-    await orm(db).execute(sql`set local lock_timeout='5s'`);
-    await orm(db).execute(sql`select signal_desk.lock_evidence_access()`);
+    await beginLocked(db, sql`select signal_desk.lock_evidence_access()`);
     const order: AccessCheck[] =
       permission === "write" ? ["write", "opportunity"] : ["opportunity"];
     const { opportunity } = await requireOpportunityAccess(actor, opportunityId, order, role, db);
@@ -551,6 +550,7 @@ export async function getWorkbench(actor: Actor, opportunityId: string) {
             attempt: importJobs.attempt,
             mode: importJobs.mode,
             model: importJobs.model,
+            droppedClaims: importJobs.dropped_claims,
           })
           .from(importJobs)
           .where(

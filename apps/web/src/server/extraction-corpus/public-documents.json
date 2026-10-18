@@ -1,0 +1,234 @@
+{
+  "label": "PUBLIC documents supplied by Ethan on 2026-10-18 (fixtures/seller-documents). Real, publicly distributed brochures and an Army manual; not synthetic and not customer data. Labels frozen before any model run on these documents.",
+  "version": "public-documents-v1",
+  "frozen": "2026-10-18, before any model run on these documents",
+  "rules": {
+    "match": "Same as extraction-corpus-v1.",
+    "options": "A brochure that lists alternatives (chassis options, a pump range) states no single fact; any claim for that field is a false positive.",
+    "excerpt": "The Army manual document is its equipment data pages 34 to 38, cut with pdfseparate and pdfunite; page numbers are relative to that cut."
+  },
+  "packets": [
+    {
+      "id": "PD1",
+      "title": "HME Ahrens-Fox Wildland Type 1 Model 18 brochure",
+      "documents": [
+        {
+          "id": "H1",
+          "name": "HME-Wildland-Type1.pdf",
+          "kind": "document",
+          "format": "file-pdf",
+          "file": "HME-Wildland-Type1.pdf",
+          "sha256": "01e53b1e7043be821b72c3dfb383475a3527b71716d6f4db6edd3416a472e59c"
+        }
+      ],
+      "claims": [
+        {
+          "id": "H01",
+          "document": "H1",
+          "field": "chassisManufacturer",
+          "value": "HME",
+          "unit": "",
+          "page": 1,
+          "excerpt": "Chassis: HME Custom",
+          "alternatives": [
+            "HME Custom",
+            "HME Custom - Short Front Overhang (SFO)",
+            "HME Custom SFO",
+            "HME Custom (SFO)"
+          ]
+        },
+        {
+          "id": "H02",
+          "document": "H1",
+          "field": "bodyBuilder",
+          "value": "HME Ahrens-Fox",
+          "unit": "",
+          "page": 1,
+          "excerpt": "HME AHRENS-FOX",
+          "alternatives": ["HME", "HME Ahrens Fox"]
+        },
+        {
+          "id": "H03",
+          "document": "H1",
+          "field": "model",
+          "value": "Wildland Type 1 Model 18",
+          "unit": "",
+          "page": 1,
+          "excerpt": "WILDLAND TYPE 1 MODEL 18",
+          "alternatives": [
+            "Model 18",
+            "Type 1 Model 18",
+            "HME Ahrens-Fox Wildland Type 1 Model 18",
+            "Wildland Type 1, Model 18"
+          ]
+        },
+        {
+          "id": "H04",
+          "document": "H1",
+          "field": "transmission",
+          "value": "Allison 3000EVS",
+          "unit": "",
+          "page": 1,
+          "excerpt": "Allison 3000EVS Transmission",
+          "alternatives": ["Allison 3000EVS Transmission", "Allison 3000 EVS", "3000EVS"]
+        },
+        {
+          "id": "H05",
+          "document": "H1",
+          "field": "pumpCapacity",
+          "value": "1500",
+          "unit": "gpm",
+          "page": 1,
+          "excerpt": "1500 GPM"
+        },
+        {
+          "id": "H06",
+          "document": "H1",
+          "field": "tankCapacity",
+          "value": "800",
+          "unit": "gal",
+          "page": 1,
+          "excerpt": "Tank: 800 Gallons"
+        }
+      ],
+      "optional": [{ "document": "H1", "field": "fuel", "value": "diesel", "unit": "" }],
+      "conflicts": []
+    },
+    {
+      "id": "PD2",
+      "title": "US Army TM 5-4210-220-12 equipment data, Model 2500L",
+      "documents": [
+        {
+          "id": "T1",
+          "name": "TM-5-4210-220-12 equipment data pages 34-38.pdf",
+          "kind": "document",
+          "format": "file-pdf",
+          "file": "TM-5-4210-220-12.pdf",
+          "sha256": "587f9aef73676d73da600eadcdf4f49816fd6aa994617bf8dd383437e615d2d4",
+          "pageRange": [34, 38]
+        }
+      ],
+      "claims": [
+        {
+          "id": "T01",
+          "document": "T1",
+          "field": "chassisManufacturer",
+          "value": "Amertek Inc",
+          "unit": "",
+          "page": 1,
+          "excerpt": "Amertek Inc",
+          "alternatives": ["Amertek", "Amertek Inc."]
+        },
+        {
+          "id": "T02",
+          "document": "T1",
+          "field": "bodyBuilder",
+          "value": "Amertek Inc",
+          "unit": "",
+          "page": 1,
+          "excerpt": "Amertek Inc",
+          "alternatives": ["Amertek", "Amertek Inc."]
+        },
+        {
+          "id": "T03",
+          "document": "T1",
+          "field": "fuel",
+          "value": "DF2",
+          "unit": "",
+          "page": 1,
+          "excerpt": "DF2",
+          "alternatives": [
+            "diesel",
+            "diesel fuel",
+            "diesel (DF2)",
+            "DF2 diesel",
+            "DF2 (diesel)",
+            "diesel fuel no. 2"
+          ]
+        },
+        {
+          "id": "T04",
+          "document": "T1",
+          "field": "transmission",
+          "value": "HT 750 DRD",
+          "unit": "",
+          "page": 2,
+          "excerpt": "HT 750 DRD",
+          "alternatives": ["Detroit Diesel Allison HT 750 DRD", "Allison HT 750 DRD"]
+        },
+        {
+          "id": "T05",
+          "document": "T1",
+          "field": "tankCapacity",
+          "value": "660",
+          "unit": "gal",
+          "page": 4,
+          "excerpt": "660 gal (2500 L)"
+        },
+        {
+          "id": "T06",
+          "document": "T1",
+          "field": "pumpCapacity",
+          "value": "1000",
+          "unit": "gpm",
+          "page": 4,
+          "excerpt": "1000 gpm at 150 psi"
+        }
+      ],
+      "optional": [
+        { "document": "T1", "field": "tankCapacity", "value": "2500", "unit": "L" },
+        { "document": "T1", "field": "pumpCapacity", "value": "3790", "unit": "L/min" },
+        { "document": "T1", "field": "pumpCapacity", "value": "600", "unit": "gpm" },
+        { "document": "T1", "field": "pumpCapacity", "value": "2270", "unit": "L/min" }
+      ],
+      "conflicts": []
+    },
+    {
+      "id": "PD3",
+      "title": "BME Sierra Mini Pumper brochure, page images only",
+      "documents": [
+        {
+          "id": "S1",
+          "name": "MiniPumper_Sierra_Brochure2025.pdf",
+          "kind": "document",
+          "format": "image-pdf",
+          "file": "MiniPumper_Sierra_Brochure2025.pdf",
+          "sha256": "c03498e4ffcbc405443a2fcab8e53d231472db9f2e155c794bc5f295aa4f51ff"
+        }
+      ],
+      "claims": [
+        {
+          "id": "S01",
+          "document": "S1",
+          "field": "tankCapacity",
+          "value": "300",
+          "unit": "gal",
+          "page": 2,
+          "excerpt": "300 Gallon Poly Water Tank"
+        },
+        {
+          "id": "S02",
+          "document": "S1",
+          "field": "bodyBuilder",
+          "value": "BME",
+          "unit": "",
+          "page": 1,
+          "excerpt": "BME's Mini Pumper",
+          "alternatives": ["BME Fire Trucks", "BME Fire"]
+        },
+        {
+          "id": "S03",
+          "document": "S1",
+          "field": "model",
+          "value": "Sierra",
+          "unit": "",
+          "page": 1,
+          "excerpt": "SIERRA",
+          "alternatives": ["Sierra Mini Pumper", "BME Sierra", "BME Sierra Mini Pumper"]
+        }
+      ],
+      "optional": [],
+      "conflicts": []
+    }
+  ]
+}

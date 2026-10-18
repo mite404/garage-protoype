@@ -18,6 +18,10 @@ const probes: Record<string, string> = {
   "0010_jev-routing": "select to_regclass('signal_desk.inquiry_suggestions') as name",
   "0011_jev-routing-policies":
     "select (select policyname from pg_policies where schemaname='signal_desk' and tablename='inquiry_suggestions' and policyname='server_insert') as name",
+  "0012_derived-locators":
+    "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='import_jobs' and column_name='dropped_claims') as name",
+  "0013_derived-locators-access":
+    "select (select conname from pg_constraint where conname='import_jobs_dropped_claims_check') as name",
 };
 const migrations = new URL("../../../../db/migrations/", import.meta.url);
 
