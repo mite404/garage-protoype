@@ -14,11 +14,13 @@
     "cloudflare:dev": "cd cloudflare && vite dev",
     "cloudflare:build": "cd cloudflare && vite build",
     "cloudflare:deploy": "cd cloudflare && vite build && wrangler deploy",
+    "website:build": "opennextjs-cloudflare build",
+    "website:preview": "opennextjs-cloudflare preview",
+    "website:deploy": "opennextjs-cloudflare deploy",
     "eval:latency": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/turn-latency.ts",
     "eval:latency:control": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/provider-control.ts",
     "eval:jev": "node --conditions=react-server --import tsx scripts/eval-jev-routing.ts",
     "eval:extraction": "node --conditions=react-server --import tsx src/extraction-eval.ts",
-    "build:cloudflare": "opennextjs-cloudflare build",
     "compare:pdf": "node --conditions=react-server --import tsx scripts/compare-pdf-extractors.ts"
   },
   "dependencies": {

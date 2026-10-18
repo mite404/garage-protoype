@@ -55,6 +55,9 @@ jobs:
           npm run check
       - name: Check streaming and import guarantees on the Cloudflare Worker
         run: npm run test:cloudflare
+      # Last: OpenNext reruns `next build`, which would replace the build the checks started.
+      - name: Build the website Worker
+        run: npm run website:build
       - name: Show Cloudflare Worker logs
         if: failure()
         run: cat apps/web/cloudflare/.wrangler/test-worker.log || true

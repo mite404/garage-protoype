@@ -34,6 +34,7 @@
     "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts",
     "streaming": "npm run streaming -w @signal-desk/web",
     "cloudflare:build": "npm run cloudflare:build -w @signal-desk/web",
+    "website:build": "npm run website:build -w @signal-desk/web",
     "eval:latency": "npm run eval:latency -w @signal-desk/web --",
     "eval:latency:control": "npm run eval:latency:control -w @signal-desk/web --"
   },
