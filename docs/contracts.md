@@ -264,7 +264,9 @@ documents. No message, commercial assurance, or response draft is created or sen
 
 `src/worker.ts` exports `runWorker(signal, provider?)`. Its CLI is
 `node --conditions=react-server --import tsx src/worker.ts`; use a supervised service with the
-runtime database role. The import worker has no installed live provider adapter. A missing
+runtime database role. On Cloudflare, the owner Worker's `signal-desk-imports` Queue consumer
+replaces it: queueing or retrying a job wakes the owner, and its cron sweep re-enqueues claimable
+jobs. Neither import worker has an installed live provider adapter. A missing
 adapter fails the job as unavailable, never as successful processing. Lease expiry never refunds
 inference spend.
 

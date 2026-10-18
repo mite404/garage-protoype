@@ -58,6 +58,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-030: Run the specialist streaming owner as a Cloudflare Worker on the Workers Free plan, with
   one Flue Durable Object per conversation reaching PostgreSQL through uncached Hyperdrive, because
   it removes an always-on host while the same guarantee suite passes on Node and workerd.
+- ADR-031: Serve the website as its own OpenNext Worker on Workers Paid, calling the owner Worker
+  through a service binding, and run imports as a Queue consumer on the owner, because the Free
+  plan's 10 ms CPU limit fails authenticated pages and the two Workers together exceed its 3 MiB.
 
 ## Proposed
 

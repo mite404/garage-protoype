@@ -150,21 +150,36 @@ transport against a synthetic local provider. It does not spend tokens or verify
 authentication. See the [trial result](plans/008-flue-specialist-trial.md#implementation-evidence)
 for the remaining permissioned live-provider check.
 
-### Cloudflare streaming Worker
+### Cloudflare Workers
 
-`apps/web/cloudflare/` runs the same turns on Cloudflare instead of `npm run streaming` (ADR-030).
-Run only one owner against a database. Next.js wakes the Worker when `STREAM_WORKER_URL` and
-`STREAM_WORKER_TOKEN` are set; without them it only records turns, as before. The Worker drives
-each turn from a `TurnDriver` Durable Object, runs Flue's agent as one Durable Object per
-conversation, and reaches PostgreSQL through Hyperdrive on the session pooler (port 5432). A
-one-minute cron sweep, run inside a Durable Object, recovers turns whose wake was lost.
+Two Workers share one Hyperdrive config (ADR-030, ADR-031). `apps/web/cloudflare/` is the owner:
+it runs the same turns as `npm run streaming` and the same imports as `npm run worker`. The
+OpenNext build of the Next.js app is the website. Run only one owner against a database.
+
+- The website reaches the owner through the `STREAM_OWNER` service binding to its `StreamOwner`
+  entrypoint. It is unreachable from the internet, so it needs no token.
+- A Next.js app on Node wakes the owner over HTTP instead, when `STREAM_WORKER_URL` and
+  `STREAM_WORKER_TOKEN` are set. Without them it only records turns and jobs, and the Node owner
+  and polling import worker find them.
+- The owner drives each turn from a `TurnDriver` Durable Object and runs Flue's agent as one
+  Durable Object per conversation.
+- Imports go through the `signal-desk-imports` Queue. The consumer runs the same `claimImport` and
+  `processImport` as the Node worker, so the fenced database lease still decides who processes a
+  job, and redelivery is harmless.
+- A one-minute cron sweep, run inside a Durable Object, recovers turns whose wake was lost and
+  re-enqueues queued imports or imports whose lease expired.
+- PDF text is extracted in the upload request with `unpdf`. The page count is checked first, so a
+  500-page PDF costs about 1 s of CPU at most.
 
 | Command | Does |
 | --- | --- |
 | `npm run cloudflare:build` | Builds the deployable Worker into `apps/web/cloudflare/dist/` |
 | `npm run cloudflare:dev -w @signal-desk/web` | Runs the Worker in local workerd |
 | `npm run cloudflare:deploy -w @signal-desk/web` | Builds and deploys with Wrangler |
-| `npm run test:cloudflare` | Runs `streaming.test.ts` against local workerd |
+| `npm run website:build` | Builds the website Worker into `apps/web/.open-next/` |
+| `npm run website:preview -w @signal-desk/web` | Runs the built website in local workerd |
+| `npm run website:deploy -w @signal-desk/web` | Builds and deploys the website with Wrangler |
+| `npm run test:cloudflare` | Runs the streaming and import guarantees against local workerd |
 
 `npm run test:cloudflare` needs `TEST_DATABASE_URL`, the production Next build, and a role that
 can create the `signal_desk_worker_test` login role, because Hyperdrive's local proxy drops
@@ -175,23 +190,27 @@ are kept in `apps/web/cloudflare/.wrangler/test-worker.log`. Run Wrangler and Vi
 package scripts or from `apps/web/cloudflare/` directly: `npx` in a workspace runs from the
 package root and picks up the wrong configuration.
 
-To deploy, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set and run from
-`apps/web/cloudflare/`:
+Both Workers run on Workers Paid: the website exceeds the Free plan's 10 ms CPU per request (see
+[the OpenNext spike](opennext-spike.md)). To deploy, with `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` set:
 
 1. Create the Hyperdrive config with caching disabled, since a cached read could keep showing a
    revoked observer a conversation for up to a minute:
-   `wrangler hyperdrive create signal-desk-streaming --connection-string="$URL" --caching-disabled`.
+   `wrangler hyperdrive create signal-desk --connection-string="$URL" --caching-disabled`.
    Use a login role that defaults to `signal_desk_runtime` and the session pooler on port 5432.
-2. Put the returned id in `wrangler.jsonc`.
-3. Write `STREAM_WORKER_TOKEN` and `OPENROUTER_API_KEY` to a mode-600 JSON file outside the
-   repository and deploy with `npm run cloudflare:build` then
-   `wrangler deploy --secrets-file <file>`. Delete the file afterwards.
-4. Set `STREAM_WORKER_URL` and `STREAM_WORKER_TOKEN` on the Next.js deployment, then stop the
-   Node owner.
+2. Put the returned id in both `apps/web/cloudflare/wrangler.jsonc` and `apps/web/wrangler.jsonc`.
+3. Create the import queue: `wrangler queues create signal-desk-imports`.
+4. From `apps/web/cloudflare/`, write `OPENROUTER_API_KEY` to a mode-600 JSON file outside the
+   repository and deploy the owner first, since the website binds to it:
+   `npm run cloudflare:build` then `wrangler deploy --secrets-file <file>`. Delete the file
+   afterwards. `STREAM_WORKER_TOKEN` is needed only while a Node app wakes the owner.
+5. Set the website's public variables, such as `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
+   `APP_ORIGIN`, then deploy it with `npm run website:deploy -w @signal-desk/web`.
+6. Stop the Node owner and the polling import worker.
 
-The API token needs Account: Workers Scripts Edit and Hyperdrive Edit. The account must have a
-`workers.dev` subdomain, which only the account owner can create in the dashboard. Never set
-`SIGNAL_DESK_TEST_*` variables on a deployed Worker.
+The API token needs Account: Workers Scripts Edit, Hyperdrive Edit and Queues Edit. The account
+must have a `workers.dev` subdomain, which only the account owner can create in the dashboard.
+Never set `SIGNAL_DESK_TEST_*` variables on a deployed Worker.
 
 ### Turn latency evaluation
 

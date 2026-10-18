@@ -77,8 +77,11 @@ Acceptance holds. The quality differences are within single-run noise.
 **Where imports run:** a Queue consumer on the owner Worker. The upload request enqueues the job
 ID, and the consumer runs the existing `claimImport(id)` and `processImport`. The Postgres lease
 stays the source of truth, so a redelivered message is harmless. A cron sweep re-enqueues jobs
-whose lease expired. A Durable Object adds nothing here, because jobs share no state. PDF parsing
-costs up to about 1 s of CPU, so it should also move from the upload request into the consumer.
+whose lease expired. A Durable Object adds nothing here, because jobs share no state.
+
+PDF parsing stays in the upload request. With the page count checked first it costs at most about
+1 s of CPU, well inside the Paid limit of 30 s. Moving it into the consumer would need a pending
+state for every source, because imports freeze source text when they are queued.
 
 ## 4. One Worker or two?
 
@@ -91,8 +94,15 @@ Use two Workers, with both bound to the same Hyperdrive config:
 - The website should reach the owner through a service binding instead of the public URL and
   token.
 
-## Not done
+## Follow-up (ADR-031)
 
-- Nothing touches `garage-prototype` or production.
+The recommendation is built: the website Worker calls the owner through the `StreamOwner` service
+binding, and imports run on the owner's Queue consumer. `npm run test:cloudflare` checks the
+consumer on workerd, including a repeated wake and recovery by the cron sweep. Both Workers were
+also run together locally against the spike project, where sign-in, a full turn, cancellation, a
+PDF upload through `unpdf` and a queued import all worked.
+
+- On current main the website is 3,609 KiB gzipped and the owner 1,308 KiB. The website no
+  longer fits Free's 3 MiB even alone; Paid allows 10 MiB.
+- Nothing touches `garage-prototype` or production. Deploying waits for Workers Paid.
 - The staging Workers `signal-desk-web-staging` and `signal-desk-streaming-staging` stay in place.
-- The Queue consumer, the service binding and the website deploy pipeline are not built.
