@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
+import { useState } from "react";
 import type { MunicipalityWorkspace as Workspace } from "@signal-desk/contracts/municipality-schema";
+import type { StreamView } from "@signal-desk/contracts/assistance-schema";
 import MunicipalityWorkspace from "./municipality-workspace";
+import SaleChat from "./sale-chat";
 
 const workspace: Workspace = {
   organization: {
@@ -11,6 +14,12 @@ const workspace: Workspace = {
     region: "Texas",
     unit: "Engine 001",
     synthetic: true,
+  },
+  thumbnails: {
+    pumper: {
+      url: new URL("./assets/synthetic-pumper.webp", import.meta.url).href,
+      label: "Synthetic pumper illustration, not vehicle evidence",
+    },
   },
   acquisitions: [
     {
@@ -53,15 +62,54 @@ const workspace: Workspace = {
   ],
 };
 
+function PreviewChat() {
+  const [streams, setStreams] = useState<StreamView[]>([
+    {
+      id: "synthetic-conversation",
+      inquiryId: "synthetic-question",
+      message: "What is blocking this purchase?",
+      state: "completed",
+      text: "The pump-test report is missing. The proposed $84,000 purchase remains contingent on its review. I can help prepare a request for the seller.",
+      cards: [],
+      errorCode: null,
+    },
+  ]);
+  return (
+    <SaleChat
+      context="Austin · Engine 001"
+      streams={streams}
+      pending={false}
+      connection="Synthetic preview · No model connected"
+      denied={false}
+      onSubmit={async (message) =>
+        setStreams([
+          ...streams,
+          {
+            id: String(streams.length),
+            inquiryId: "synthetic-preview",
+            message,
+            state: "completed",
+            text: "Preview message recorded locally. No model or external messaging is connected.",
+            cards: [],
+            errorCode: null,
+          },
+        ])
+      }
+      onStop={() => {}}
+    />
+  );
+}
+
 const meta = {
   title: "Municipal sales/Workspace",
   component: MunicipalityWorkspace,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "fullscreen", theme: "light" },
+  args: { workspace, chat: <PreviewChat /> },
   decorators: [
-    (Story) => (
-      <main className="min-h-screen px-5 py-8">
+    (Story, { parameters }) => (
+      <div data-theme={parameters.theme}>
         <Story />
-      </main>
+      </div>
     ),
   ],
 } satisfies Meta<typeof MunicipalityWorkspace>;
@@ -69,14 +117,30 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
-  args: { workspace },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
     await expect(canvas.getByText(/Contacted San Antonio Fire Department/)).toBeVisible();
-    await expect(canvas.getByText("$84,000")).toHaveTextContent("$84,000 proposed");
+    await expect(canvas.getByText("$84,000")).toBeVisible();
+    await expect(
+      within(canvas.getByRole("region", { name: "Active acquisition" })).getByRole("img", {
+        name: "Synthetic pumper illustration, not vehicle evidence",
+      }),
+    ).toBeVisible();
   },
 };
+export const Dark: Story = { ...Default, parameters: { theme: "dark" } };
+export const ChatOpen: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Sale assistant" }));
+    const dialog = canvas.getByRole("dialog", { name: "Sale assistant" });
+    await expect(dialog).toBeVisible();
+    await expect(within(dialog).getByText("What is blocking this purchase?")).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
+  },
+};
+export const DarkChatOpen: Story = { ...ChatOpen, parameters: { theme: "dark" } };
 export const EmptyActivityAndListings: Story = {
   args: { workspace: { ...workspace, activity: [], ownedListings: [] } },
   play: async ({ canvasElement }) => {

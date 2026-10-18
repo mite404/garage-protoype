@@ -19,13 +19,13 @@ export default async function MunicipalityPage({ params }: { params: Promise<{ i
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return (
-      <section>
+      <main id="main-content" className="municipal-main py-10">
         <h1>Department unavailable.</h1>
         <p className="mt-4">{error.message} No private records have been loaded.</p>
         <Link className="quiet-button mt-6" href="/desk">
           Back to departments
         </Link>
-      </section>
+      </main>
     );
   }
   const { organization, acquisitions } = workspace;

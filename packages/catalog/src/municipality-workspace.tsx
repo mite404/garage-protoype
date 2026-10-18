@@ -19,61 +19,61 @@ const date = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-function MunicipalityIdentity({ organization }: Pick<Workspace, "organization">) {
-  return (
-    <header className="mt-7 mb-10">
-      {organization.synthetic && <p className="eyebrow mb-3">Synthetic demonstration</p>}
-      <h1>{organization.name}</h1>
-      <p className="mt-3 text-muted-foreground">
-        {organization.city}, {organization.region}
-        {organization.unit && ` · ${organization.unit}`}
-      </p>
-    </header>
+function VehicleThumbnail({
+  thumbnail,
+}: {
+  thumbnail?: NonNullable<Workspace["thumbnails"]>[string];
+}) {
+  return thumbnail ? (
+    <img
+      className="municipal-thumbnail"
+      src={thumbnail.url}
+      alt={thumbnail.label}
+      width="132"
+      height="96"
+    />
+  ) : (
+    <div className="municipal-thumbnail municipal-no-photo">No approved photo</div>
   );
 }
 
-function Acquisition({ deal }: { deal: Workspace["acquisitions"][number] }) {
+function Acquisition({
+  deal,
+  thumbnail,
+}: {
+  deal: Workspace["acquisitions"][number];
+  thumbnail?: NonNullable<Workspace["thumbnails"]>[string];
+}) {
   return (
-    <article className="panel mb-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-semibold">{deal.title}</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Seller · {deal.seller ?? "Not recorded"}
-          </p>
-        </div>
-        {deal.terms && <span className="state state-unknown">{stages[deal.terms.stage]}</span>}
-      </div>
-      {deal.terms ? (
-        <>
-          <p className="mt-6 text-3xl font-semibold tracking-tight">
-            {money.format(deal.terms.amountCents / 100)}{" "}
-            <span className="text-sm font-normal text-muted-foreground">proposed</span>
-          </p>
-          <div className="mt-5 rounded-lg border border-border bg-muted p-4">
-            <p className="text-sm font-semibold">Purchase conditions</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-              {deal.terms.conditions.map((condition, index) => (
-                <li key={index}>{condition}</li>
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : (
-        <p className="mt-5 text-sm text-muted-foreground">
-          No proposed amount or conditions recorded.
-        </p>
-      )}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground">
-          Prototype only. No real escrow, payment or delivery commitment.
-        </p>
-        <a
-          className="text-sm font-semibold text-primary"
-          href={`/desk/opportunities/${encodeURIComponent(deal.id)}`}
-        >
-          Review evidence →
-        </a>
+    <article className="municipal-acquisition">
+      <VehicleThumbnail thumbnail={thumbnail} />
+      <div className="municipal-acquisition-content">
+        <h3>{deal.title}</h3>
+        <p className="municipal-secondary">Seller: {deal.seller ?? "Not recorded"}</p>
+        {deal.terms ? (
+          <>
+            <p className="municipal-price">
+              <strong>{money.format(deal.terms.amountCents / 100)}</strong> proposed
+            </p>
+            <p className="municipal-state">
+              <span>State:</span> <span className="state">{stages[deal.terms.stage]}</span>
+            </p>
+            <div className="municipal-conditions">
+              <span>Condition{deal.terms.conditions.length > 1 ? "s" : ""}:</span>
+              <ul>
+                {deal.terms.conditions.map((condition, index) => (
+                  <li key={index}>{condition}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        ) : (
+          <p className="municipal-secondary">No proposed amount or conditions recorded.</p>
+        )}
+        <footer className="municipal-acquisition-footer">
+          <p>Simulated deal. No payment or escrow funds held.</p>
+          <a href={`/desk/opportunities/${encodeURIComponent(deal.id)}`}>Review evidence →</a>
+        </footer>
       </div>
     </article>
   );
@@ -83,60 +83,52 @@ function MunicipalityInventory({
   organization,
   activity,
   ownedListings,
-}: Pick<Workspace, "organization" | "activity" | "ownedListings">) {
+  thumbnails,
+}: Pick<Workspace, "organization" | "activity" | "ownedListings" | "thumbnails">) {
   return (
     <>
-      <section aria-labelledby="interest-heading" className="mb-9">
-        <h2 id="interest-heading" className="mb-4">
-          Interested in
-        </h2>
-        <div className="panel divide-y divide-border">
+      <section aria-labelledby="interest-heading" className="municipal-section">
+        <h2 id="interest-heading">Interested in</h2>
+        <div className="municipal-list">
           {!activity.length && (
-            <p className="text-sm text-muted-foreground">
-              No favorites or seller contact activity recorded.
-            </p>
+            <p className="municipal-empty">No favorites or seller contact activity recorded.</p>
           )}
           {activity.map((item) => (
-            <article
-              key={item.id}
-              className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
-            >
+            <article key={item.id} className="municipal-list-row">
+              <VehicleThumbnail thumbnail={thumbnails?.[item.vehicleId]} />
               <div>
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3>
                   {item.kind === "favorite"
-                    ? "Added to favorites"
-                    : `Contacted ${item.seller ?? "seller"}`}{" "}
-                  · {date.format(item.occurredAt)}
+                    ? "Favorited"
+                    : `Contacted ${item.seller ?? "seller"} about`}{" "}
+                  {item.title}
+                </h3>
+                <p className="municipal-secondary">
+                  {date.format(item.occurredAt)} ·{" "}
+                  {item.kind === "favorite" ? "Added to watchlist" : "Contact recorded"}
                 </p>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {item.kind === "favorite" ? "Favorite" : "Contact metadata only"}
-              </span>
             </article>
           ))}
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Activity metadata only. Seller messages are not read.
-        </p>
+        <p className="municipal-note">Activity metadata only. Seller messages are not read.</p>
       </section>
-      <section aria-labelledby="owned-heading">
-        <h2 id="owned-heading" className="mb-4">
-          Owned listings
-        </h2>
-        <div className="panel divide-y divide-border">
-          {!ownedListings.length && (
-            <p className="text-sm text-muted-foreground">No owned listings recorded.</p>
-          )}
+      <section aria-labelledby="owned-heading" className="municipal-section">
+        <h2 id="owned-heading">Selling</h2>
+        <div className="municipal-list">
+          {!ownedListings.length && <p className="municipal-empty">No owned listings recorded.</p>}
           {ownedListings.map((listing) => (
-            <article key={listing.id} className="py-4 first:pt-0 last:pb-0">
-              <h3 className="font-semibold">{listing.title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Owned by {organization.name} ·{" "}
-                {listing.publishedAt
-                  ? `Listed ${date.format(listing.publishedAt)}`
-                  : "Not published"}
-              </p>
+            <article key={listing.id} className="municipal-list-row">
+              <VehicleThumbnail thumbnail={thumbnails?.[listing.id]} />
+              <div>
+                <h3>{listing.title}</h3>
+                <p className="municipal-secondary">{organization.name} (owned)</p>
+                <p className="municipal-secondary">
+                  {listing.publishedAt
+                    ? `Listed ${date.format(listing.publishedAt)}`
+                    : "Not published"}
+                </p>
+              </div>
             </article>
           ))}
         </div>
@@ -145,7 +137,7 @@ function MunicipalityInventory({
   );
 }
 
-/** Renders the municipality projection with a caller-supplied live chat. */
+/** Composes the municipality page around real projection data and caller-owned chat. */
 export default function MunicipalityWorkspace({
   workspace,
   chat,
@@ -153,26 +145,53 @@ export default function MunicipalityWorkspace({
   workspace: Workspace;
   chat?: ReactNode;
 }) {
-  const { organization, acquisitions } = workspace;
+  const { organization, acquisitions, thumbnails } = workspace;
   return (
-    <div className="mx-auto max-w-4xl pb-24">
-      <a href="/desk" className="text-sm text-muted-foreground">
-        ← Municipal sales
+    <div className="municipal-page">
+      <a className="dispatch-skip" href="#main-content">
+        Skip to content
       </a>
-      <MunicipalityIdentity organization={organization} />
-      <section aria-labelledby="acquisition-heading" className="mb-9">
-        <h2 id="acquisition-heading" className="mb-4">
-          Active acquisition
-        </h2>
-        {acquisitions.map((deal) => (
-          <Acquisition key={deal.id} deal={deal} />
-        ))}
-      </section>
-      <MunicipalityInventory
-        organization={organization}
-        activity={workspace.activity}
-        ownedListings={workspace.ownedListings}
-      />
+      <header className="municipal-topbar">
+        <nav aria-label="Municipal sales">
+          <a className="municipal-brand" href="/">
+            Signal Desk
+          </a>
+          <a className="municipal-section-link" href="/desk">
+            Municipal Sales
+          </a>
+        </nav>
+        <div className="municipal-topbar-context">
+          {organization.synthetic && <span className="state">Synthetic demonstration</span>}
+          <span>
+            {organization.city}, {organization.region}
+          </span>
+        </div>
+      </header>
+      <main id="main-content" className="municipal-main" tabIndex={-1}>
+        <header className="municipal-identity">
+          <h1>{organization.name}</h1>
+          <p>
+            {organization.city}, {organization.region}
+            {organization.unit && ` · ${organization.unit}`}
+          </p>
+        </header>
+        <section aria-labelledby="acquisition-heading" className="municipal-section">
+          <h2 id="acquisition-heading">Active acquisition</h2>
+          {acquisitions.map((deal) => (
+            <Acquisition key={deal.id} deal={deal} thumbnail={thumbnails?.[deal.vehicleId]} />
+          ))}
+        </section>
+        <MunicipalityInventory
+          organization={organization}
+          activity={workspace.activity}
+          ownedListings={workspace.ownedListings}
+          thumbnails={thumbnails}
+        />
+        <footer className="municipal-note">
+          Independent prototype. Not affiliated with Garage. No messages, payments or commercial
+          commitments.
+        </footer>
+      </main>
       {chat}
     </div>
   );

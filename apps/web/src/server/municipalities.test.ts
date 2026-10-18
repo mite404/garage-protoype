@@ -6,6 +6,8 @@ import { prepareTestDatabase } from "./test-database";
 import { getMunicipalityWorkspace, listMunicipalities } from "./municipalities";
 import { seedMunicipality } from "./municipality-seed";
 import { submitStream, streamPrompt } from "./streaming";
+import { addSource, getWorkbench, reviewEvidence } from "./evidence";
+import { startTestApp } from "./test-app";
 
 const url = process.env.TEST_DATABASE_URL;
 if (process.env.CI && !url) throw new Error("CI requires TEST_DATABASE_URL.");
@@ -64,6 +66,73 @@ test(
       assert.doesNotMatch(
         JSON.stringify(view),
         /PRIVATE|HIDDEN|internal_notes|message|municipal-hidden/,
+      );
+      assert.deepEqual(view.thumbnails, {});
+      const photo = await addSource(actor, "municipal-deal", {
+        name: "Synthetic thumbnail permission check",
+        kind: "photo",
+        mediaType: "image/png",
+        content: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+          "base64",
+        ),
+        audience: "sales",
+        shareable: true,
+        permission: "synthetic",
+        provenance: "Synthetic pixel for permission testing, not vehicle evidence",
+      });
+      const review = {
+        kind: "reviewPhoto",
+        sourceId: photo.id,
+        view: "front",
+        readable: true,
+        approved: true,
+        reason: "Synthetic permission test",
+      };
+      const workbench = await getWorkbench(actor, "municipal-deal");
+      await reviewEvidence(actor, "municipal-deal", workbench.revision, review);
+      assert.deepEqual(
+        (await getMunicipalityWorkspace(actor, "austin-fire-department")).thumbnails,
+        {},
+      );
+      await db.query(
+        "update signal_desk.vehicles set published_at=now() where id='municipal-truck'",
+      );
+      assert.deepEqual(
+        (await getMunicipalityWorkspace(actor, "austin-fire-department")).thumbnails,
+        {
+          "municipal-truck": {
+            url: `/api/v1/public/media/${photo.id}`,
+            label: "Front supplied view · Reviewed readable",
+          },
+        },
+      );
+      const app = await startTestApp(user, session);
+      try {
+        const response = await fetch(`${app.origin}/desk/municipalities/austin-fire-department`, {
+          headers: { Cookie: app.cookie },
+        });
+        assert.equal(response.status, 200);
+        const html = await response.text();
+        assert.match(html, /aria-label="Municipal sales"/);
+        assert.match(html, /Austin Fire Department/);
+        assert.match(html, new RegExp(`/api/v1/public/media/${photo.id}`));
+        assert.match(html, /Simulated deal. No payment or escrow funds held./);
+        assert.doesNotMatch(
+          html,
+          /aria-label="Main navigation"|PRIVATE VEHICLE NOTE|PRIVATE DEAL NOTE/,
+        );
+      } finally {
+        await app.stop();
+      }
+      const approved = await getWorkbench(actor, "municipal-deal");
+      await reviewEvidence(actor, "municipal-deal", approved.revision, {
+        ...review,
+        approved: false,
+      });
+      assert.deepEqual(
+        (await getMunicipalityWorkspace(actor, "austin-fire-department")).thumbnails,
+        {},
       );
       await db.query(`insert into signal_desk.inference_models
         (id,enabled,max_input_bytes,max_photos,photo_tokens,overhead_tokens,max_output_tokens,input_micro_usd,output_micro_usd,max_attempts,retry_ms,timeout_ms)
@@ -132,7 +201,7 @@ test(
         code: "ACCESS_REVOKED",
       });
     } finally {
-      await db.query("delete from signal_desk.sources where id='municipal-private'");
+      await db.query("delete from signal_desk.sources where opportunity_id='municipal-deal'");
       await db.query(
         "delete from signal_desk.municipality_interests where organization_id='austin-fire-department'",
       );

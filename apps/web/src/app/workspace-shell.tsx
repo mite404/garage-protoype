@@ -14,6 +14,7 @@ const destinations = [
 /** Marks navigation from the current route without loading private records. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  if (/^\/desk\/municipalities\/[^/]+\/?$/.test(pathname)) return children;
   const active = destinations.findLast(
     ({ href }) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)),
   );

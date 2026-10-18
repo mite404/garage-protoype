@@ -25,6 +25,7 @@ const acquisitionSchema = z.object({
 /** Workspace projection. Activity contains metadata, never message bodies. */
 export const workspaceSchema = z.object({
   organization: organizationSchema,
+  thumbnails: z.record(z.string(), z.object({ url: z.string(), label: z.string() })).optional(),
   acquisitions: z.tuple([acquisitionSchema]).rest(acquisitionSchema),
   activity: z.array(
     z.object({

@@ -17,6 +17,26 @@ import {
 import { refreshActor, requireOpportunity, type Actor } from "./access";
 import { evidenceTransaction } from "./evidence";
 import { AppError } from "./errors";
+import { getPublicVehicle } from "./records";
+import { photoLabels } from "@signal-desk/contracts/photo-schema";
+
+async function publicThumbnails(client: Parameters<typeof orm>[0], vehicleIds: string[]) {
+  const thumbnails: NonNullable<MunicipalityWorkspace["thumbnails"]> = {};
+  for (const id of new Set(vehicleIds)) {
+    try {
+      const vehicle = await getPublicVehicle(id, client);
+      const photo = vehicle.photos[0];
+      if (photo)
+        thumbnails[id] = {
+          url: photo.mediaUrl,
+          label: `${photoLabels[photo.view]} supplied view · Reviewed readable`,
+        };
+    } catch (error) {
+      if (!(error instanceof AppError) || error.status !== 404) throw error;
+    }
+  }
+  return thumbnails;
+}
 
 /** Lists only departments with a currently assigned opportunity.
  * @throws {AppError} When the credential or specialist role is no longer valid.
@@ -122,10 +142,21 @@ export async function getMunicipalityWorkspace(
         .from(vehicles)
         .where(eq(vehicles.ownerOrganizationId, id))
         .orderBy(asc(vehicles.id));
+      const thumbnails = await publicThumbnails(client, [
+        ...acquisitions.map((deal) => deal.vehicleId),
+        ...activity.map((item) => item.vehicleId),
+        ...ownedListings.map((listing) => listing.id),
+      ]);
       for (const acquisition of acquisitions)
         await requireOpportunity(current, acquisition.id, "specialist", client);
       await requireOpportunity(current, anchor.opportunityId, "specialist", client);
-      return workspaceSchema.parse({ organization, acquisitions, activity, ownedListings });
+      return workspaceSchema.parse({
+        organization,
+        acquisitions,
+        activity,
+        ownedListings,
+        thumbnails,
+      });
     },
     "specialist",
     "read",

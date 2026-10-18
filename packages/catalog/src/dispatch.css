@@ -183,3 +183,229 @@
     padding: 0 20px 24px;
   }
 }
+
+.municipal-page {
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+  font: 14px/1.5 var(--font-sans);
+}
+.municipal-topbar,
+.municipal-main {
+  width: min(100%, 1100px);
+  margin-inline: auto;
+  padding-inline: 30px;
+}
+.municipal-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 78px;
+  padding-block: 16px;
+}
+.municipal-topbar nav,
+.municipal-topbar-context {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.municipal-section-link {
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.municipal-brand {
+  font: 600 20px/1.2 var(--font-display);
+  letter-spacing: -0.6px;
+}
+.municipal-topbar-context {
+  gap: 28px;
+  font-size: 12px;
+}
+.municipal-topbar .state {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.municipal-topbar .state,
+.municipal-state .state {
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  color: var(--primary);
+}
+.municipal-main {
+  padding-bottom: 100px;
+}
+.municipal-identity {
+  padding: 0 0 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.municipal-identity h1 {
+  margin: 0 0 4px;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -1px;
+}
+.municipal-identity p {
+  color: var(--muted-foreground);
+  font-size: 16px;
+}
+.municipal-section {
+  margin-bottom: 28px;
+}
+.municipal-section h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+.municipal-section h3 {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.municipal-acquisition,
+.municipal-list {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+}
+.municipal-acquisition {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.municipal-acquisition-content {
+  min-width: 0;
+  flex: 1;
+}
+.municipal-thumbnail {
+  width: 132px;
+  height: 98px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 5px;
+  background: var(--muted);
+}
+.municipal-no-photo {
+  display: grid;
+  place-content: center;
+  padding: 8px;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 11px;
+}
+.municipal-secondary {
+  margin-top: 3px;
+  color: var(--muted-foreground);
+}
+.municipal-price {
+  margin-top: 5px;
+  font-size: 16px;
+}
+.municipal-state,
+.municipal-conditions {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--muted-foreground);
+}
+.municipal-state .state {
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.municipal-conditions > span {
+  flex-shrink: 0;
+}
+.municipal-conditions ul {
+  display: grid;
+  gap: 4px;
+}
+.municipal-acquisition-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.municipal-acquisition-footer a {
+  color: var(--primary);
+}
+.municipal-list {
+  padding: 4px 16px;
+}
+.municipal-list-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-block: 12px;
+}
+.municipal-list-row .municipal-thumbnail {
+  width: 80px;
+  height: 64px;
+}
+.municipal-list-row h3 {
+  font-size: 14px;
+  font-weight: 500;
+}
+.municipal-list-row .municipal-secondary {
+  font-size: 12px;
+}
+.municipal-note {
+  margin-top: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.municipal-empty {
+  padding-block: 16px;
+  color: var(--muted-foreground);
+}
+.municipal-page .sale-chat {
+  width: min(390px, calc(100vw - 24px));
+  height: min(560px, calc(100dvh - 24px));
+}
+@media (max-width: 600px) {
+  .municipal-topbar,
+  .municipal-main {
+    padding-inline: 18px;
+  }
+  .municipal-topbar {
+    gap: 12px;
+    padding-block: 20px;
+  }
+  .municipal-topbar-context {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .municipal-identity h1 {
+    font-size: 28px;
+  }
+  .municipal-acquisition {
+    gap: 12px;
+    padding: 12px;
+  }
+  .municipal-acquisition > .municipal-thumbnail {
+    width: 72px;
+    height: 64px;
+  }
+  .municipal-conditions {
+    display: block;
+  }
+  .municipal-list-row {
+    gap: 12px;
+  }
+  .municipal-list-row .municipal-thumbnail {
+    width: 64px;
+    height: 56px;
+  }
+}
