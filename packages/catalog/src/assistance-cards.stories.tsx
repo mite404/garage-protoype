@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, within } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 import type { InlineCard } from "@signal-desk/contracts/assistance-schema";
 import AssistanceCard from "./assistance-cards";
 
@@ -18,6 +18,7 @@ const answer = {
 const review = {
   kind: "review",
   inquiryId: "synthetic-question-2",
+  routingRevision: 0,
   state: "conflict",
   blockerId: "synthetic-blocker-1",
   question: "What is the tank capacity?",
@@ -104,6 +105,56 @@ export const HumanReview: Story = {
       ...review,
       state: "human_review",
       nextAction: "Ask the specialist to interpret the buyer's question.",
+    },
+  },
+};
+export const JevSuggested: Story = {
+  args: {
+    card: {
+      ...review,
+      state: "human_review",
+      question: "How much water can it carry?",
+      nextAction: "Clarify the buyer's intent with the assigned specialist.",
+      suggestion: {
+        state: "suggested",
+        field: "tankCapacity",
+        confidence: 0.98,
+        modelVersion: "jev-1.13.0",
+      },
+    },
+    onAcceptSuggestion: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Tank capacity · 98% confidence")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Use suggested field" }));
+    await expect(args.onAcceptSuggestion).toHaveBeenCalledOnce();
+  },
+};
+export const JevNeedsReview: Story = {
+  args: {
+    card: {
+      ...review,
+      state: "human_review",
+      question: "Is the tank big enough for our department?",
+      nextAction: "Clarify the buyer's intent with the assigned specialist.",
+      suggestion: {
+        state: "needs_review",
+        reason: "judgment",
+        confidence: 0.94,
+        modelVersion: "jev-1.13.0",
+      },
+    },
+  },
+};
+export const JevUnavailable: Story = {
+  args: {
+    card: {
+      ...review,
+      state: "human_review",
+      question: "How much water can it carry?",
+      nextAction: "Clarify the buyer's intent with the assigned specialist.",
+      suggestion: { state: "unavailable", code: "NOT_CONFIGURED" },
     },
   },
 };

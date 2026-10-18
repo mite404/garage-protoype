@@ -75,11 +75,13 @@ function StreamTurns({
   streams,
   sending,
   pending,
+  onAcceptSuggestion,
   onCancel,
 }: {
   streams: StreamView[];
   sending: string | undefined;
   pending: boolean;
+  onAcceptSuggestion: (inquiryId: string, routingRevision: number) => void;
   onCancel: (turnId: string) => void;
 }) {
   return (
@@ -89,7 +91,7 @@ function StreamTurns({
           <Prose text={turn.text} />
           <div className="mt-4 space-y-4">
             {turn.cards.map((card, i) => (
-              <AssistanceCard card={card} key={i} />
+              <AssistanceCard card={card} key={i} onAcceptSuggestion={onAcceptSuggestion} />
             ))}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -180,6 +182,9 @@ export default function Conversation({
       setPending(false);
     }
   }
+  function accept(inquiryId: string, revision: number) {
+    void save({ kind: "accept_suggestion", inquiryId, revision });
+  }
   function chat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const field = event.currentTarget.elements.namedItem("message") as HTMLTextAreaElement;
@@ -231,7 +236,7 @@ export default function Conversation({
           .map((turn) => (
             <ConversationTurn key={turn.id} request={turn.message}>
               {turn.cards.map((card, i) => (
-                <AssistanceCard card={card} key={i} />
+                <AssistanceCard card={card} key={i} onAcceptSuggestion={accept} />
               ))}
               {!turn.cards.length && (
                 <p className="text-sm text-muted-foreground">
@@ -251,6 +256,7 @@ export default function Conversation({
           streams={streams}
           sending={sending}
           pending={pending}
+          onAcceptSuggestion={accept}
           onCancel={(turnId) => void save({ kind: "cancel", turnId }, "stream")}
         />
       </section>
@@ -283,7 +289,7 @@ export default function Conversation({
                 <br />
                 {q.input.text}
               </p>
-              <AssistanceCard card={q.card} />
+              <AssistanceCard card={q.card} onAcceptSuggestion={accept} />
               <p className="mt-2 text-xs text-muted-foreground">
                 Current classification · {q.classification.replaceAll("_", " ")}
               </p>

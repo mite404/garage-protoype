@@ -59,6 +59,7 @@ export const ConnectedTurn: Story = {
         card={{
           kind: "review",
           inquiryId: "synthetic-question",
+          routingRevision: 0,
           state: "conflict",
           blockerId: "synthetic-tank-conflict",
           question: "What is the tank capacity?",

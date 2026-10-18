@@ -22,7 +22,9 @@ export default function SaleChatAdapter({
   context: string;
   initialStreams: StreamView[];
 }) {
-  const endpoint = `/api/v1/desk/opportunities/${encodeURIComponent(opportunityId)}/stream`;
+  const base = `/api/v1/desk/opportunities/${encodeURIComponent(opportunityId)}`;
+  const endpoint = `${base}/stream`;
+  const assistanceEndpoint = `${base}/assistance`;
   const [streams, setStreams] = useState(initialStreams);
   const [connection, setConnection] = useState("Connecting to saved conversation…");
   const [denied, setDenied] = useState(false);
@@ -57,7 +59,11 @@ export default function SaleChatAdapter({
     };
   }, [endpoint]);
   async function command(
-    body: { kind: "chat"; message: string } | { kind: "cancel"; turnId: string },
+    target: string,
+    body:
+      | { kind: "chat"; message: string }
+      | { kind: "cancel"; turnId: string }
+      | { kind: "accept_suggestion"; inquiryId: string; revision: number },
   ) {
     if (pending) return;
     const serialized = JSON.stringify(body);
@@ -66,7 +72,7 @@ export default function SaleChatAdapter({
     setPending(true);
     setConnection("Connected · History saved");
     try {
-      await postPrototypeCommand(endpoint, serialized, retry.current.key);
+      await postPrototypeCommand(target, serialized, retry.current.key);
       retry.current = { body: "", key: "" };
       await savedStreams(endpoint).then(setStreams, () =>
         setConnection("Message accepted. Reconnecting to saved progress…"),
@@ -85,9 +91,15 @@ export default function SaleChatAdapter({
       pending={pending}
       connection={connection}
       denied={denied}
-      onSubmit={(message) => command({ kind: "chat", message })}
+      onSubmit={(message) => command(endpoint, { kind: "chat", message })}
       onStop={(turnId) => {
-        void command({ kind: "cancel", turnId }).catch(() => {});
+        void command(endpoint, { kind: "cancel", turnId }).catch(() => {});
+      }}
+      onAcceptSuggestion={(inquiryId, revision) => {
+        // Routing acceptance is an assistance command; chat and cancel belong to the stream.
+        void command(assistanceEndpoint, { kind: "accept_suggestion", inquiryId, revision }).catch(
+          () => {},
+        );
       }}
     />
   );
