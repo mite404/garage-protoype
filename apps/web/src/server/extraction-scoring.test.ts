@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { promisify } from "node:util";
 import {
   corpusSchema,
   eth79Packet,
@@ -19,8 +15,8 @@ import {
   type RunResult,
 } from "./extraction-scoring";
 import { documentBytes } from "./extraction-fixtures";
+import { pdfPages } from "./pdf-text";
 
-const exec = promisify(execFile);
 const packet: Packet = {
   id: "T",
   title: "Synthetic scoring packet",
@@ -72,23 +68,6 @@ const claim = (document: string, field: string, value: string, unit = ""): Predi
   end: 1,
   excerpt: "x",
 });
-
-async function pdfPages(content: Buffer) {
-  const dir = await mkdtemp(join(tmpdir(), "extraction-corpus-"));
-  try {
-    await writeFile(join(dir, "source.pdf"), content);
-    const { stdout } = await exec("pdftotext", [
-      "-layout",
-      "-enc",
-      "UTF-8",
-      join(dir, "source.pdf"),
-      "-",
-    ]);
-    return stdout.split("\f");
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
 
 test("claim scoring matches canonical facts per document and keeps conflicts distinct", () => {
   const predicted = [

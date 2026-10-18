@@ -1,10 +1,5 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import {
@@ -48,6 +43,7 @@ import {
 } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
+import { pdfPages } from "./pdf-text";
 import { parseInput } from "./validation";
 import { appendPhotoReview, readPhotos, refreshPhotoBlockers } from "./photos";
 import { photoCoverage, suggestPhotoRequest } from "@signal-desk/contracts/photo-schema";
@@ -59,7 +55,6 @@ import {
   reviewSchema,
 } from "@signal-desk/contracts/evidence-schema";
 
-const exec = promisify(execFile);
 const sourceInput = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -201,48 +196,30 @@ export async function evidenceTransaction<T>(
   }
 }
 
-async function pdfText(content: Buffer) {
-  if (content.subarray(0, 5).toString() !== "%PDF-")
-    throw new AppError(415, "INVALID_PDF", "Provide a text-based PDF.");
-  const dir = await mkdtemp(join(tmpdir(), "signal-source-"));
+function textPages(content: Buffer) {
+  let text: string;
   try {
-    const path = join(dir, "source.pdf");
-    await writeFile(path, content, { mode: 0o600 });
-    return (
-      await exec("pdftotext", ["-layout", "-enc", "UTF-8", path, "-"], {
-        timeout: 10000,
-        maxBuffer: 2097152,
-      })
-    ).stdout;
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT")
-      throw new AppError(503, "PDF_UNAVAILABLE", "PDF text extraction is unavailable.");
-    throw new AppError(
-      422,
-      "PDF_UNREADABLE",
-      "PDF could not be read. Scanned PDF OCR is not supported.",
-    );
-  } finally {
-    await rm(dir, { recursive: true, force: true });
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(content);
+  } catch {
+    throw new AppError(422, "INVALID_TEXT", "Provide UTF-8 text.");
   }
+  const pages = text.split("\f");
+  if (!pages.at(-1)?.trim()) pages.pop();
+  return pages;
+}
+
+// Same limits for every format: readable text, no NUL bytes, at most 2 MiB and 500 pages.
+function checkedPages(pages: string[]) {
+  const text = pages.join("\f");
+  if (!text.trim() || text.includes("\0") || Buffer.byteLength(text) > 2097152)
+    throw new AppError(422, "NO_TEXT", "Provide readable text; scanned PDF OCR is not supported.");
+  if (pages.length > 500) throw new AppError(413, "TOO_LARGE", "Source exceeds 500 pages.");
+  return pages;
 }
 
 async function extractPages(content: Buffer, mediaType: string) {
-  let text: string;
-  if (mediaType === "application/pdf") text = await pdfText(content);
-  else {
-    try {
-      text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(content);
-    } catch {
-      throw new AppError(422, "INVALID_TEXT", "Provide UTF-8 text.");
-    }
-  }
-  if (!text.trim() || text.includes("\0") || Buffer.byteLength(text) > 2097152)
-    throw new AppError(422, "NO_TEXT", "Provide readable text; scanned PDF OCR is not supported.");
-  const pages = text.split("\f");
-  if (!pages.at(-1)?.trim()) pages.pop();
-  if (pages.length > 500) throw new AppError(413, "TOO_LARGE", "Source exceeds 500 pages.");
-  return pages;
+  const pages = mediaType === "application/pdf" ? await pdfPages(content) : textPages(content); // → string[]
+  return checkedPages(pages);
 }
 
 /** Stores original bytes and immutable provenance; only the uploader grants excerpt sharing.
