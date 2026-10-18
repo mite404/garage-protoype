@@ -5,11 +5,11 @@ Chooses the model for the document import worker. Candidates: `anthropic/claude-
 
 ## Recommendation
 
-Use `openai/gpt-6-luna` with reasoning effort `none` and price routing. The catch is that no model
-passes the worker's current validation. At effort `none`, 27 of 30 corpus imports were rejected
-for model-computed offsets, and only 1 of 339 offsets was exact. Yet 95% of the excerpts were
-verbatim and occurred exactly once on the cited page. Model choice cannot fix this.
-The worker must derive offsets itself (see [Decision needed](#decision-needed)).
+Use `openai/gpt-6-luna` with reasoning effort `none` and price routing. The catch was that no
+model passed the worker's original validation. At effort `none`, 27 of 30 corpus imports were
+rejected for model-computed offsets, and only 1 of 339 offsets was exact. Yet 95% of the excerpts
+were verbatim and occurred exactly once on the cited page. Model choice could not fix this, so the
+worker now derives offsets itself; see [derived locators](#derived-locators-approved-adr-028).
 
 With derived offsets, Luna has the best recall, costs the least, finishes the corpus without
 malformed output, accepts PDF and image input, and works through batch.
@@ -125,7 +125,24 @@ that key.
 Integer micro-USD admission rates overstate these prices 2-15x, because 1 µ$ per token is the
 minimum rate. This matters for budget sizing, not for safety.
 
-## Decision needed
+## Derived locators (approved, ADR-028)
+
+The worker now derives offsets from a verbatim excerpt that occurs exactly once on its cited page,
+drops unverifiable claims individually, and counts them on the job. Luna at effort `none`, rerun
+through the changed worker:
+
+| Set                      | Accepted | Committed precision / recall | Conflicts |
+| ------------------------ | -------- | ---------------------------- | --------- |
+| ETH-79, 3 runs           | 2/3      | 1.00 / 1.00 when accepted    | 2/3       |
+| Synthetic corpus, 2 runs | 9/10     | 0.92 / 0.86 (89/8/15)        | 7/8       |
+| Public documents, 1 run  | 2/2      | 0.75 / 0.50                  | n/a       |
+
+Before the change, every one of these imports was rejected. Both remaining rejections were a
+single mistyped character in a source UUID (`4f7d` for `4f5d`), which fails the classification
+envelope. Giving sources short aliases such as `S1` in the frozen input, mapped back by the
+worker, would remove that failure mode without loosening validation.
+
+## Original proposal
 
 The worker should keep validation strict but stop asking the model for character offsets:
 
@@ -137,8 +154,7 @@ The worker should keep validation strict but stop asking the model for character
    schema description. Keep hedged values such as `about 85k` rejected.
 
 Provenance stays exact because offsets still point to verified text on a stored page, and human
-review is unchanged. This changes the import contract in `imports.ts`, so it needs approval
-before implementation.
+review is unchanged. All three parts were approved and implemented.
 
 ## Reproducing
 
