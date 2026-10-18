@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNull, like, sql } from "drizzle-orm";
 import { z } from "zod";
-import { streamView } from "@signal-desk/contracts/assistance-schema";
+import { streamView, type StreamActivity } from "@signal-desk/contracts/assistance-schema";
 import { orm } from "./db";
 import {
   credentialSchema,
@@ -223,6 +223,25 @@ export async function streamContext(id: string) {
   if (uncertain.length)
     throw new AppError(409, "SPEND_UNCERTAIN", "Prior provider request requires reconciliation.");
   return { actor, row };
+}
+
+const activityWrites = new Map<string, Promise<void>>();
+
+/** Records the owner's current real step for observers without delaying that step. Writes apply
+ * in call order per turn, only while it runs; a failed write never stops the turn.
+ */
+export function noteActivity(id: string, activity: StreamActivity) {
+  const write = async () => {
+    await orm()
+      .update(streamTurns)
+      .set({ activity })
+      .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
+  };
+  const next = (activityWrites.get(id) ?? Promise.resolve()).then(write).catch(() => {});
+  activityWrites.set(id, next);
+  void next.then(() => {
+    if (activityWrites.get(id) === next) activityWrites.delete(id);
+  });
 }
 
 /** Strict boundary for persisted model-call failures exposed in the UI. */

@@ -72,6 +72,7 @@ function PreviewChat() {
       text: "The pump-test report is missing. The proposed $84,000 purchase remains contingent on its review. I can help prepare a request for the seller.",
       cards: [],
       errorCode: null,
+      activity: null,
     },
   ]);
   return (
@@ -92,6 +93,7 @@ function PreviewChat() {
             text: "Preview message recorded locally. No model or external messaging is connected.",
             cards: [],
             errorCode: null,
+            activity: null,
           },
         ])
       }

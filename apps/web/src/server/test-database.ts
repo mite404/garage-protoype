@@ -15,6 +15,10 @@ const migrations = [
     "select to_regprocedure('signal_desk.session_is_active(uuid,uuid)') as name",
   ],
   ["009-municipality-workspace.sql", "select to_regclass('signal_desk.organizations') as name"],
+  [
+    "010-stream-activity.sql",
+    "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='stream_turns' and column_name='activity') as name",
+  ],
 ] as const;
 
 /** Initializes only a disposable *_test database, never a prototype or live database. */

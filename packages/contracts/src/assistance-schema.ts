@@ -95,6 +95,15 @@ export const inlineCard = z.discriminatedUnion("kind", [
 ]);
 export type InlineCard = z.infer<typeof inlineCard>;
 
+/** The owner's current real step for a running turn; presentation only, never authority. */
+export const streamActivity = z.enum([
+  "reading_deal",
+  "checking_evidence",
+  "preparing_draft",
+  "writing",
+]);
+export type StreamActivity = z.infer<typeof streamActivity>;
+
 /** Observation snapshots replace previous snapshots, so reconnect cannot append duplicate deltas. */
 export const streamView = z.object({
   id: z.string(),
@@ -104,6 +113,7 @@ export const streamView = z.object({
   text: z.string(),
   cards: z.array(inlineCard),
   errorCode: z.string().nullable(),
+  activity: streamActivity.nullable(),
 });
 export type StreamView = z.infer<typeof streamView>;
 

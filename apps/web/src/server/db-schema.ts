@@ -10,7 +10,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import type { draftCommand, inquiryInput } from "@signal-desk/contracts/assistance-schema";
+import type {
+  draftCommand,
+  inquiryInput,
+  StreamActivity,
+} from "@signal-desk/contracts/assistance-schema";
 import type { suggestPhotoRequest } from "@signal-desk/contracts/photo-schema";
 
 const privateSchema = pgSchema("signal_desk");
@@ -402,5 +406,6 @@ export const streamTurns = privateSchema.table("stream_turns", {
   text: text("text").notNull(),
   submissionId: text("submission_id"),
   errorCode: text("error_code"),
+  activity: text("activity").$type<StreamActivity>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
