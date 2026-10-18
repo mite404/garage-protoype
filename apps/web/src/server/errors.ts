@@ -13,6 +13,8 @@ export class AppError extends Error {
 
 /** Returns the shared JSON envelope without leaking credentials or private errors. */
 export function failure(error: unknown) {
+  // Callers see only a generic retryable error, so the cause must reach the server log.
+  if (!(error instanceof AppError)) console.error("Unexpected request failure", error);
   const safe =
     error instanceof AppError
       ? error
