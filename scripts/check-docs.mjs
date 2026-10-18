@@ -1,13 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+// `e2e init` writes and refreshes this skill; rewrapping it by hand would be overwritten.
+const generatedDirs = [".agents/skills/e2e/"];
 const files = execFileSync(
   "git",
   ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md"],
   { encoding: "utf8" },
 )
   .split("\0")
-  .filter(Boolean);
+  .filter((file) => file && !generatedDirs.some((dir) => file.startsWith(dir)));
 const errors = [];
 
 for (const file of new Set(files)) {

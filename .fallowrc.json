@@ -4,10 +4,15 @@
     "apps/web/src/worker.ts",
     "apps/web/src/streaming-worker.ts",
     "apps/web/src/mcp.ts",
+    "apps/web/src/e2e-stack.ts",
     "apps/web/flue.config.ts",
     "packages/**/*.stories.tsx",
-    "apps/storybook/.storybook/main.ts"
+    "apps/storybook/.storybook/main.ts",
+    "e2e.config.ts",
+    "tests/**/*.e2e.ts"
   ],
-  "health": { "coverage": "coverage" },
+  "health": {
+    "coverage": "coverage"
+  },
   "ignorePatterns": [".next/**", "storybook-static/**", ".amp/**", "next-env.d.ts"]
 }
