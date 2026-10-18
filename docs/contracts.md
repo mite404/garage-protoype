@@ -186,8 +186,8 @@ Results are checked against fresh record access before return, including cached 
 
 ## Implemented ETH-75 evidence and review
 
-`db/003-evidence.sql` extends the ordered foundation migrations. Originals (`sources`), extracted
-assertions (`claims`), human decisions (`evidence_reviews`), and classification history
+`db/migrations/0002_evidence.sql` extends the ordered foundation migrations. Originals (`sources`),
+extracted assertions (`claims`), human decisions (`evidence_reviews`), and classification history
 (`source_classifications`) are separate append-only records for the runtime role. Original bytes
 have a generated SHA256. Locators use one-based pages and UTF-16 start/end offsets with an exact
 excerpt. Repeated content with identical owner, media type, kind, audience, permission, provenance,
@@ -277,8 +277,9 @@ tokenizer, framing, pricing bounds, and live extraction quality also remain unve
 ## Implemented ETH-76 photo boundary
 
 Photos extend the existing sources, import jobs, review transaction, and opportunity blockers.
-There is no separate upload, worker, or draft store. `db/004-photos.sql` adds append-only machine
-suggestions and human reviews. A worker can append a suggestion but cannot replace a human review.
+There is no separate upload, worker, or draft store. `db/migrations/0003_photos.sql` adds
+append-only machine suggestions and human reviews. A worker can append a suggestion but cannot
+replace a human review.
 
 - `addSource` also accepts `kind: "photo"` with `image/png` or `image/jpeg`, up to 5 MiB. Declared
   MIME must match the signature. Original bytes, SHA256, permission, and provenance are preserved.
@@ -444,10 +445,11 @@ and durable worker remain unchanged. No separate daemon or language-model adapte
 
 ## Implemented ETH-77 buyer assistance and chat
 
-`db/005-assistance.sql` adds append-only inquiries, routing decisions, unsent drafts, logical chat
-turns, and card-call outcomes. `src/server/assistance.ts` owns the shared operations. They reuse
-the evidence transaction, current session and opportunity permissions, and existing blocker records.
-There are no external sending, acceptance, counteroffer, payment, or delivery operations.
+`db/migrations/0004_assistance.sql` adds append-only inquiries, routing decisions, unsent drafts,
+logical chat turns, and card-call outcomes. `src/server/assistance.ts` owns the shared operations.
+They reuse the evidence transaction, current session and opportunity permissions, and existing
+blocker records. There are no external sending, acceptance, counteroffer, payment, or delivery
+operations.
 
 - `submitInquiry(actor, opportunityId, input, key)` records an inquiry on an existing opportunity.
   Strict inputs are `{kind:"question", text}`, `{kind:"fact", text, field}`, or an explicit

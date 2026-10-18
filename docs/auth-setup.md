@@ -25,7 +25,10 @@ Do not point a live app at the test session stand-in.
 npm run db:migrate
 ```
 
-The migration is transactional, serialized, and recorded in `public.signal_desk_migrations`.
+Drizzle Kit applies `db/migrations/` in journal order inside one transaction, serialized by an
+advisory lock, and records each file in `drizzle.__drizzle_migrations`. A database migrated before
+Drizzle Kit keeps `public.signal_desk_migrations`; the first run adopts the files listed there
+instead of reapplying them.
 It creates private tables in `signal_desk`, enables row-level security, and grants read access to
 the server-only `signal_desk_runtime` role. Keep `signal_desk` out of the exposed Data API schemas.
 Do not grant that role to `anon`, `authenticated`, or another browser-facing database role.

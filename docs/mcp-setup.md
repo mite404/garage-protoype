@@ -4,8 +4,8 @@ Use a separate prototype installation with invited specialist access. No live in
 is installed by this feature. Missing model configuration and budgets deny processing.
 
 1. Install the pinned Node 22 toolchain and run `npm ci` in this repository.
-2. Apply migrations through `006-app-tokens.sql` with the operator migration command from
-   [auth setup](auth-setup.md). Never give that connection string to your terminal MCP client.
+2. Apply migrations through `db/migrations/0005_app-tokens.sql` with the operator migration command
+   from [auth setup](auth-setup.md). Never give that connection string to your terminal MCP client.
 3. Sign in to the specialist dashboard. Open **Manage local MCP tokens** and create a labeled token.
    Keep read-only access unless you need unsent drafts. Paid processing also needs explicit write
    and spending permission, a configured server model, and operator-provisioned budgets.

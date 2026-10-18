@@ -46,6 +46,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-026: Run every deployed process in `us-west-2`, with Vercel functions in `pdx1`, beside the
   Supabase database because turns make hundreds of sequential queries and cross-region round trips
   dominate their latency.
+- ADR-027: Generate and apply migrations with Drizzle Kit from `db-schema.ts`, keeping functions,
+  grants, and row security as custom SQL migrations in the same journal, because one schema
+  definition should drive both typed queries and table changes.
 
 ## Proposed
 
