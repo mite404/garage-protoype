@@ -88,8 +88,62 @@ usage, prices, or invoices. Paid provider calls: zero. Provider latency and real
 The full gate separately exercises concurrent admission, uncertain spend after SIGKILL, fresh retry
 admission, expired leases, fencing against late completion, current permissions, immutable evidence,
 and session-only approval. Passing these controlled tests does not establish provider reliability.
-Jev is not implemented, so a Jev versus single-model comparison is unavailable. No conversion,
-revenue, human-time saving, or efficiency baseline is claimed.
+ETH-83 later added Jev routing; see
+[Jev routing suggestions (ETH-83)](#jev-routing-suggestions-eth-83). No conversion, revenue,
+human-time saving, or sales efficiency baseline is claimed.
+
+## Jev routing suggestions (ETH-83)
+
+This section measures one bounded use: suggesting an evidence field for a specialist question
+that `routeQuestion` does not recognize. Jev never routes on its own. A suggestion waits for the
+specialist to accept it. Buyer inquiries never call Jev.
+
+The corpus is `apps/web/src/server/jev-routing-corpus.json`, SHA256
+`e1e4aae370c8a9e74787aaabfa11286f275fadb48ff84264523f7995041a67cb`. It holds 44 original
+synthetic specialist questions: 16 dev cases and 28 held-out cases. Labels were frozen before
+any held-out run. The 12 design-probe questions are dev cases. The 0.80 Choice-confidence
+threshold was set before the first run and was not tuned afterward. One author wrote both the
+questions and the labels, so these are contract holdouts, not an independent benchmark.
+
+The run on 2026-10-18 used `jev-1.13.0` behind the real spending admission on a local `_test`
+database. The baseline was `moonshotai/kimi-k3` through OpenRouter with low reasoning effort,
+which is the model the specialist chat already uses. A prediction counts as correct when it
+names the gold field or, for a gold `null`, makes no field suggestion.
+
+| Held-out (28) | Correct | Field questions routed | Wrong suggestions | p50 / p95 ms | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Exact matcher | 12 | 2 of 18 | 0 | 0 / 0 | 0 |
+| Matcher, then Jev | 28 | 18 of 18 | 0 | 76 / 122 | 754 microUSD |
+| Kimi K3 baseline | 28 | 18 of 18 | 0 | 1083 / 6394 | 22,864 microUSD |
+
+The dev split gave the same pattern. The matcher scored 5 of 16, matcher then Jev scored 16 of 16,
+and the baseline scored 16 of 16. Jev latency is end-to-end through admission and settlement,
+including two local PostgreSQL transactions. Baseline latency is one OpenRouter round trip.
+Jev used about 670 input tokens per question. The ledger settled 1,188 microUSD across 42 calls
+at $0.042 per million input tokens. Output tokens were reported but cost nothing. Baseline cost
+is OpenRouter's reported charge.
+
+On this corpus, both models made every routing correct. Jev did it about 14 times faster at the
+median and about 30 times cheaper, and its confidence gives code a threshold to test. Every
+held-out field answer scored at least 0.92, and every non-field answer chose `multiple`,
+`judgment`, or `other`. No field answer fell below 0.80, so the low-confidence branch is covered
+by the controlled fake, not by real Jev data. A small, easy, single-author corpus cannot
+establish accuracy on real specialist wording.
+
+The first run found a real defect. Jev reports about 134 output tokens for this 14-option Choice,
+which exceeded the provisioned `max_output_tokens` of 64. Settlement then marked each call
+uncertain and held its reservation, and the next call hit the concurrency limit. The failure
+stayed in human review as designed. The documented cap is now 512, and the controlled fake
+reports realistic output usage, so the regression fails the suite.
+
+Reproduce with a provisioned key on a disposable database. The script provisions the documented
+model row and a $0.10 budget, then writes the full report to
+`.amp/in/artifacts/jev-routing-eval.json`. Omit `--baseline` to skip the paid OpenRouter calls:
+
+```sh
+env -u DATABASE_URL TEST_DATABASE_URL='postgres:///signal_desk_jev_test?host=/var/run/postgresql' \
+  npm run eval:jev -w @signal-desk/web -- --baseline
+```
 
 ## Reproduce on a disposable local stack
 
