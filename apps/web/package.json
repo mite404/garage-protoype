@@ -17,7 +17,8 @@
     "eval:latency": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/turn-latency.ts",
     "eval:latency:control": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/provider-control.ts",
     "eval:jev": "node --conditions=react-server --import tsx scripts/eval-jev-routing.ts",
-    "eval:extraction": "node --conditions=react-server --import tsx src/extraction-eval.ts"
+    "eval:extraction": "node --conditions=react-server --import tsx src/extraction-eval.ts",
+    "build:cloudflare": "opennextjs-cloudflare build"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.3.0",

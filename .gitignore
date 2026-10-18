@@ -10,3 +10,5 @@ coverage/
 .fallow/
 *.tsbuildinfo
 .DS_Store
+.open-next/
+.wrangler/
