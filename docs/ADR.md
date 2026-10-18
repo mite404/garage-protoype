@@ -40,6 +40,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-024: Make the municipality profile the primary workspace with a persistent pop-up sale
   assistant because specialists need deal conditions and organization activity in context, not an
   evidence workbench presented as chat.
+- ADR-025: Keep Flue for the bounded [specialist conversation][flue-trial], not as a full runtime
+  migration, because the trial streamed real tool output and recovered turns while preserving
+  sales, evidence, and spending controls.
 
 ## Proposed
 

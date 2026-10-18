@@ -179,7 +179,7 @@ tool execution and streamed observation now work, and controlled tests cover the
 uncertain-spend cases. Hosted end-to-end latency remains a limitation: these measurements include
 database authorization, projection, and tool work, not just model generation time. No external
 message, payment, or commercial commitment was made. The trial shipped to `main` on October 18,
-2026. The recommendation still needs Ethan's adoption decision before ADR-020 changes.
+2026. Ethan accepted the recommendation on October 18, 2026 (ADR-025).
 
 ## Approved municipality workspace direction
 

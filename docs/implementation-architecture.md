@@ -127,8 +127,9 @@ Buyer-visible answers still require evidence and citation checks before disclosu
 label does not authorize unsupported claims or private content. Streaming never grants publication,
 message-delivery, or commercial authority.
 
-Streaming is required independently of the runtime choice. Flue is approved for the bounded trial
-below, not full adoption. Pi Durable, Mastra, and Temporal remain unapproved alternatives.
+Streaming is required independently of the runtime choice. Flue is kept for the bounded specialist
+conversation below (ADR-025), not adopted as the whole runtime. Pi Durable, Mastra, and Temporal
+remain unapproved alternatives.
 
 The [product plan][plan] owns requirement R13 and acceptance example AE9. Hold a controlled provider
 stream open and verify text and a validated card appear before generation finishes. Test split
@@ -137,8 +138,8 @@ Markdown, fragmented tool arguments, interruption, and reconnect without another
 ## Trial Flue without transferring sales authority
 
 ADR-020 approves [ticket 008][flue-trial] for one specialist conversation using Dispatch components
-and existing sales operations. The trial is implemented and recommends keeping this bounded use;
-it is not approval for a full runtime migration. Flue's durable conversations, PostgreSQL
+and existing sales operations. ADR-025 keeps Flue for this bounded use after the trial; it is not
+approval for a full runtime migration. Flue's durable conversations, PostgreSQL
 integration, and separate submission and observation fit the experiment; plan 008 records how
 they were verified in this application.
 
