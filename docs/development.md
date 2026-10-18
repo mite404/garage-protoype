@@ -149,6 +149,49 @@ transport against a synthetic local provider. It does not spend tokens or verify
 authentication. See the [trial result](plans/008-flue-specialist-trial.md#implementation-evidence)
 for the remaining permissioned live-provider check.
 
+### Cloudflare streaming Worker
+
+`apps/web/cloudflare/` runs the same turns on Cloudflare instead of `npm run streaming` (ADR-030).
+Run only one owner against a database. Next.js wakes the Worker when `STREAM_WORKER_URL` and
+`STREAM_WORKER_TOKEN` are set; without them it only records turns, as before. The Worker drives
+each turn from a `TurnDriver` Durable Object, runs Flue's agent as one Durable Object per
+conversation, and reaches PostgreSQL through Hyperdrive on the session pooler (port 5432). A
+one-minute cron sweep, run inside a Durable Object, recovers turns whose wake was lost.
+
+| Command | Does |
+| --- | --- |
+| `npm run cloudflare:build` | Builds the deployable Worker into `apps/web/cloudflare/dist/` |
+| `npm run cloudflare:dev -w @signal-desk/web` | Runs the Worker in local workerd |
+| `npm run cloudflare:deploy -w @signal-desk/web` | Builds and deploys with Wrangler |
+| `npm run test:cloudflare` | Runs `streaming.test.ts` against local workerd |
+
+`npm run test:cloudflare` needs `TEST_DATABASE_URL`, the production Next build, and a role that
+can create the `signal_desk_worker_test` login role, because Hyperdrive's local proxy drops
+startup options. It refuses to run while `apps/web/cloudflare/.dev.vars` exists, since Wrangler
+would let that file override the test seams. The local provider and crash points are compiled in
+only with `SIGNAL_DESK_TEST_SEAMS=1`; deployable builds contain neither. Worker logs from each run
+are kept in `apps/web/cloudflare/.wrangler/test-worker.log`. Run Wrangler and Vite through the
+package scripts or from `apps/web/cloudflare/` directly: `npx` in a workspace runs from the
+package root and picks up the wrong configuration.
+
+To deploy, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set and run from
+`apps/web/cloudflare/`:
+
+1. Create the Hyperdrive config with caching disabled, since a cached read could keep showing a
+   revoked observer a conversation for up to a minute:
+   `wrangler hyperdrive create signal-desk-streaming --connection-string="$URL" --caching-disabled`.
+   Use a login role that defaults to `signal_desk_runtime` and the session pooler on port 5432.
+2. Put the returned id in `wrangler.jsonc`.
+3. Write `STREAM_WORKER_TOKEN` and `OPENROUTER_API_KEY` to a mode-600 JSON file outside the
+   repository and deploy with `npm run cloudflare:build` then
+   `wrangler deploy --secrets-file <file>`. Delete the file afterwards.
+4. Set `STREAM_WORKER_URL` and `STREAM_WORKER_TOKEN` on the Next.js deployment, then stop the
+   Node owner.
+
+The API token needs Account: Workers Scripts Edit and Hyperdrive Edit. The account must have a
+`workers.dev` subdomain, which only the account owner can create in the dashboard. Never set
+`SIGNAL_DESK_TEST_*` variables on a deployed Worker.
+
 ### Turn latency evaluation
 
 `npm run eval:latency` measures real specialist turns with paid OpenRouter Kimi K3 requests.

@@ -148,10 +148,13 @@ OpenRouter's model catalog lists `moonshotai/kimi-k3` with tool calling and stru
 Keep `OPENROUTER_API_KEY` server-only. Plan 008 records the permissioned live OpenRouter run.
 
 Next.js authenticates submission, observation, and cancellation. One Node execution owner runs the
-conversation, as required by [Flue's database guidance][flue-database]. Flue persists conversation
-progress; application PostgreSQL records remain authoritative for permissions, evidence revisions,
-human approvals, inference reservations, and idempotent drafts. Do not copy those rules into prompts
-or let framework tools write around the existing sales operations.
+conversation, as required by [Flue's database guidance][flue-database]. ADR-030 moves that owner to
+a Cloudflare Worker: Next.js wakes one Durable Object per logical turn after submission or
+cancellation, a cron sweep recovers lost wakes, and each conversation's Flue agent keeps its own
+history in Durable Object storage. Both owners share `streaming-turn.ts` and one guarantee suite.
+Flue persists conversation progress; application PostgreSQL records remain authoritative for
+permissions, evidence revisions, human approvals, inference reservations, and idempotent drafts. Do
+not copy those rules into prompts or let framework tools write around the existing sales operations.
 
 Use stable logical-turn identifiers for submission. Flue's `send()` admits a message and `observe()`
 reads progress, per its [client documentation][flue-client]. Reconnect observes the existing turn
