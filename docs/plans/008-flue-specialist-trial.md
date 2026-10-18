@@ -178,12 +178,13 @@ Recommendation: retain the bounded Flue integration, not a wholesale runtime mig
 tool execution and streamed observation now work, and controlled tests cover the recovery and
 uncertain-spend cases. Hosted end-to-end latency remains a limitation: these measurements include
 database authorization, projection, and tool work, not just model generation time. No external
-message, payment, or commercial commitment was made. Source changes remain local until shipped.
+message, payment, or commercial commitment was made. The trial shipped to `main` on October 18,
+2026. The recommendation still needs Ethan's adoption decision before ADR-020 changes.
 
 ## Approved municipality workspace direction
 
 Ethan approved the municipality-page concept after reviewing the running evidence workbench.
-This is the next UI scope, not an implemented or browser-verified replacement yet (ADR-024).
+[Plan 009](009-municipality-workspace.md) implements and verifies this scope (ADR-024).
 
 - One page represents one municipality or department, with its unit identity visible.
 - An active purchase card sits directly below the identity and shows the proposed amount,

@@ -137,13 +137,14 @@ Markdown, fragmented tool arguments, interruption, and reconnect without another
 ## Trial Flue without transferring sales authority
 
 ADR-020 approves [ticket 008][flue-trial] for one specialist conversation using Dispatch components
-and existing sales operations. This is a trial decision, not implemented functionality or approval
-for a full runtime migration. Flue's documented durable conversations, PostgreSQL integration, and
-separate submission and observation fit the experiment; verify them in this application.
+and existing sales operations. The trial is implemented and recommends keeping this bounded use;
+it is not approval for a full runtime migration. Flue's durable conversations, PostgreSQL
+integration, and separate submission and observation fit the experiment; plan 008 records how
+they were verified in this application.
 
 Use Kimi K3 through OpenRouter for the initial trial, as Ethan selected on October 16, 2026.
 OpenRouter's model catalog lists `moonshotai/kimi-k3` with tool calling and structured outputs.
-Keep `OPENROUTER_API_KEY` server-only. Catalog availability is not a verified live integration.
+Keep `OPENROUTER_API_KEY` server-only. Plan 008 records the permissioned live OpenRouter run.
 
 Next.js authenticates submission, observation, and cancellation. One Node execution owner runs the
 conversation, as required by [Flue's database guidance][flue-database]. Flue persists conversation

@@ -118,7 +118,10 @@ HTTP operations, the worker, and future MCP operations must use this shared oper
 call a provider directly.
 Only implemented workflow operations can queue processing. Buyer inquiries use deterministic
 reviewed-evidence lookup and human routing, not paid model processing.
-No live provider adapter, provider purchase, default budget, or enabled model is installed.
+This path installs no live provider adapter, provider purchase, default budget, or enabled model.
+The Flue specialist conversation is separate. It calls OpenRouter through its own admitted
+provider in `src/server/streaming-provider.ts`, under the same spending admission and budgets
+(see [plan 008](plans/008-flue-specialist-trial.md)).
 
 The request contains `key`, `opportunityId`, `model`, `input`, `photos`, and `attempt` (default 1).
 The key is scoped to the user for the installation's lifetime. Changing its payload returns
@@ -240,8 +243,9 @@ documents. No message, commercial assurance, or response draft is created or sen
 
 `src/worker.ts` exports `runWorker(signal, provider?)`. Its CLI is
 `node --conditions=react-server --import tsx src/worker.ts`; use a supervised service with the
-runtime database role. There is no installed live provider adapter. A missing adapter fails the
-job as unavailable, never as successful processing. Lease expiry never refunds inference spend.
+runtime database role. The import worker has no installed live provider adapter. A missing
+adapter fails the job as unavailable, never as successful processing. Lease expiry never refunds
+inference spend.
 
 HTTP operations use the same server functions and `{data}` / `{error}` envelopes:
 
