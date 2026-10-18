@@ -21,7 +21,7 @@ export type OpenRouterReceipt = {
 type Options = {
   fetch?: typeof fetch;
   apiKey?: () => string | undefined;
-  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  reasoningEffort?: "none" | "low" | "medium" | "high";
   // OpenRouter endpoint ordering among same-model providers; price is the default.
   sort?: "price" | "throughput" | "latency";
   onReceipt?: (receipt: OpenRouterReceipt) => void;

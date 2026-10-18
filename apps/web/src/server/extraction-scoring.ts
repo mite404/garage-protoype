@@ -22,10 +22,14 @@ const goldClaim = z
 const documentSchema = z
   .object({
     id: z.string(),
-    name: z.string().startsWith("Synthetic "),
+    name: z.string().min(1),
     kind: documentKind,
-    format: z.enum(["text", "text-pdf", "scanned-pdf"]),
-    pages: z.array(z.string().min(1)).min(1),
+    // Synthetic documents carry their text; public ones name a checked fixture file.
+    format: z.enum(["text", "text-pdf", "scanned-pdf", "file-pdf", "image-pdf"]),
+    pages: z.array(z.string().min(1)).default([]),
+    file: z.string().optional(),
+    sha256: z.string().length(64).optional(),
+    pageRange: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
     classification: z.string().optional(),
     noise: z.boolean().optional(),
     legal: z.boolean().optional(),
@@ -47,10 +51,10 @@ const packetSchema = z
     canaries: z.array(z.string()).default([]),
   })
   .strict();
-/** Frozen labeled extraction corpus; every document is synthetic. */
+/** Frozen labeled extraction corpus, labeled as synthetic or public material. */
 export const corpusSchema = z
   .object({
-    label: z.string().startsWith("SYNTHETIC"),
+    label: z.string().regex(/^(SYNTHETIC|PUBLIC) /),
     version: z.string(),
     frozen: z.string(),
     rules: z.record(z.string(), z.string()),

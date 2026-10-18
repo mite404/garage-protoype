@@ -10,7 +10,6 @@ import { addSource } from "./server/evidence";
 import {
   corpusSchema,
   eth79Packet,
-  fixturePdf,
   predictedClaims,
   scoreClaims,
   scoreLocators,
@@ -19,6 +18,7 @@ import {
   type Packet,
   type RunResult,
 } from "./server/extraction-scoring";
+import { documentBytes, pageImages } from "./server/extraction-fixtures";
 import { claimImport, processImport, queueImport } from "./server/imports";
 import { reconcileInference, runInference } from "./server/model";
 import {
@@ -42,11 +42,12 @@ const defaultModels = [
 const capUsd = 0.9;
 const api = "https://openrouter.ai/api/v1";
 const corpusUrl = new URL("./server/extraction-corpus/corpus.json", import.meta.url);
+const publicUrl = new URL("./server/extraction-corpus/public-documents.json", import.meta.url);
 const fixtureUrl = (name: string) => new URL(`./server/extraction-corpus/${name}`, import.meta.url);
 // Integer micro-USD rates cannot express sub-$1/M prices, so 1 per token overstates every model.
 const policy = {
   max_input_bytes: 200000,
-  max_photos: 1,
+  max_photos: 2,
   photo_tokens: 8000,
   overhead_tokens: 3000,
   max_output_tokens: 6000,
@@ -92,18 +93,31 @@ const completedBatch = z.object({
 });
 const errorCode = z.object({ code: z.string() });
 const terminal = new Set(["completed", "failed", "expired", "cancelled"]);
+const exactly = "quote excerpts exactly as printed";
 const probes = {
   scanned: {
+    corpus: "synthetic",
     document: "D08",
     mediaType: "image/jpeg",
-    note: "is a scanned page with no text layer. Read the image, cite page 1, and quote excerpts exactly as printed",
+    note: `is a scanned page with no text layer. Read the image, cite page 1, and ${exactly}`,
+    attachments: async () => [await readFile(fixtureUrl("scanned-page.jpg"))],
   },
   pdf: {
+    corpus: "synthetic",
     document: "D05",
     mediaType: "application/pdf",
-    note: "is a PDF file whose text layer is not supplied separately. Read the PDF, cite its one-based pages, and quote excerpts exactly as printed",
+    note: `is a PDF file without a separate text layer. Cite its one-based pages and ${exactly}`,
+    attachments: async (doc: Doc) => [(await documentBytes(doc)).content],
+  },
+  "public-image": {
+    corpus: "public",
+    document: "S1",
+    mediaType: "image/jpeg",
+    note: `are a brochure's page images in order, with no text layer. Cite one-based pages and ${exactly}`,
+    attachments: pageImages,
   },
 } as const;
+type ProbeKind = keyof typeof probes;
 // Unreconciled calls are carried at their worst case until a receipt replaces them.
 type Ledger = {
   baselineKeyUsageUsd: number;
@@ -119,7 +133,7 @@ type Context = {
   prices: Map<string, { prompt: number; completion: number }>;
   ledger: Ledger;
   adapter: Adapter;
-  corpus: z.infer<typeof corpusSchema>;
+  corpora: Record<"synthetic" | "public", z.infer<typeof corpusSchema>>;
 };
 type Batch = z.infer<typeof batchSchema>;
 type BatchState = { batch?: Batch; attemptId?: string; submit?: object };
@@ -164,8 +178,9 @@ function batchOutcome(batch: Batch) {
   return openRouterOutcome({ ...body, usage: { ...body.usage, cost } }, latency);
 }
 
-function completedOutput(report: { kind: string; output?: string }) {
-  return report.kind === "completed" ? (report.output ?? "") : "";
+// Unsettled attempts have no report yet.
+function completedOutput(report: { kind: string; output?: string } | null) {
+  return report?.kind === "completed" ? (report.output ?? "") : "";
 }
 
 // No receipt for a dispatched call means the provider may still bill it at its worst case.
@@ -181,22 +196,11 @@ function batchBody(chat: NonNullable<ReturnType<typeof openRouterChatRequest>>, 
 }
 
 function adapterOptions(effort?: string, sort?: string): Adapter {
-  const efforts = z.enum(["minimal", "low", "medium", "high"]);
+  const efforts = z.enum(["none", "low", "medium", "high"]);
   const sorts = z.enum(["price", "throughput", "latency"]);
   return {
     ...(effort ? { reasoningEffort: efforts.parse(effort) } : {}),
     ...(sort ? { sort: sorts.parse(sort) } : {}),
-  };
-}
-
-async function documentBytes(doc: Doc) {
-  if (doc.format === "text")
-    return { content: Buffer.from(doc.pages.join("\f")), mediaType: "text/plain" };
-  if (doc.format === "text-pdf")
-    return { content: fixturePdf(doc.pages), mediaType: "application/pdf" };
-  return {
-    content: await readFile(fixtureUrl(`${doc.fixture}.pdf`)),
-    mediaType: "application/pdf",
   };
 }
 
@@ -314,8 +318,9 @@ async function addDocument(ctx: Context, tag: string, doc: Doc) {
       ...(await documentBytes(doc)),
       audience: "sales",
       shareable: ["document", "seller_note"].includes(doc.kind),
-      permission: "synthetic",
-      provenance: "Synthetic extraction evaluation corpus. Not live seller material.",
+      ...(doc.file
+        ? { permission: "permissioned", provenance: "Public document fixture supplied by Ethan." }
+        : { permission: "synthetic", provenance: "Synthetic extraction evaluation corpus." }),
     });
     return { id: source.id };
   } catch (error) {
@@ -347,7 +352,10 @@ async function readJob(db: PoolClient, jobId: string, sourceIds: string[]) {
     "select state,error from signal_desk.import_jobs where id=$1",
     [jobId],
   );
-  const attempt = await db.query<{ state: string; report: { kind: string; output?: string } }>(
+  const attempt = await db.query<{
+    state: string;
+    report: { kind: string; output?: string } | null;
+  }>(
     `select a.state,a.report from signal_desk.inference_attempts a
      join signal_desk.inference_operations o on o.id=a.operation_id where o.request_key=$1`,
     [`import:${jobId}`],
@@ -401,6 +409,7 @@ async function runPacket(ctx: Context, suite: string, packet: Packet, model: str
   const tag = `${ctx.runId}-${suite}-${packet.id}-${slug(model)}-r${rep}`;
   await opportunity(ctx.db, tag, packet.title);
   const { sources, rejected } = await addDocuments(ctx, tag, packet);
+  if (sources.size === 0) throw new Error(`${tag} has no importable sources.`);
   const { lease, worst } = await leaseImport(ctx, tag, model, [...sources.values()]);
   const receipts: OpenRouterReceipt[] = [];
   const provider = openRouterProvider({ ...ctx.adapter, onReceipt: (r) => receipts.push(r) });
@@ -459,25 +468,24 @@ async function probeInference(ctx: Context, request: Parameters<typeof runInfere
   return { ...result, http, receipt: receipts[0] };
 }
 
-async function probeBytes(kind: keyof typeof probes, doc: Doc) {
-  if (kind === "scanned") return readFile(fixtureUrl("scanned-page.jpg"));
-  return (await documentBytes(doc)).content;
-}
-
-async function probeRequest(ctx: Context, kind: keyof typeof probes, doc: Doc, tag: string) {
+async function probeRequest(ctx: Context, kind: ProbeKind, doc: Doc, tag: string) {
   const spec = probes[kind];
   const sourceId = `${kind}-probe`;
-  const note = `PROBE: The attachment for source ${sourceId} ${spec.note}.`;
+  const note = `PROBE: The attachments for source ${sourceId} ${spec.note}.`;
   const instruction = `${await frozenInstruction(ctx.db)} ${note}`;
   const source = { id: sourceId, kind: "document", mediaType: spec.mediaType, pages: [] };
-  const input = JSON.stringify({ instruction, sources: [{ ...source, provenance: "Synthetic" }] });
-  const photo = `data:${spec.mediaType};base64,${(await probeBytes(kind, doc)).toString("base64")}`;
-  const request = { key: tag, opportunityId: tag, input, photos: [photo] };
-  return { sourceId, request, bytes: Buffer.byteLength(input) + Buffer.byteLength(photo) };
+  const input = JSON.stringify({ instruction, sources: [{ ...source, provenance: spec.corpus }] });
+  const photos = (await spec.attachments(doc)).map(
+    (bytes) => `data:${spec.mediaType};base64,${bytes.toString("base64")}`,
+  );
+  const request = { key: tag, opportunityId: tag, input, photos };
+  const bytes = [input, ...photos].reduce((total, part) => total + Buffer.byteLength(part), 0);
+  return { sourceId, request, bytes };
 }
 
-async function probe(ctx: Context, kind: keyof typeof probes, model: string) {
-  const { packet, doc } = corpusDocument(ctx.corpus, probes[kind].document);
+async function probe(ctx: Context, kind: ProbeKind, model: string) {
+  const spec = probes[kind];
+  const { packet, doc } = corpusDocument(ctx.corpora[spec.corpus], spec.document);
   const tag = `${ctx.runId}-probe-${kind}-${slug(model)}`;
   await opportunity(ctx.db, tag, `${kind} probe`);
   const { sourceId, request, bytes } = await probeRequest(ctx, kind, doc, tag);
@@ -634,6 +642,46 @@ async function readRows(out: string, suite: string) {
 }
 
 type Append = (row: object) => Promise<void>;
+type Row = Record<string, unknown>;
+
+function savedPacket(ctx: Context, suite: string, id: string) {
+  const packets = suite === "eth79" ? [eth79Packet()] : packetsFor(ctx, suite);
+  const packet = packets.find((p) => p.id === id);
+  if (!packet) throw new Error(`Unknown packet ${id}.`);
+  return packet;
+}
+
+function sourceEntry(packet: Packet, source: { id: string; name: string }) {
+  const doc = packet.documents.find((d) => d.name === source.name);
+  return doc ? [[doc.id, source.id] as const] : [];
+}
+
+// Re-derives scores for a saved run from the evaluation database, without provider calls.
+async function rescoreRow(ctx: Context, row: Row) {
+  const suite = String(row.suite);
+  const packet = savedPacket(ctx, suite, String(row.packet));
+  const tag = `${String(row.runId)}-${suite}-${packet.id}-${slug(String(row.model))}-r${String(row.rep)}`;
+  const job = await ctx.db.query<{ id: string }>(
+    "select id from signal_desk.import_jobs where opportunity_id=$1",
+    [tag],
+  );
+  const stored = await ctx.db.query<{ id: string; name: string }>(
+    "select id,name from signal_desk.sources where opportunity_id=$1",
+    [tag],
+  );
+  const sources = new Map(stored.rows.flatMap((source) => sourceEntry(packet, source)));
+  const result = await jobResult(ctx.db, job.rows[0]?.id ?? "", sources);
+  return { ...row, ...scoreRun(packet, result.run) };
+}
+
+async function rescore(ctx: Context) {
+  for (const suite of ["eth79", "corpus", "public"]) {
+    const rows = await readRows(ctx.out, suite);
+    const scored = await Promise.all(rows.map((row) => rescoreRow(ctx, row)));
+    const lines = scored.map((row) => `${JSON.stringify(row)}\n`).join("");
+    await writeFile(`${ctx.out}/${suite}.rescored.jsonl`, lines);
+  }
+}
 
 async function runPackets(
   ctx: Context,
@@ -642,7 +690,7 @@ async function runPackets(
   reps: number,
   append: Append,
 ) {
-  const packets = suite === "eth79" ? [eth79Packet()] : ctx.corpus.packets;
+  const packets = suite === "eth79" ? [eth79Packet()] : packetsFor(ctx, suite);
   for (let rep = 1; rep <= reps; rep++)
     for (const packet of packets)
       await Promise.all(
@@ -650,12 +698,13 @@ async function runPackets(
       );
 }
 
-async function runProbes(
-  ctx: Context,
-  kind: keyof typeof probes,
-  models: string[],
-  append: Append,
-) {
+// Image-only documents cannot enter the text pipeline; the image probe scores them instead.
+function packetsFor(ctx: Context, suite: string) {
+  const corpus = ctx.corpora[suite === "public" ? "public" : "synthetic"];
+  return corpus.packets.filter((p) => p.documents.some((doc) => doc.format !== "image-pdf"));
+}
+
+async function runProbes(ctx: Context, kind: ProbeKind, models: string[], append: Append) {
   for (const model of models) await append(await probe(ctx, kind, model));
 }
 
@@ -669,8 +718,11 @@ async function runSuite(ctx: Context, suite: string, models: string[], reps: num
   const suites: Record<string, () => Promise<unknown>> = {
     eth79: () => runPackets(ctx, suite, models, reps, append),
     corpus: () => runPackets(ctx, suite, models, reps, append),
+    public: () => runPackets(ctx, suite, models, reps, append),
     scanned: () => runProbes(ctx, "scanned", models, append),
     pdf: () => runProbes(ctx, "pdf", models, append),
+    "public-image": () => runProbes(ctx, "public-image", models, append),
+    rescore: () => rescore(ctx),
     batch: () => Promise.all(models.map(async (model) => append(await batchProbe(ctx, model)))),
   };
   const run = suites[suite];
@@ -681,6 +733,7 @@ async function runSuite(ctx: Context, suite: string, models: string[], reps: num
 async function context(url: string, models: string[], values: Record<string, string>) {
   const { pool, db } = await prepare(url, models);
   const corpusBytes = await readFile(corpusUrl);
+  const publicBytes = await readFile(publicUrl);
   const ctx: Context = {
     pool,
     db,
@@ -690,16 +743,21 @@ async function context(url: string, models: string[], values: Record<string, str
     prices: await maxPrices(models),
     ledger: await loadLedger(values.out ?? ""),
     adapter: adapterOptions(values.effort, values.sort),
-    corpus: corpusSchema.parse(JSON.parse(corpusBytes.toString())),
+    corpora: {
+      synthetic: corpusSchema.parse(JSON.parse(corpusBytes.toString())),
+      public: corpusSchema.parse(JSON.parse(publicBytes.toString())),
+    },
   };
-  const sha = createHash("sha256").update(corpusBytes).digest("hex");
-  console.error(`corpus sha256 ${sha}; spent ${spent(ctx.ledger).toFixed(6)} USD`);
+  const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+  const labels = `corpus ${sha(corpusBytes)}, public ${sha(publicBytes)}`;
+  console.error(`labels ${labels}; spent ${spent(ctx.ledger).toFixed(6)} USD`);
   return ctx;
 }
 
 async function printSummary(out: string) {
-  for (const suite of ["eth79", "corpus"]) {
-    const rows = summarize(await readRows(out, suite));
+  for (const suite of ["eth79", "corpus", "public"]) {
+    const rescored = await readRows(out, `${suite}.rescored`);
+    const rows = summarize(rescored.length ? rescored : await readRows(out, suite));
     console.log(`## ${suite}\n${JSON.stringify(rows, null, 1)}`);
   }
 }

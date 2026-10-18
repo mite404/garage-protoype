@@ -8,7 +8,6 @@ import { promisify } from "node:util";
 import {
   corpusSchema,
   eth79Packet,
-  fixturePdf,
   predictedClaims,
   scoreClaims,
   scoreInjection,
@@ -19,6 +18,7 @@ import {
   type Predicted,
   type RunResult,
 } from "./extraction-scoring";
+import { documentBytes } from "./extraction-fixtures";
 
 const exec = promisify(execFile);
 const packet: Packet = {
@@ -199,16 +199,16 @@ test("ETH-79 gold comes from the saved packet's two tank assertions and records 
 
 async function documentPages(doc: Packet["documents"][number]) {
   if (doc.format === "text") return doc.pages;
-  if (doc.format === "text-pdf") return pdfPages(fixturePdf(doc.pages));
-  return pdfPages(
-    await readFile(new URL(`./extraction-corpus/${doc.fixture}.pdf`, import.meta.url)),
-  );
+  return pdfPages((await documentBytes(doc)).content);
+}
+
+async function frozen(name: string) {
+  const text = await readFile(new URL(`./extraction-corpus/${name}`, import.meta.url), "utf8");
+  return corpusSchema.parse(JSON.parse(text));
 }
 
 test("frozen synthetic corpus gold excerpts survive production PDF text extraction", async () => {
-  const corpus = corpusSchema.parse(
-    JSON.parse(await readFile(new URL("./extraction-corpus/corpus.json", import.meta.url), "utf8")),
-  );
+  const corpus = await frozen("corpus.json");
   const documents = corpus.packets.flatMap((p) => p.documents);
   assert.ok(documents.length >= 15);
   assert.ok(documents.some((d) => d.legal) && documents.some((d) => d.injection));
@@ -218,6 +218,25 @@ test("frozen synthetic corpus gold excerpts survive production PDF text extracti
     const scanned = doc.format === "scanned-pdf";
     if (scanned) assert.equal(pages.join("").trim(), "", `${doc.id} must have no text layer`);
     for (const claim of gold.filter((c) => c.document === doc.id && !scanned))
+      assert.ok(
+        pages[claim.page - 1]?.includes(claim.excerpt),
+        `${claim.id} on page ${claim.page}`,
+      );
+  }
+});
+
+test("public fixture labels match checksummed files and their extracted page text", async () => {
+  const corpus = await frozen("public-documents.json");
+  const documents = corpus.packets.flatMap((p) => p.documents);
+  const gold = corpus.packets.flatMap((p) => p.claims);
+  assert.ok(corpus.label.startsWith("PUBLIC "));
+  for (const doc of documents) {
+    const pages = await documentPages(doc);
+    if (doc.format === "image-pdf") {
+      assert.equal(pages.join("").trim(), "", `${doc.id} must have no text layer`);
+      continue;
+    }
+    for (const claim of gold.filter((c) => c.document === doc.id))
       assert.ok(
         pages[claim.page - 1]?.includes(claim.excerpt),
         `${claim.id} on page ${claim.page}`,
