@@ -296,6 +296,12 @@ test(
           .sort(),
         ["prepare_draft", "show_card"],
       );
+      // The fixture policy reserves 1 and 12 micro-USD per input and output token.
+      assert.deepEqual(JSON.parse(providerInput).provider, {
+        allow_fallbacks: false,
+        sort: "latency",
+        max_price: { prompt: 1, completion: 12 },
+      });
       const reconnect = await readStreams(actor, "stream-deal");
       assert.equal(reconnect[0]?.id, submitted.id);
       assert.equal(calls, 2);

@@ -62,6 +62,9 @@ type Provider = (request: {
   photos: string[];
   maxInputTokens: number;
   maxOutputTokens: number;
+  // Reserved micro-USD per token, which equals the US$ per million tokens a provider may charge.
+  inputMicroUsd: number;
+  outputMicroUsd: number;
   attemptId: string;
   signal: AbortSignal;
 }) => Promise<Report>;
@@ -72,6 +75,8 @@ type Admission =
       attemptId: string;
       maxInputTokens: number;
       maxOutputTokens: number;
+      inputMicroUsd: number;
+      outputMicroUsd: number;
       timeoutMs: number;
     };
 
@@ -265,6 +270,8 @@ async function admit(actor: Actor, request: Request, db: PoolClient): Promise<Ad
     attemptId,
     maxInputTokens: inputBound,
     maxOutputTokens: policy.max_output_tokens,
+    inputMicroUsd: policy.input_micro_usd,
+    outputMicroUsd: policy.output_micro_usd,
     timeoutMs: policy.timeout_ms,
   };
 }
@@ -373,7 +380,8 @@ export async function runInference(actor: Actor, raw: unknown, provider?: Provid
     db.release();
   }
   if (admission.kind === "cached") return outcome(admission.report);
-  const { attemptId, maxInputTokens, maxOutputTokens, timeoutMs } = admission;
+  const { attemptId, maxInputTokens, maxOutputTokens, inputMicroUsd, outputMicroUsd, timeoutMs } =
+    admission;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let report: Report;
@@ -392,6 +400,8 @@ export async function runInference(actor: Actor, raw: unknown, provider?: Provid
           photos: request.photos,
           maxInputTokens,
           maxOutputTokens,
+          inputMicroUsd,
+          outputMicroUsd,
           attemptId,
           signal: controller.signal,
         }),
