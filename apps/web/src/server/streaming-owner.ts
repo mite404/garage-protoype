@@ -27,8 +27,8 @@ async function execute(id: string) {
       .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])))
       .returning({ id: streamTurns.id });
     if (!claimed.length) return;
-    const { row } = await streamActor(id);
     const context = await streamPrompt(id);
+    const { row } = context;
     const receipt = await handle.dispatch({
       message: row.message,
       idempotencyKey: id,
