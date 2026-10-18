@@ -1,38 +1,55 @@
-import { readFile, readdir } from "node:fs/promises";
-import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { readMigrationFiles } from "drizzle-orm/migrator";
+import { Pool, type PoolClient } from "pg";
 import { migrateFlue } from "../apps/web/src/server/flue-storage";
+import { legacyBaseline } from "../apps/web/src/server/migrations";
 
+const migrationsFolder = new URL("../db/migrations", import.meta.url).pathname;
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url) throw new Error("MIGRATION_DATABASE_URL is required.");
+
+// Files the legacy runner applied, listed only until Drizzle records its first migration here.
+async function unadoptedLegacyNames(client: PoolClient) {
+  const state = await client.query<{ adopt: boolean }>(`select
+    to_regclass('public.signal_desk_migrations') is not null
+    and not exists (select 1 from drizzle.__drizzle_migrations) as adopt`);
+  if (!state.rows[0]?.adopt) return [];
+  const applied = await client.query<{ name: string }>(
+    "select name from public.signal_desk_migrations",
+  );
+  return applied.rows.map((row) => row.name);
+}
+
+// Records the legacy runner's applied files once, before Drizzle's first run on that database.
+async function adoptLegacyHistory(client: PoolClient) {
+  await client.query("begin");
+  await client.query("create schema if not exists drizzle");
+  await client.query(`create table if not exists drizzle.__drizzle_migrations
+    (id serial primary key, hash text not null, created_at bigint)`);
+  const migrations = readMigrationFiles({ migrationsFolder });
+  for (const row of legacyBaseline(migrations, await unadoptedLegacyNames(client)))
+    await client.query("insert into drizzle.__drizzle_migrations(hash,created_at) values ($1,$2)", [
+      row.hash,
+      row.createdAt,
+    ]);
+  await client.query("commit");
+}
+
 const pool = new Pool({ connectionString: url, max: 1 });
 const client = await pool.connect();
 try {
-  await client.query("begin");
-  await client.query("select pg_advisory_xact_lock(73001)");
-  await client.query(
-    "create table if not exists public.signal_desk_migrations (name text primary key)",
-  );
-  await client.query("revoke all on public.signal_desk_migrations from public");
-  const names = (await readdir(new URL("../db/", import.meta.url)))
-    .filter((name) => /^\d{3}-.+\.sql$/.test(name))
-    .sort();
-  for (const name of names) {
-    const applied = await client.query(
-      "select name from public.signal_desk_migrations where name=$1",
-      [name],
-    );
-    if (!applied.rowCount) {
-      await client.query(await readFile(new URL("../db/" + name, import.meta.url), "utf8"));
-      await client.query("insert into public.signal_desk_migrations(name) values ($1)", [name]);
-    }
-  }
-  await client.query("commit");
+  // Serializes with other operator runs and with test fixtures that take the same key.
+  await client.query("select pg_advisory_lock(73001)");
+  await adoptLegacyHistory(client);
+  await migrate(drizzle(client), { migrationsFolder });
   await migrateFlue(url);
-  process.stdout.write("Ordered migrations applied or already current.\n");
+  process.stdout.write("Migrations applied or already current.\n");
 } catch (error) {
-  await client.query("rollback");
+  await client.query("rollback").catch(() => undefined);
   throw error;
 } finally {
+  await client.query("select pg_advisory_unlock(73001)").catch(() => undefined);
   client.release();
   await pool.end();
 }
