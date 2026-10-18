@@ -22,7 +22,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { database, orm } from "./db";
+import { beginLocked, database, orm } from "./db";
 import {
   claims as claimTable,
   evidenceBlockers,
@@ -174,9 +174,7 @@ export async function evidenceTransaction<T>(
 ) {
   const db = await database().connect();
   try {
-    await orm(db).execute(sql`begin`);
-    await orm(db).execute(sql`set local lock_timeout='5s'`);
-    await orm(db).execute(sql`select signal_desk.lock_evidence_access()`);
+    await beginLocked(db, sql`select signal_desk.lock_evidence_access()`);
     const order: AccessCheck[] =
       permission === "write" ? ["write", "opportunity"] : ["opportunity"];
     const { opportunity } = await requireOpportunityAccess(actor, opportunityId, order, role, db);

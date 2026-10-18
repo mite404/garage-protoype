@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { database, orm } from "./db";
+import { beginLocked, database, orm } from "./db";
 import { appTokens } from "./db-schema";
 import { refreshActor, requireSession, type Actor } from "./access";
 import { AppError } from "./errors";
@@ -25,9 +25,7 @@ async function management<T>(actor: Actor, action: (db: PoolClient, current: Act
   requireSession(actor);
   const db = await database().connect();
   try {
-    await orm(db).execute(sql`begin`);
-    await orm(db).execute(sql`set local lock_timeout='5s'`);
-    await orm(db).execute(sql`select signal_desk.lock_token_management()`);
+    await beginLocked(db, sql`select signal_desk.lock_token_management()`);
     const current = await refreshActor(actor, db);
     if (current.role !== "specialist")
       throw new AppError(403, "FORBIDDEN", "An invited specialist is required.");

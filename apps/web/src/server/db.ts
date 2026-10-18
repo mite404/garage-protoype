@@ -1,5 +1,6 @@
 import "server-only";
 import { Pool, type PoolClient } from "pg";
+import { sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./db-schema";
 import { AppError } from "./errors";
@@ -38,4 +39,13 @@ export function sessionDatabaseUrl(processName: string) {
 /** Uses Drizzle's typed ORM over the existing pool or caller-owned transaction. */
 export function orm(client?: PoolClient) {
   return drizzle(database(client), { schema });
+}
+
+/** Begins a transaction that waits at most five seconds for locks, then takes the given
+ * serialization lock before any access check reads state.
+ */
+export async function beginLocked(client: PoolClient, lock: SQL) {
+  await orm(client).execute(sql`begin`);
+  await orm(client).execute(sql`set local lock_timeout='5s'`);
+  await orm(client).execute(lock);
 }
