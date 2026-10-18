@@ -1,6 +1,7 @@
 ---
 name: verifying-signal-desk
-description: Verifies Signal Desk cards, conversation text and sales workflows before PR handoff.
+description: Verifies Signal Desk cards, conversation, chat and municipal workspaces, sales
+  workflows and MCP tokens before PR handoff.
 ---
 
 # Verify Signal Desk
@@ -10,8 +11,16 @@ Storybook proves presentation with synthetic props, not permission checks or liv
 
 ## Gate
 
-Use the pinned Node version from `.node-version`; `.agents/setup` installs it in orbs.
-Read `docs/development.md` for isolated test database setup before running:
+Use the pinned Node version from `.node-version`. In orbs, `.agents/setup` installs it and puts it
+on `PATH` for login and `.bashrc` shells inside the repo. Confirm before anything else:
+
+```sh
+test "$(node --version)" = "v$(cat .node-version)"
+```
+
+If that fails in a shell started before setup, prepend
+`$HOME/.local/share/signal-desk-node/node_modules/node/bin` to `PATH`. Read
+`docs/development.md` for isolated test database setup before running:
 
 ```sh
 npm run build
@@ -37,8 +46,8 @@ amp orb service start verify-signal-desk --port 6106 --command \
 curl --fail --silent http://localhost:6106/index.json
 ```
 
-The doctor response must contain `agent-catalog-assistance-cards--conflict` and
-`conversation-reading--structured-response`, not just an HTTP 200. If the port belongs to another
+The doctor response must list the stories, not just return an HTTP 200; the helper compares
+that list with its own and stops on any difference. If the port belongs to another
 run, use its service status and owner; never kill an unknown process. For app HTTP regressions,
 the native test harness owns its controlled identity-provider and production-app instances.
 
@@ -50,10 +59,14 @@ Load `using-agent-browser`, then run from the repo root:
 node .agents/skills/verifying-signal-desk/scripts/verify-ui.mjs http://localhost:6106
 ```
 
-The helper opens real catalog components, asserts rendered content and semantic typography, checks
-390px overflow, and captures review images under `.amp/in/artifacts/legibility/`.
-Inspect those images with `view_media`. Screenshots alone do not verify interactions; record real
-pointer and keyboard input when changing controls, focus, hover, or motion.
+The helper refuses an unpinned Node and fails when Storybook has a story its `stories` table does
+not check, or the reverse. It opens every story, waits for its play function to finish, fails on
+Storybook's error display, asserts visible copy and semantic typography, checks 390px overflow,
+and captures one image per story under `.amp/in/artifacts/legibility/`.
+Play functions are the interaction tests: they click, type and press keys through Testing Library,
+so a new control needs a play function before this helper can prove it. Inspect the images by
+reading them. Record real pointer input only for hover or motion that a play function cannot
+assert.
 Literal source excerpts, user messages and drafts retain their text; Markdown emphasis is reserved
 for authored response and next-action prose. Verify that unsafe links and HTML remain inert.
 
@@ -64,7 +77,7 @@ created for this run, then confirm evidence survives:
 
 ```sh
 amp orb service stop verify-signal-desk
-test -f .amp/in/artifacts/legibility/conflict.png
+test -f .amp/in/artifacts/legibility/agent-catalog-assistance-cards.conflict.png
 ```
 
 Maintain this map with `/maintain-verification-skill` when routes or cards change.

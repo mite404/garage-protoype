@@ -23,15 +23,18 @@ fi
 
 export PATH="$node_bin:$PATH"
 profile_marker="# Signal Desk Node toolchain"
-if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
-  cat >> "$HOME/.bash_profile" <<EOF
+# Login shells read .bash_profile; agent and terminal shells read only .bashrc.
+for profile in "$HOME/.bash_profile" "$HOME/.bashrc"; do
+  if ! grep -Fqx "$profile_marker" "$profile" 2>/dev/null; then
+    cat >> "$profile" <<EOF
 
 $profile_marker
 if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
   export PATH="$node_bin:\$PATH"
 fi
 EOF
-fi
+  fi
+done
 
 node --version
 pdftotext -v

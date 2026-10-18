@@ -19,4 +19,6 @@ text rather than becoming emphasis or executable nodes. Inspect desktop and narr
 ## Gotchas
 
 The prose parser is Yaklabs' limited Markdown subset, not CommonMark. Emphasis is authored, not
-inferred from keywords. No streaming runtime, model connection, or sharing capability is implied.
+inferred from keywords. Live streaming exists only in the app: the opportunity stream route runs a
+Flue agent through OpenRouter, and its tools can only show evidence-checked cards and prepare
+unsent drafts. Reading stories are synthetic and connect no model. Nothing is sent externally.
