@@ -913,6 +913,62 @@ test(
           assert.deepEqual((await getPublicVehicle("evidence-truck")).facts, []);
         },
       );
+      await t.test(
+        "providers see short source aliases that the worker maps back to real IDs",
+        async () => {
+          const spec = await source("Alias spec", "Pump capacity: 1250 gpm.");
+          const note = await source("Alias note", "Seller says the tank holds 750 gallons.");
+          const queued = await queueImport(actor, "evidence-deal", {
+            sourceIds: [spec.id, note.id],
+            model: "evidence-controlled",
+            key: "source-aliases",
+          });
+          const lease = await claimImport(queued.id);
+          assert.ok(lease);
+          // Aliases follow the frozen source order, which sorts by real ID.
+          const order = [spec.id, note.id].sort();
+          const alias = (id: string) => `S${order.indexOf(id) + 1}`;
+          let sent = "";
+          await processImport(lease, async (request) => {
+            sent = request.input;
+            return {
+              ...(await provider()),
+              output: JSON.stringify({
+                claims: [
+                  {
+                    sourceId: alias(spec.id),
+                    field: "pumpCapacity",
+                    value: "1250",
+                    unit: "gpm",
+                    page: 1,
+                    excerpt: "Pump capacity: 1250 gpm.",
+                  },
+                ],
+                classifications: order.map((id) => ({
+                  ...output.classifications[0],
+                  sourceId: alias(id),
+                })),
+              }),
+            };
+          });
+          const cited = JSON.parse(sent).sources.map((s: { id: string }) => s.id);
+          assert.deepEqual(cited, ["S1", "S2"]);
+          assert.equal(sent.includes(spec.id) || sent.includes(note.id), false);
+          const view = await getWorkbench(actor, "evidence-deal");
+          assert.equal(view.jobs.find((j) => j.id === queued.id)?.state, "ready");
+          assert.deepEqual(
+            view.claims.filter((c) => c.field === "pumpCapacity").map((c) => c.sourceId),
+            [spec.id],
+          );
+          assert.deepEqual(
+            view.classifications
+              .map((c) => c.sourceId)
+              .filter((id) => order.includes(id))
+              .sort(),
+            order,
+          );
+        },
+      );
       await t.test("an incomplete envelope commits no claims and stays terminal", async () => {
         const text = await source("Bad envelope", "Tank capacity: 200 gallons.");
         const queued = await queueImport(actor, "evidence-deal", {

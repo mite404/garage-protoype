@@ -19,7 +19,7 @@ import {
   type RunResult,
 } from "./server/extraction-scoring";
 import { documentBytes, pageImages } from "./server/extraction-fixtures";
-import { claimImport, processImport, queueImport } from "./server/imports";
+import { claimImport, processImport, providerInput, queueImport } from "./server/imports";
 import { reconcileInference, runInference } from "./server/model";
 import {
   openRouterChatRequest,
@@ -376,8 +376,20 @@ async function readJob(db: PoolClient, jobId: string, sourceIds: string[]) {
   return { job: job.rows[0], attempt: attempt.rows[0], claims: claims.rows, pages: pages.rows };
 }
 
+// The provider cites short aliases; map them to documents alongside the real source IDs.
+async function aliasDocuments(db: PoolClient, jobId: string, documents: Map<string, string>) {
+  const input = await jobInput(db, jobId);
+  const frozen = z.object({ sources: z.array(z.object({ id: z.string(), alias: z.string() })) });
+  const parsed = frozen.safeParse(input ? JSON.parse(input) : {});
+  const aliases = (parsed.data?.sources ?? []).map(
+    (s) => [s.alias, documents.get(s.id) ?? ""] as const,
+  );
+  return new Map([...documents, ...aliases]);
+}
+
 async function jobResult(db: PoolClient, jobId: string, sources: Map<string, string>) {
-  const documents = new Map([...sources].map(([doc, source]) => [source, doc]));
+  const ids = new Map([...sources].map(([doc, source]) => [source, doc]));
+  const documents = await aliasDocuments(db, jobId, ids);
   const docOf = (sourceId: string) => documents.get(sourceId) ?? "";
   const rows = await readJob(db, jobId, [...sources.values()]);
   const run: RunResult = {
@@ -625,7 +637,7 @@ async function batchProbe(ctx: Context, model: string) {
   // Queue only to freeze the production snapshot; the worker's 60-second lease cannot wait.
   const sourceIds = [...sources.values()];
   const job = await queueImport(ctx.actor, tag, { sourceIds, model: batchModel, key: tag });
-  const input = await jobInput(ctx.db, job.id);
+  const input = providerInput(await jobInput(ctx.db, job.id));
   const worst = guard(ctx, model, Buffer.byteLength(input));
   const request = { key: tag, opportunityId: tag, model: batchModel, input, photos: [] };
   const result = await runBatch(ctx, request, model);
@@ -633,7 +645,8 @@ async function batchProbe(ctx: Context, model: string) {
   await record(ctx, tag, summary.spend);
   await saveOutput(ctx, tag, result.output);
   const pages = new Map(packet.documents.map((doc) => [doc.id, doc.pages]));
-  const documents = new Map([...sources].map(([doc, source]) => [source, doc]));
+  const ids = new Map([...sources].map(([doc, source]) => [source, doc]));
+  const documents = await aliasDocuments(ctx.db, job.id, ids);
   const run = { output: result.output, committed: [], pages, documents };
   const { raw, locators, schema } = scoreRun(packet, { ...run, reached: new Set(sources.keys()) });
   return {

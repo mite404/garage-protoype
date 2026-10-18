@@ -243,10 +243,11 @@ documents. No message, commercial assurance, or response draft is created or sen
 - `queueImport(actor, opportunityId, {sourceIds, model, key})` authorizes every source before
   freezing its pages, hash, kind, provenance, and extraction instruction. The maximum packet is
   20 sources. Deduplication includes the opportunity, exact source IDs/hashes, model, and
-  `evidence-v3-derived-locators` configuration. Change the version when extraction rules change.
+  `evidence-v4-source-aliases` configuration. Change the version when extraction rules change.
 - `claimImport(id?)` claims one queued or expired job with a 60-second lease and increasing fence.
 - `processImport(lease, provider?)` rechecks access, calls only `runInference` for provider mode,
-  and fences its atomic commit. Providers return a page and verbatim excerpt per claim, never
+  and fences its atomic commit. Providers see each source by a short alias (`S1`, `S2`) that the
+  worker maps back to its real ID. Providers return a page and verbatim excerpt per claim, never
   offsets. The worker derives offsets where the excerpt occurs exactly once on that page and drops
   claims with a missing or repeated excerpt, a context source, or an invalid value. The job
   records the dropped count as `droppedClaims`. An invalid envelope or incomplete
