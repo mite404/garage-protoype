@@ -36,8 +36,6 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-      - name: Install text-PDF support
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - run: npm ci
       - run: npm run build
       - name: Build the Cloudflare streaming Worker
@@ -55,8 +53,11 @@ jobs:
               exit 1
             }
           npm run check
-      - name: Check streaming guarantees on the Cloudflare Worker
+      - name: Check streaming and import guarantees on the Cloudflare Worker
         run: npm run test:cloudflare
+      # Last: OpenNext reruns `next build`, which would replace the build the checks started.
+      - name: Build the website Worker
+        run: npm run website:build
       - name: Show Cloudflare Worker logs
         if: failure()
         run: cat apps/web/cloudflare/.wrangler/test-worker.log || true

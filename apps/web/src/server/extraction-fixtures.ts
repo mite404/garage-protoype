@@ -4,7 +4,9 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { extractText, getDocumentProxy } from "unpdf";
 import { fixturePdf, type Packet } from "./extraction-scoring";
+import { pdfPages } from "./pdf-text";
 
 type Doc = Packet["documents"][number];
 
@@ -57,6 +59,21 @@ export async function documentBytes(doc: Doc) {
   const file = await publicFile(doc);
   const content = doc.pageRange ? await cutPages(file.path, doc.pageRange) : file.content;
   return { content, mediaType: "application/pdf" };
+}
+
+/** Returns a labeled document's page text as imports extract it, with `unpdf`. Public fixtures are
+ * read whole and sliced to their labeled range: PDF.js extracts each page on its own, so this
+ * matches extracting the cut file without needing poppler, and skips the import page limit.
+ * @throws {Error} If a public fixture is missing or differs from its frozen checksum.
+ */
+export async function documentPages(doc: Doc) {
+  if (doc.format === "text") return doc.pages;
+  if (doc.format !== "file-pdf" && doc.format !== "image-pdf")
+    return pdfPages((await documentBytes(doc)).content);
+  const { content } = await publicFile(doc);
+  const pdf = await getDocumentProxy(new Uint8Array(content)); // → PDFDocumentProxy
+  const { text } = await extractText(pdf, { mergePages: false }); // → string[], one per page
+  return doc.pageRange ? text.slice(doc.pageRange[0] - 1, doc.pageRange[1]) : text;
 }
 
 /** Renders each page of a checksum-verified public image PDF as a JPEG for image input, small

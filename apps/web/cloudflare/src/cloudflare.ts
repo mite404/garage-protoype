@@ -1,4 +1,4 @@
-import { DurableObject, env } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { eq, and, inArray } from "drizzle-orm";
 import { init } from "@flue/runtime";
 import { orm } from "../../src/server/db";
@@ -6,6 +6,7 @@ import { streamTurns } from "../../src/server/db-schema";
 import { executeTurn } from "../../src/server/streaming-turn";
 import { SpecialistStream } from "./agents/specialist";
 import { withDatabaseOwner } from "./database";
+import { consumeImports, enqueueImport, sweepImports, type ImportMessage } from "./imports";
 
 const cancelRetryMs = 500;
 const settleWaitMs = 5000;
@@ -117,9 +118,11 @@ export class TurnDriver extends DurableObject<Env> {
   }
 }
 
-/** Recovers turns whose kick was lost. Runs in an object, where CPU limits suit database work. */
+/** Recovers turns whose kick was lost and imports whose wake or consumer was lost. Runs in an
+ * object, where CPU limits suit database work.
+ */
 export class TurnSweeper extends DurableObject<Env> {
-  /** Wakes the driver of every unfinished turn. */
+  /** Wakes the driver of every unfinished turn and re-enqueues every claimable import. */
   async sweep() {
     await withDatabaseOwner(this, async () => {
       const rows = await orm()
@@ -127,7 +130,30 @@ export class TurnSweeper extends DurableObject<Env> {
         .from(streamTurns)
         .where(inArray(streamTurns.state, ["queued", "running", "cancelling"]));
       for (const row of rows) await kickTurn(row.id);
+      await sweepImports();
     });
+  }
+}
+
+/** The web Worker's service binding. It is unreachable from the internet, so it needs no token,
+ * and like the HTTP adapter it never reads or returns conversation or source content.
+ */
+export class StreamOwner extends WorkerEntrypoint<Env> {
+  /** Wakes the object that owns one logical turn. */
+  async kickTurn(turnId: string) {
+    await kickTurn(turnId);
+  }
+
+  /** Asks the turn's object to stop it.
+   * @returns Whether the stop is acknowledged; otherwise the object keeps retrying on its own.
+   */
+  async cancelTurn(turnId: string) {
+    return cancelTurn(turnId);
+  }
+
+  /** Hands one import job to the import queue. */
+  async enqueueImport(jobId: string) {
+    await enqueueImport(jobId);
   }
 }
 
@@ -135,4 +161,7 @@ export default {
   async scheduled() {
     await env.TURN_SWEEPER.getByName("sweeper").sweep();
   },
-} satisfies ExportedHandler<Env>;
+  async queue(batch: MessageBatch<ImportMessage>) {
+    await consumeImports(batch);
+  },
+} satisfies ExportedHandler<Env, ImportMessage>;

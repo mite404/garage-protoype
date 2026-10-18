@@ -26,20 +26,23 @@ const nodeRuntime: DatabaseRuntime = {
   },
   owner: () => processOwner,
 };
-const pools = new WeakMap<object, Pool>();
-let runtime = nodeRuntime;
+// Kept on globalThis because Next.js bundles instrumentation and routes with separate module copies.
+const state = ((globalThis as { [key: symbol]: unknown })[Symbol.for("signal-desk.database")] ??= {
+  runtime: nodeRuntime,
+  pools: new WeakMap<object, Pool>(),
+}) as { runtime: DatabaseRuntime; pools: WeakMap<object, Pool> };
 
 /** Replaces where connections come from. Call once at startup, before any query. */
 export function configureDatabase(next: DatabaseRuntime) {
-  runtime = next;
+  state.runtime = next;
 }
 
 function ownedPool() {
-  const owner = runtime.owner(); // → object
-  const existing = pools.get(owner); // → Pool | undefined
+  const owner = state.runtime.owner(); // → object
+  const existing = state.pools.get(owner); // → Pool | undefined
   if (existing) return existing;
-  const pool = new Pool({ connectionString: runtime.connectionString(), max: 5 });
-  pools.set(owner, pool);
+  const pool = new Pool({ connectionString: state.runtime.connectionString(), max: 5 });
+  state.pools.set(owner, pool);
   return pool;
 }
 

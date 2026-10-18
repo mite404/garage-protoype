@@ -37,6 +37,7 @@ import {
 } from "@signal-desk/contracts/evidence-schema";
 import { examples, savedExtraction } from "./saved-evidence";
 import { refreshPhotoBlockers } from "./photos";
+import { wakeOwner } from "./owner";
 
 const configuration = "evidence-v4-source-aliases";
 const requestSchema = z
@@ -369,7 +370,7 @@ async function ensureJob(
  */
 export async function queueImport(actor: Actor, opportunityId: string, raw: unknown) {
   const input = parseInput(requestSchema, raw);
-  return evidenceTransaction(actor, opportunityId, async (db) => {
+  const queued = await evidenceTransaction(actor, opportunityId, async (db) => {
     await requireSpending(actor, db);
     await orm(db).execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${actor.userId + ":" + input.key},75001))`,
@@ -391,7 +392,15 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
       .onConflictDoNothing();
     return { id };
   });
+  await wakeOwner("enqueueImport", queued.id);
+  return queued;
 }
+
+/** Selects jobs `claimImport` may take: queued, or processing with an expired lease. */
+export const claimableImports = or(
+  eq(importJobs.state, "queued"),
+  and(eq(importJobs.state, "processing"), lt(importJobs.lease_until, sql`clock_timestamp()`)),
+);
 
 /** Claims a queued or expired import for a fixed 60-second lease, incrementing its fence.
  * Recovery keeps the paid attempt number unchanged. Never releases a spend reservation.
@@ -401,18 +410,7 @@ export async function claimImport(id?: string): Promise<Lease | null> {
   const candidate = db
     .select({ id: importJobs.id })
     .from(importJobs)
-    .where(
-      and(
-        id === undefined ? undefined : eq(importJobs.id, id),
-        or(
-          eq(importJobs.state, "queued"),
-          and(
-            eq(importJobs.state, "processing"),
-            lt(importJobs.lease_until, sql`clock_timestamp()`),
-          ),
-        ),
-      ),
-    )
+    .where(and(id === undefined ? undefined : eq(importJobs.id, id), claimableImports))
     .orderBy(importJobs.created_at)
     .for("update", { skipLocked: true })
     .limit(1);
@@ -667,6 +665,21 @@ export async function processImport(lease: Lease, provider?: Provider) {
   }
 }
 
+/** Claims and processes one job: the given one, or the oldest claimable one.
+ * @returns Whether a job was claimed. A lost lease means another worker owns the job, not failure.
+ * @throws For database configuration or connectivity failures; the job stays claimable.
+ */
+export async function runNextImport(id?: string, provider?: Provider) {
+  const lease = await claimImport(id); // → Lease | null; null when done or leased elsewhere
+  if (!lease) return false;
+  try {
+    await processImport(lease, provider);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "STALE_WORKER") throw error;
+  }
+  return true;
+}
+
 async function lastAttempt(db: PoolClient, actor: Actor, id: string) {
   const previous = await orm(db)
     .select({ state: inferenceAttempts.state, report: inferenceAttempts.report })
@@ -691,7 +704,7 @@ export async function retryImport(actor: Actor, id: string) {
   const result = await orm().select().from(importJobs).where(eq(importJobs.id, id));
   if (!result.length) throw new AppError(404, "NOT_FOUND", "Job not found.");
   const job = jobSchema.parse(result[0]);
-  return evidenceTransaction(actor, job.opportunity_id, async (db) => {
+  const queued = await evidenceTransaction(actor, job.opportunity_id, async (db) => {
     await requireSpending(actor, db);
     requireRequester(job, actor);
     const original = await jobActor(job);
@@ -709,6 +722,8 @@ export async function retryImport(actor: Actor, id: string) {
       .where(eq(importJobs.id, id));
     return { id };
   });
+  await wakeOwner("enqueueImport", queued.id);
+  return queued;
 }
 
 /** Adds the exact synthetic saved packet to an existing opportunity without a provider call.

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "signal-desk-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Replace with the id from `wrangler hyperdrive create --caching-disabled`.
+      "id": "00000000000000000000000000000000",
+      "localConnectionString": "postgresql://signal_desk_runtime@127.0.0.1:5432/signal_desk",
+    },
+  ],
+  // Typed RPC to the owner Worker, which needs no token, unlike its HTTP route for Node.
+  "services": [
+    { "binding": "STREAM_OWNER", "service": "signal-desk-streaming", "entrypoint": "StreamOwner" },
+  ],
+  "placement": { "region": "aws:us-west-2" },
+  "observability": { "enabled": true },
+}

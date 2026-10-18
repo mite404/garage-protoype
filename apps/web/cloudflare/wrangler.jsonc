@@ -20,6 +20,11 @@
       { "name": "TURN_SWEEPER", "class_name": "TurnSweeper" },
     ],
   },
+  // Import jobs, consumed one at a time; the database lease decides who processes a job.
+  "queues": {
+    "producers": [{ "binding": "IMPORTS", "queue": "signal-desk-imports" }],
+    "consumers": [{ "queue": "signal-desk-imports", "max_batch_size": 1, "max_retries": 10 }],
+  },
   "migrations": [
     {
       "tag": "v1",

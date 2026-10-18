@@ -264,7 +264,9 @@ documents. No message, commercial assurance, or response draft is created or sen
 
 `src/worker.ts` exports `runWorker(signal, provider?)`. Its CLI is
 `node --conditions=react-server --import tsx src/worker.ts`; use a supervised service with the
-runtime database role. The import worker has no installed live provider adapter. A missing
+runtime database role. On Cloudflare, the owner Worker's `signal-desk-imports` Queue consumer
+replaces it: queueing or retrying a job wakes the owner, and its cron sweep re-enqueues claimable
+jobs. Neither import worker has an installed live provider adapter. A missing
 adapter fails the job as unavailable, never as successful processing. Lease expiry never refunds
 inference spend.
 
@@ -289,9 +291,10 @@ Runtime credentials cannot edit identity permissions, immutable source bytes, or
 The UI at `/desk/opportunities/:id` is a finite authored review workbench, not a generated component
 renderer or a competing chat-card catalog. The finite chat presentation contract below is unchanged.
 
-PDF extraction requires the OS `pdftotext` executable (`poppler-utils`), with a 10-second timeout,
-2 MiB extracted-text cap, 10 MiB original-byte cap, and 500-page cap. Missing extraction tooling
-returns `503 PDF_UNAVAILABLE`. Unreadable or scanned PDFs fail explicitly; OCR is not implemented.
+PDF extraction uses the in-process `unpdf` (PDF.js) library, with a 2 MiB extracted-text cap,
+10 MiB original-byte cap, and 500-page cap checked before text extraction. No OS executable is
+needed, so it also runs on Workers. Unreadable or scanned PDFs fail explicitly; OCR is not
+implemented.
 Hosted PostgreSQL grants/locking and live Supabase verification remain unverified. Provider-specific
 tokenizer, framing, pricing bounds, and live extraction quality also remain unverified.
 
