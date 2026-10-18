@@ -186,6 +186,9 @@ test("run scoring separates malformed output from schema-valid claims the worker
   assert.deepEqual(scored.locators, { total: 1, exact: 0, found: 1, unique: 1 });
   assert.deepEqual(scored.committed.value, { tp: 0, fp: 0, fn: 3 });
   assert.deepEqual(scored.classification, { total: 4, correct: 1 });
+  // The excerpt occurs once, so a derived locator commits the claim the worker rejected.
+  assert.deepEqual(scored.derivable.value, { tp: 1, fp: 0, fn: 2 });
+  assert.deepEqual(scored.rejections, ["classifications", "offsets"]);
 });
 
 test("ETH-79 gold comes from the saved packet's two tank assertions and records claim", () => {

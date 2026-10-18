@@ -171,6 +171,26 @@ function percentile(values: number[], p: number) {
   return sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null;
 }
 
+// Private notes and inquiries are context; the worker rejects any claim citing them.
+const contextKinds = new Set(["private_note", "inquiry"]);
+
+function exactLocator(claim: Predicted, pages: Map<string, string[]>) {
+  const page = pages.get(claim.document)?.[claim.page - 1] ?? "";
+  return claim.end > claim.start && page.slice(claim.start, claim.end) === claim.excerpt;
+}
+
+function validValue(claim: Predicted) {
+  return key(claim.document, claim.field, claim.value, claim.unit) !== null;
+}
+
+function classificationGap(output: unknown, documents: Map<string, string>) {
+  const listed = classified.safeParse(output).data?.classifications ?? [];
+  const cited = listed.map((c) => documents.get(c.sourceId));
+  const expected = [...documents.values()];
+  const complete = expected.every((doc) => cited.filter((id) => id === doc).length === 1);
+  return !complete || cited.length !== expected.length || cited.includes(undefined);
+}
+
 /** Scores predicted claims against gold claims for the documents that reached the model.
  * Duplicate predictions of one fact count once; optional readings are neutral.
  */
@@ -240,6 +260,42 @@ export function predictedClaims(raw: string, documents: Map<string, string>) {
   return { claims, unusable: list.data.claims.length - claims.length };
 }
 
+// Names each check the import worker's validation would fail for this output. One failure
+// rejects the whole import, so a single bad locator discards every correct claim.
+function rejectionReasons(packet: Packet, run: RunResult) {
+  const output = json(run.output);
+  if (!extractionSchema.safeParse(output).success) return ["schema"];
+  const kinds = new Map(packet.documents.map((doc) => [doc.id, doc.kind]));
+  const { claims, unusable } = predictedClaims(run.output, run.documents);
+  const checks: [string, boolean][] = [
+    ["classifications", classificationGap(output, run.documents)],
+    ["unknown-source", unusable > 0],
+    ["context-claim", claims.some((c) => contextKinds.has(kinds.get(c.document) ?? ""))],
+    ["offsets", claims.some((c) => !exactLocator(c, run.pages))],
+    ["value-format", claims.some((c) => !validValue(c))],
+  ];
+  return checks.filter(([, failed]) => failed).map(([reason]) => reason);
+}
+
+function derivedLocator(claim: Predicted, pages: Map<string, string[]>) {
+  const page = pages.get(claim.document)?.[claim.page - 1] ?? "";
+  const parts = page.split(claim.excerpt);
+  if (!claim.excerpt || parts.length !== 2) return [];
+  const start = parts[0]?.length ?? 0;
+  return [{ ...claim, start, end: start + claim.excerpt.length }];
+}
+
+// Claims a worker could commit if it derived offsets from a verbatim excerpt that occurs once
+// on the cited page, and dropped individual invalid claims instead of the whole import.
+function derivableClaims(packet: Packet, run: RunResult) {
+  const kinds = new Map(packet.documents.map((doc) => [doc.id, doc.kind]));
+  const allowed = (claim: Predicted) =>
+    !contextKinds.has(kinds.get(claim.document) ?? "") && validValue(claim);
+  return predictedClaims(run.output, run.documents)
+    .claims.filter(allowed)
+    .flatMap((claim) => derivedLocator(claim, run.pages));
+}
+
 /** Scores one import: raw model output, the claims the worker committed, and their locators. */
 export function scoreRun(packet: Packet, run: RunResult) {
   const parsed = predictedClaims(run.output, run.documents);
@@ -251,6 +307,8 @@ export function scoreRun(packet: Packet, run: RunResult) {
     schema: extractionSchema.safeParse(json(run.output)).success,
     raw: { ...raw, value: { ...raw.value, fp: raw.value.fp + parsed.unusable } },
     committed: scoreClaims(packet, run.committed, run.reached),
+    derivable: scoreClaims(packet, derivableClaims(packet, run), run.reached),
+    rejections: run.output ? rejectionReasons(packet, run) : ["no-output"],
     locators: scoreLocators(parsed.claims, run.pages),
     injection: scoreInjection(packet, parsed.claims, run.output),
     classification: {
@@ -350,6 +408,16 @@ export function fixturePdf(pages: string[]) {
  * recall, exact offsets, preserved conflicts, injection failures, malformed output, latency and
  * provider-reported cost per document.
  */
+const empty = { tp: 0, fp: 0, fn: 0 };
+
+function tally(reasons: string[]) {
+  return Object.fromEntries(
+    Map.groupBy(reasons, (r) => r)
+      .entries()
+      .map(([r, all]) => [r, all.length]),
+  );
+}
+
 export function summarize(rows: Row[]) {
   const pick = <T>(row: Row, path: string[]) =>
     path.reduce<unknown>((node, part) => (node as Row | undefined)?.[part], row) as T;
@@ -378,6 +446,8 @@ export function summarize(rows: Row[]) {
       rawValue: sum(group, (row) => pick(row, ["raw", "value"])),
       rawField: sum(group, (row) => pick(row, ["raw", "field"])),
       committedValue: sum(group, (row) => pick(row, ["committed", "value"])),
+      derivableValue: sum(group, (row) => pick(row, ["derivable", "value"]) ?? empty),
+      rejections: tally(group.flatMap((row) => pick<string[]>(row, ["rejections"]) ?? [])),
       offsetsExact: `${locators.reduce((n, l) => n + l.exact, 0)}/${total}`,
       excerptsUnique: `${locators.reduce((n, l) => n + l.unique, 0)}/${total}`,
       conflictsRaw: conflicts("raw"),
