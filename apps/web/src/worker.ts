@@ -1,14 +1,16 @@
 import { setTimeout } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { sessionDatabaseUrl } from "./server/db";
 import { claimImport, processImport } from "./server/imports";
 
 /** Runs one durable import worker. No live provider is installed by default.
- * @throws For database configuration or connectivity failures; jobs survive process restart.
+ * @throws For a transaction-pooler URL, database configuration or connectivity failures; jobs survive process restart.
  */
 export async function runWorker(
   signal: AbortSignal,
   provider?: Parameters<typeof processImport>[1],
 ) {
+  sessionDatabaseUrl("The import worker");
   while (!signal.aborted) {
     const lease = await claimImport();
     if (lease) {
