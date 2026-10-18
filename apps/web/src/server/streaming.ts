@@ -18,7 +18,7 @@ import {
   requireWrite,
   type Actor,
 } from "./access";
-import { beginChatTurn, getAssistance } from "./assistance";
+import { beginChatTurn, getAssistance, getAssistanceRevision } from "./assistance";
 import { getWorkbench } from "./evidence";
 import { AppError } from "./errors";
 import { getMunicipalityWorkspace } from "./municipalities";
@@ -44,7 +44,10 @@ export async function streamActor(id: string) {
  * @throws {AppError} For stale evidence, ended credentials, or removed membership.
  */
 export async function streamPrompt(id: string) {
-  const { actor, row, view } = await streamContext(id);
+  const { actor, row } = await streamContext(id);
+  const view = await getAssistance(actor, row.opportunityId);
+  if (view.revision !== row.revision)
+    throw new AppError(412, "STALE_REVIEW", "Evidence changed during generation.");
   const opportunity = await requireOpportunity(actor, row.opportunityId, "specialist");
   const [organization] = await orm()
     .select({ id: organizations.id })
@@ -176,8 +179,7 @@ export async function streamContext(id: string) {
   const { actor, row } = await streamActor(id);
   if (!["queued", "running"].includes(row.state))
     throw new AppError(409, "STREAM_STOPPED", "Stream is no longer running.");
-  const view = await getAssistance(actor, row.opportunityId);
-  if (view.revision !== row.revision)
+  if ((await getAssistanceRevision(actor, row.opportunityId)) !== row.revision)
     throw new AppError(412, "STALE_REVIEW", "Evidence changed during generation.");
   const uncertain = await orm()
     .select({ id: inferenceAttempts.id })
@@ -193,7 +195,7 @@ export async function streamContext(id: string) {
     .limit(1);
   if (uncertain.length)
     throw new AppError(409, "SPEND_UNCERTAIN", "Prior provider request requires reconciliation.");
-  return { actor, row, view };
+  return { actor, row };
 }
 
 /** Strict boundary for persisted model-call failures exposed in the UI. */
