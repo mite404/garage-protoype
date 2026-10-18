@@ -17,6 +17,7 @@ async function execute(id: string) {
   const handle = init(SpecialistStream, { id });
   let writes = Promise.resolve();
   let writeError: unknown;
+  let writeQueued = false;
   let text = "";
   let afterTool = false;
   try {
@@ -67,10 +68,15 @@ Current evidence revision: ${context.revision}`,
           if (afterTool && text) text = text.trimEnd() + "\n\n";
           afterTool = false;
           text += chunk.delta;
-          const snapshot = text;
+          // One queued write persists every delta received before it starts, so database round
+          // trips scale with write latency rather than token count. Each write still rechecks access.
+          if (writeQueued) return;
+          writeQueued = true;
           writes = writes
             .then(async () => {
+              writeQueued = false;
               if (writeError) return;
+              const snapshot = text;
               await streamActor(id);
               await orm()
                 .update(streamTurns)
