@@ -393,6 +393,12 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
   });
 }
 
+// Jobs `claimImport` may take: queued, or processing with an expired lease.
+const claimableImports = or(
+  eq(importJobs.state, "queued"),
+  and(eq(importJobs.state, "processing"), lt(importJobs.lease_until, sql`clock_timestamp()`)),
+);
+
 /** Claims a queued or expired import for a fixed 60-second lease, incrementing its fence.
  * Recovery keeps the paid attempt number unchanged. Never releases a spend reservation.
  */
@@ -401,18 +407,7 @@ export async function claimImport(id?: string): Promise<Lease | null> {
   const candidate = db
     .select({ id: importJobs.id })
     .from(importJobs)
-    .where(
-      and(
-        id === undefined ? undefined : eq(importJobs.id, id),
-        or(
-          eq(importJobs.state, "queued"),
-          and(
-            eq(importJobs.state, "processing"),
-            lt(importJobs.lease_until, sql`clock_timestamp()`),
-          ),
-        ),
-      ),
-    )
+    .where(and(id === undefined ? undefined : eq(importJobs.id, id), claimableImports))
     .orderBy(importJobs.created_at)
     .for("update", { skipLocked: true })
     .limit(1);
@@ -665,6 +660,21 @@ export async function processImport(lease: Lease, provider?: Provider) {
   } catch (error) {
     await failImport(lease, error);
   }
+}
+
+/** Claims and processes one job: the given one, or the oldest claimable one.
+ * @returns Whether a job was claimed. A lost lease means another worker owns the job, not failure.
+ * @throws For database configuration or connectivity failures; the job stays claimable.
+ */
+export async function runNextImport(id?: string, provider?: Provider) {
+  const lease = await claimImport(id); // → Lease | null; null when done or leased elsewhere
+  if (!lease) return false;
+  try {
+    await processImport(lease, provider);
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "STALE_WORKER") throw error;
+  }
+  return true;
 }
 
 async function lastAttempt(db: PoolClient, actor: Actor, id: string) {
