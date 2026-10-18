@@ -1,13 +1,14 @@
 import "server-only";
 import { eq, inArray, and, sql } from "drizzle-orm";
 import { init, type FlueExecutionInterceptor } from "@flue/runtime";
+import type { ConversationStreamStore } from "@flue/runtime/adapter";
 import { approvedSalesTool, type StreamActivity } from "@signal-desk/contracts/assistance-schema";
 import { orm } from "./db";
 import { streamTurns } from "./db-schema";
 import { noteActivity, streamActor, streamError, streamPrompt } from "./streaming";
-import { modelExecution } from "./streaming-provider";
+import { modelExecution, requireModelCheckpoint } from "./streaming-provider";
 import { AppError } from "./errors";
-import { SpecialistStream } from "../agents/specialist";
+import type { SpecialistStream } from "../agents/specialist";
 
 // Truthful progress labels for the approved sales tools.
 const toolActivity: Record<string, StreamActivity> = {
@@ -15,11 +16,35 @@ const toolActivity: Record<string, StreamActivity> = {
   prepare_draft: "preparing_draft",
 };
 
+// Checkpoint failures that make a resumed turn unsafe to continue rather than an outage.
+const unrecoverable = ["SPEND_UNCERTAIN", "MODEL_CHECKPOINT_MISSING"];
+
+/** Checks a queued or running turn's paid results against Flue's canonical history before Flue
+ * may resume it, and interrupts the turn when spending cannot be proven settled.
+ * @returns Whether the turn was interrupted.
+ * @throws For checkpoint failures other than uncertain spending or a missing checkpoint.
+ */
+export async function reconcileTurn(id: string, store: ConversationStreamStore) {
+  try {
+    await requireModelCheckpoint(id, store);
+    return false;
+  } catch (error) {
+    if (!(error instanceof AppError) || !unrecoverable.includes(error.code)) throw error;
+    await orm()
+      .update(streamTurns)
+      .set({ state: "interrupted", errorCode: error.code })
+      .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
+    return true;
+  }
+}
+
 /** Runs one admitted logical turn on whichever Flue runtime is configured, Node or Cloudflare.
  * Projects text, activity and terminal state into stream_turns; never throws for turn failures.
+ * @param agent The specialist agent as registered in the calling runtime; Flue resolves agents by
+ * identity, and the Cloudflare build registers its own wrapper.
  */
-export async function executeTurn(id: string) {
-  const handle = init(SpecialistStream, { id });
+export async function executeTurn(agent: typeof SpecialistStream, id: string) {
+  const handle = init(agent, { id });
   let writes = Promise.resolve();
   let writeError: unknown;
   let writeQueued = false;

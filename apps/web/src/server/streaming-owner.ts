@@ -7,9 +7,8 @@ import type { streamSimple } from "@earendil-works/pi-ai/api/openai-completions"
 import { orm, sessionDatabaseUrl } from "./db";
 import { streamTurns } from "./db-schema";
 import { flueStorage, lockStreamingOwner } from "./flue-storage";
-import { admittedProvider, requireModelCheckpoint } from "./streaming-provider";
-import { executeTurn, salesInterceptor } from "./streaming-turn";
-import { AppError } from "./errors";
+import { admittedProvider } from "./streaming-provider";
+import { executeTurn, reconcileTurn, salesInterceptor } from "./streaming-turn";
 import { SpecialistStream } from "../agents/specialist";
 
 /** Starts one PostgreSQL-backed Flue owner. Web processes only submit or observe database records.
@@ -37,23 +36,7 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
       .select({ id: streamTurns.id })
       .from(streamTurns)
       .where(inArray(streamTurns.state, ["queued", "running"]));
-    for (const row of pending) {
-      try {
-        await requireModelCheckpoint(row.id, stores.conversationStreamStore);
-      } catch (error) {
-        if (
-          !(error instanceof AppError) ||
-          !["SPEND_UNCERTAIN", "MODEL_CHECKPOINT_MISSING"].includes(error.code)
-        )
-          throw error;
-        await orm()
-          .update(streamTurns)
-          .set({ state: "interrupted", errorCode: error.code })
-          .where(
-            and(eq(streamTurns.id, row.id), inArray(streamTurns.state, ["queued", "running"])),
-          );
-      }
-    }
+    for (const row of pending) await reconcileTurn(row.id, stores.conversationStreamStore);
     runtime = await start({
       agents: [SpecialistStream],
       providers: [admittedProvider(stores.conversationStreamStore, options.transport)],
@@ -103,7 +86,7 @@ export async function startStreamingOwner(options: { transport?: typeof streamSi
         if (row.state === "cancelling") {
           await acknowledgeCancellation(row.id);
         } else if (!active.has(row.id)) {
-          const work = executeTurn(row.id).finally(() => {
+          const work = executeTurn(SpecialistStream, row.id).finally(() => {
             active.delete(row.id);
           });
           active.set(row.id, work);
