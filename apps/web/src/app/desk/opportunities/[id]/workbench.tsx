@@ -39,6 +39,10 @@ async function postEvidence(path: string, body: FormData | string, revision?: nu
   }
 }
 
+function assertionCount(count: number) {
+  return `${count} source ${count === 1 ? "assertion" : "assertions"}`;
+}
+
 /** Finite developer-authored review UI. All mutations return to authorized server operations. */
 export default function EvidenceWorkbench({
   view,
@@ -176,9 +180,7 @@ export default function EvidenceWorkbench({
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">
-                          {claims.length
-                            ? `${claims.length} source assertions`
-                            : "No approved answer"}
+                          {claims.length ? assertionCount(claims.length) : "No approved answer"}
                         </span>
                       )}
                     </summary>
