@@ -65,9 +65,11 @@ Existing ticket orbs receive these files with their dependency snapshot and run 
 Future orbs inherit this automatically only after the setup reaches the project's default branch.
 No Claude, Codex, or Cursor MCP configuration is needed for Amp's CLI checks.
 
-Text-PDF extraction runs in process through `unpdf`, so the app and CI need no `pdftotext`.
-Orb setup still installs `poppler-utils` for `scripts/compare-pdf-extractors.ts`, which checks
-`unpdf` against `pdftotext`. This is not OCR support for scanned documents.
+Text-PDF extraction runs in process through `unpdf`, so the app, the tests and CI need no
+poppler. Orb setup still installs `poppler-utils` for tooling outside the gate: `npm run
+eval:extraction` cuts public fixtures to their labeled pages and renders image pages with it, and
+`scripts/compare-pdf-extractors.ts` checks `unpdf` against `pdftotext`. This is not OCR support for
+scanned documents.
 
 ## Supabase developer access
 

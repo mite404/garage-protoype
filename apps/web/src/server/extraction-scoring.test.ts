@@ -14,8 +14,7 @@ import {
   type Predicted,
   type RunResult,
 } from "./extraction-scoring";
-import { documentBytes } from "./extraction-fixtures";
-import { pdfPages } from "./pdf-text";
+import { documentPages } from "./extraction-fixtures";
 
 const packet: Packet = {
   id: "T",
@@ -178,11 +177,6 @@ test("ETH-79 gold comes from the saved packet's two tank assertions and records 
   );
   assert.deepEqual(eth79.conflicts, [{ field: "tankCapacity", claims: ["G1", "G2"] }]);
 });
-
-async function documentPages(doc: Packet["documents"][number]) {
-  if (doc.format === "text") return doc.pages;
-  return pdfPages((await documentBytes(doc)).content);
-}
 
 async function frozen(name: string) {
   const text = await readFile(new URL(`./extraction-corpus/${name}`, import.meta.url), "utf8");
