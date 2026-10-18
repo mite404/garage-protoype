@@ -118,7 +118,7 @@ export default function Conversation({
         />
       </div>
       <output className="mt-3 block text-xs text-muted-foreground">{connection}</output>
-      <div className="my-5 space-y-5" aria-label="Conversation history">
+      <section className="my-5 space-y-5" aria-label="Conversation history">
         {!view.turns.length && !streams.length && (
           <p className="rounded-md bg-muted p-5 text-sm text-muted-foreground">
             Start with the question blocking this sale. Answers use only reviewed, shareable
@@ -175,7 +175,7 @@ export default function Conversation({
             </div>
           </ConversationTurn>
         ))}
-      </div>
+      </section>
       <form onSubmit={chat}>
         <fieldset disabled={pending}>
           <label htmlFor="specialist-message">Question for the evidence desk</label>

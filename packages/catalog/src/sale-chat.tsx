@@ -34,11 +34,11 @@ function ChatHistory({
   streams: StreamView[];
   pending: boolean;
   onStop: (id: string) => void;
-  history: RefObject<HTMLDivElement | null>;
+  history: RefObject<HTMLElement | null>;
   onScroll: () => void;
 }) {
   return (
-    <div
+    <section
       ref={history}
       aria-label="Conversation history"
       className="chat-transcript space-y-5"
@@ -91,7 +91,7 @@ function ChatHistory({
           </div>
         </article>
       ))}
-    </div>
+    </section>
   );
 }
 
@@ -174,7 +174,7 @@ export default function SaleChat({
   const [input, setInput] = useState("");
   const launcher = useRef<HTMLButtonElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
-  const history = useRef<HTMLDivElement>(null);
+  const history = useRef<HTMLElement>(null);
   const follow = useRef(true);
   const active = streams.some((turn) => ["queued", "running", "cancelling"].includes(turn.state));
   useEffect(() => {
