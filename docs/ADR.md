@@ -43,6 +43,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-025: Keep Flue for the bounded [specialist conversation][flue-trial], not as a full runtime
   migration, because the trial streamed real tool output and recovered turns while preserving
   sales, evidence, and spending controls.
+- ADR-026: Run every deployed process in `us-west-2`, with Vercel functions in `pdx1`, beside the
+  Supabase database because turns make hundreds of sequential queries and cross-region round trips
+  dominate their latency.
 
 ## Proposed
 
