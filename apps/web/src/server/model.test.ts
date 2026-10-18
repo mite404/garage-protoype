@@ -440,7 +440,11 @@ test(
         });
       `,
             ],
-            { env: process.env, stdio: ["ignore", "pipe", "pipe"] },
+            {
+              cwd: new URL("../../../../", import.meta.url),
+              env: process.env,
+              stdio: ["ignore", "pipe", "pipe"],
+            },
           );
           try {
             await once(child.stdout, "data", { signal: AbortSignal.timeout(5000) });

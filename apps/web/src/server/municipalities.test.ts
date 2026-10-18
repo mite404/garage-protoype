@@ -212,6 +212,9 @@ test(
         "delete from signal_desk.opportunity_members where opportunity_id='municipal-deal'",
       );
       await db.query(
+        "delete from signal_desk.inquiry_suggestions where inquiry_id in (select id from signal_desk.inquiries where opportunity_id in ('municipal-deal','municipal-hidden'))",
+      );
+      await db.query(
         "delete from signal_desk.opportunities where id in ('municipal-deal','municipal-hidden')",
       );
       await db.query(

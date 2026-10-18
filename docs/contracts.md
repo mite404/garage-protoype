@@ -118,7 +118,8 @@ HTTP operations, the worker, and future MCP operations must use this shared oper
 call a provider directly.
 Only implemented workflow operations can queue processing. Buyer inquiries use deterministic
 reviewed-evidence lookup and human routing, not paid model processing.
-This path installs no live provider adapter, provider purchase, default budget, or enabled model.
+This path installs no provider purchase, default budget, or enabled model. Optional Jev routing
+uses the TypeSafe adapter for unmatched specialist questions only. Buyer inquiries never call it.
 The Flue specialist conversation is separate. It calls OpenRouter through its own admitted
 provider in `src/server/streaming-provider.ts`, under the same spending admission and budgets
 (see [plan 008](plans/008-flue-specialist-trial.md)).
@@ -130,8 +131,22 @@ attempt reuses its persisted report; a retry explicitly requests the next number
 returns `409 ATTEMPT_CONFLICT`. A successful operation cannot be retried for another charge.
 
 Operator-provisioned `inference_models` rows define allowed model IDs, total UTF-8 input bytes,
-photo count, per-photo and framing token allowances, output tokens, integer micro-USD token rates,
+photo count, per-photo and framing token allowances, output tokens, integer micro-USD rates,
 attempt cap, retry delay, and timeout. One USD is 1,000,000 micro-USD.
+Rates apply per `rate_tokens` tokens (default 1). Admission and settlement each round the combined
+input/output charge up to a whole micro-USD. Each attempt snapshots the rate denominator.
+
+Manually provision Jev as `jev-1.13.0` with `max_input_bytes=4096`, `max_photos=0`,
+`photo_tokens=0`, `overhead_tokens=2048`, `max_output_tokens=512`, `input_micro_usd=42`,
+`output_micro_usd=0`, `rate_tokens=1000`, `max_attempts=1`, `retry_ms=1000`, and `timeout_ms=5000`.
+Jev reports about 134 free output tokens for the 14-option Choice; settlement still requires the
+reported count to fit the bound, so a lower cap turns every success into uncertain spend.
+No seed enables it. `TYPESAFE_API_KEY` enables the adapter; `TYPESAFE_BASE_URL` is optional.
+Only `{ specialist_question: text }` enters provider state. A Choice confidence of at least 0.8
+suggests a single evidence field. Other results retain human review, including provider failures.
+Suggestions are append-only and specialist-only. Accepting one appends human routing, never
+approves evidence or changes visibility. SDK retries are disabled; uncertain spend stays reserved.
+
 `inference_budgets` contains lifetime caps
 and concurrency limits for `installation` and each spending user's UUID. Missing rows deny spending.
 There is no automatic daily reset or reservation expiry.
@@ -146,7 +161,7 @@ or connection remains held during the provider call. This coarse lock limits adm
 and briefly delays unrelated session writes. Hosted Supabase locking privileges remain unverified.
 
 The server-owned provider callback receives `model`, `input`, `photos`, `maxInputTokens`,
-`maxOutputTokens`, `attemptId`, and an `AbortSignal`.
+`maxOutputTokens`, `attemptId`, an `AbortSignal`, and `timeout` in milliseconds.
 It must disable SDK retries and honor both caps.
 The conservative input allowance must cover all billable input, including provider framing.
 Photos contain inline permitted content, not URLs that bypass input bounds.
@@ -476,8 +491,9 @@ operations.
   retain the upstream suggestion's source and task references after reauthorization. Recipient
   labels remain unverified. No delivery action exists.
 - `beginChatTurn(actor, opportunityId, message, key)` persists a specialist turn and inquiry
-  atomically. Identical retries return the same turn. This bounded language path has no live model
-  and routes unsupported wording to human review. It does not claim general language understanding.
+  atomically after optional Jev routing inference. Identical retries reuse the inference report
+  and return the same turn. Unsupported wording stays in human review until a specialist accepts
+  a suggestion or corrects routing manually.
 - `renderCardCall(actor, opportunityId, turnId, callId, call)` validates presentation only. The
   finite tools are `answer`, `review`, and `handoff` with required `props.inquiryId`, plus `draft`
   with required `props.draftId`. No optional props exist yet. Unknown props, invented values,

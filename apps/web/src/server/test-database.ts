@@ -15,6 +15,9 @@ const probes: Record<string, string> = {
   "0008_municipality-workspace": "select to_regclass('signal_desk.organizations') as name",
   "0009_stream-activity":
     "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='stream_turns' and column_name='activity') as name",
+  "0010_jev-routing": "select to_regclass('signal_desk.inquiry_suggestions') as name",
+  "0011_jev-routing-policies":
+    "select (select policyname from pg_policies where schemaname='signal_desk' and tablename='inquiry_suggestions' and policyname='server_insert') as name",
 };
 const migrations = new URL("../../../../db/migrations/", import.meta.url);
 

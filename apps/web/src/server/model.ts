@@ -50,13 +50,14 @@ const policySchema = z.object({
   max_output_tokens: integer,
   input_micro_usd: integer,
   output_micro_usd: integer,
+  rate_tokens: integer.min(1).max(1000000),
   max_attempts: integer,
   retry_ms: integer,
   timeout_ms: integer,
 });
 type Request = z.infer<typeof requestSchema>;
 type Report = z.infer<typeof reportSchema>;
-type Provider = (request: {
+export type Provider = (request: {
   model: string;
   input: string;
   photos: string[];
@@ -67,6 +68,7 @@ type Provider = (request: {
   outputMicroUsd: number;
   attemptId: string;
   signal: AbortSignal;
+  timeout: number;
 }) => Promise<Report>;
 type Admission =
   | { kind: "cached"; report: Report }
@@ -245,8 +247,10 @@ async function admit(actor: Actor, request: Request, db: PoolClient): Promise<Ad
   );
   if (prior.report) return { kind: "cached", report: prior.report };
   const inputBound = bytes + request.photos.length * policy.photo_tokens + policy.overhead_tokens;
-  const amount =
-    inputBound * policy.input_micro_usd + policy.max_output_tokens * policy.output_micro_usd;
+  const amount = Math.ceil(
+    (inputBound * policy.input_micro_usd + policy.max_output_tokens * policy.output_micro_usd) /
+      policy.rate_tokens,
+  );
   await reserve(actor.userId, amount, db);
   await currentAccess(actor, request, db);
   const attemptId = randomUUID();
@@ -260,6 +264,7 @@ async function admit(actor: Actor, request: Request, db: PoolClient): Promise<Ad
       reserved_micro_usd: String(amount),
       input_rate: policy.input_micro_usd,
       output_rate: policy.output_micro_usd,
+      rate_tokens: policy.rate_tokens,
       input_bound: inputBound,
       output_bound: policy.max_output_tokens,
       retry_ms: policy.retry_ms,
@@ -293,6 +298,7 @@ async function settle(attemptId: string, report: Report, evidence: string | null
       reserved_micro_usd: z.coerce.number(),
       input_rate: integer,
       output_rate: integer,
+      rate_tokens: integer.min(1).max(1000000),
       input_bound: integer,
       output_bound: integer,
     })
@@ -310,7 +316,10 @@ async function settle(attemptId: string, report: Report, evidence: string | null
     throw new AppError(409, "SPEND_UNCERTAIN", "Provider usage exceeded the reserved bounds.");
   const charge =
     report.kind !== "not-billed"
-      ? report.inputTokens * row.input_rate + report.outputTokens * row.output_rate
+      ? Math.ceil(
+          (report.inputTokens * row.input_rate + report.outputTokens * row.output_rate) /
+            row.rate_tokens,
+        )
       : 0;
   // Lock both scopes in the same order as admission.
   await orm(db)
@@ -404,6 +413,7 @@ export async function runInference(actor: Actor, raw: unknown, provider?: Provid
           outputMicroUsd,
           attemptId,
           signal: controller.signal,
+          timeout: timeoutMs,
         }),
         timeout,
       ]),

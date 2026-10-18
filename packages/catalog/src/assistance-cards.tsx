@@ -1,11 +1,59 @@
-import type { InlineCard } from "@signal-desk/contracts/assistance-schema";
+import type { InlineCard, RoutingSuggestion } from "@signal-desk/contracts/assistance-schema";
 import { fieldLabels } from "@signal-desk/contracts/evidence-schema";
 import { Badge } from "@signal-desk/ui/components/ui/badge";
+import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse, Prose } from "./prose";
 
+const reviewReasons = {
+  low_confidence: "Jev was not confident about a single field.",
+  multiple: "The question asks about more than one fact.",
+  judgment: "The question asks for a judgment, not a recorded fact.",
+  other: "No evidence field fits this question.",
+};
+
+function Suggestion({
+  suggestion,
+  onAccept,
+}: {
+  suggestion: RoutingSuggestion;
+  onAccept?: () => void;
+}) {
+  if (suggestion.state === "unavailable")
+    return <p className="card-caveat">Jev routing unavailable. Route this question manually.</p>;
+  return (
+    <div className="card-suggestion">
+      <p className="reading-label">
+        {suggestion.state === "suggested" ? "Jev suggestion" : "Needs human review"}
+      </p>
+      {suggestion.state === "suggested" ? (
+        <>
+          <p>
+            {fieldLabels[suggestion.field]} · {Math.round(suggestion.confidence * 100)}% confidence
+          </p>
+          <p className="card-caveat">Suggestion only. Confirm before routing.</p>
+          {onAccept && (
+            <Button variant="outline" onClick={onAccept}>
+              Use suggested field
+            </Button>
+          )}
+        </>
+      ) : (
+        <p className="card-caveat">{reviewReasons[suggestion.reason]}</p>
+      )}
+    </div>
+  );
+}
+
 /** Renders only the finite authored catalog. Text is escaped by React; no generated markup runs. */
-export default function AssistanceCard({ card }: { card: InlineCard }) {
+export default function AssistanceCard({
+  card,
+  onAcceptSuggestion,
+}: {
+  card: InlineCard;
+  /** Offered only by specialist hosts with the current inquiry revision. */
+  onAcceptSuggestion?: (inquiryId: string, routingRevision: number) => void;
+}) {
   switch (card.kind) {
     case "answer":
       return (
@@ -37,9 +85,18 @@ export default function AssistanceCard({ card }: { card: InlineCard }) {
                 : "Unknown · Review required"}
           </Badge>
           <div>
-            <p className="reading-label">Buyer question</p>
+            <p className="reading-label">Question</p>
             <h3>{card.question}</h3>
           </div>
+          {card.suggestion && (
+            <Suggestion
+              suggestion={card.suggestion}
+              onAccept={
+                onAcceptSuggestion &&
+                (() => onAcceptSuggestion(card.inquiryId, card.routingRevision))
+              }
+            />
+          )}
           <p className="card-caveat">No supported answer yet.</p>
           <div className="card-next-action">
             <p className="reading-label">Next human action</p>

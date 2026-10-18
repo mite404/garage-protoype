@@ -73,14 +73,44 @@ const completedTurn: StreamView = {
   activity: null,
 };
 
+const suggestedTurn: StreamView = {
+  id: "synthetic-jev-turn",
+  inquiryId: "synthetic-jev-question",
+  message: "How much water can it carry?",
+  state: "completed",
+  text: "This needs a routed evidence field before I can cite an answer.",
+  cards: [
+    {
+      kind: "review",
+      inquiryId: "synthetic-jev-question",
+      routingRevision: 0,
+      state: "human_review",
+      blockerId: "synthetic-blocker-jev",
+      question: "How much water can it carry?",
+      assigneeId: "specialist-demo",
+      nextAction: "Clarify the question's intent before preparing a reply.",
+      suggestion: {
+        state: "suggested",
+        field: "tankCapacity",
+        confidence: 0.98,
+        modelVersion: "jev-1.13.0",
+      },
+    },
+  ],
+  errorCode: null,
+  activity: null,
+};
+
 function PreviewChat({ initial = [completedTurn] }: { initial?: StreamView[] }) {
+  const [connection, setConnection] = useState("Synthetic preview · No model connected");
   const [streams, setStreams] = useState<StreamView[]>(initial);
+
   return (
     <SaleChat
       context="Austin · Engine 001"
       streams={streams}
       pending={false}
-      connection="Synthetic preview · No model connected"
+      connection={connection}
       denied={false}
       onSubmit={async (message) =>
         setStreams([
@@ -98,6 +128,9 @@ function PreviewChat({ initial = [completedTurn] }: { initial?: StreamView[] }) 
         ])
       }
       onStop={() => {}}
+      onAcceptSuggestion={(inquiryId, revision) =>
+        setConnection(`Accepted suggestion for ${inquiryId} at routing revision ${revision}`)
+      }
     />
   );
 }
@@ -192,3 +225,16 @@ export const ChatWorking: Story = {
   },
 };
 export const DarkChatWorking: Story = { ...ChatWorking, parameters: { theme: "dark" } };
+export const ChatJevSuggestion: Story = {
+  args: { chat: <PreviewChat initial={[completedTurn, suggestedTurn]} /> },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Sale assistant" }));
+    const dialog = within(canvas.getByRole("dialog", { name: "Sale assistant" }));
+    await expect(dialog.getByText("Tank capacity · 98% confidence")).toBeVisible();
+    await userEvent.click(dialog.getByRole("button", { name: "Use suggested field" }));
+    await expect(
+      dialog.getByText("Accepted suggestion for synthetic-jev-question at routing revision 0"),
+    ).toBeVisible();
+  },
+};

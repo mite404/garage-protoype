@@ -37,6 +37,18 @@ const stories = {
     selector: '[data-card="review"]',
     text: ["Human interpretation required"],
   },
+  "agent-catalog-assistance-cards--jev-suggested": {
+    selector: '[data-card="review"] .card-suggestion',
+    text: ["Jev suggestion", "Tank capacity · 98% confidence", "Use suggested field"],
+  },
+  "agent-catalog-assistance-cards--jev-needs-review": {
+    selector: '[data-card="review"] .card-suggestion',
+    text: ["Needs human review", "The question asks for a judgment, not a recorded fact."],
+  },
+  "agent-catalog-assistance-cards--jev-unavailable": {
+    selector: '[data-card="review"]',
+    text: ["Jev routing unavailable. Route this question manually."],
+  },
   "agent-catalog-assistance-cards--offer-not-accepted": {
     selector: '[data-card="handoff"]',
     text: ["Offer recorded · Not accepted", "$165,000.00"],
@@ -130,6 +142,18 @@ const stories = {
   "municipal-sales-workspace--dark-chat-open": {
     selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
     text: ["What is blocking this purchase?"],
+  },
+  "municipal-sales-workspace--chat-working": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["Prepare a seller request for the pump-test report.", "Checking evidence…"],
+  },
+  "municipal-sales-workspace--dark-chat-working": {
+    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
+    text: ["Checking evidence…"],
+  },
+  "municipal-sales-workspace--chat-jev-suggestion": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["Tank capacity · 98% confidence", "Accepted suggestion for synthetic-jev-question"],
   },
   "municipal-sales-workspace--empty-activity-and-listings": {
     selector: 'nav[aria-label="Municipal sales"]',

@@ -2,6 +2,28 @@ import { z } from "zod";
 import { fieldSchema, fieldLabels } from "@signal-desk/contracts/evidence-schema";
 
 const text = z.string().trim().min(1).max(2000);
+/** Advisory Jev routing output; never a routing decision or a permission. */
+export const routingSuggestion = z.discriminatedUnion("state", [
+  z
+    .object({
+      state: z.literal("suggested"),
+      field: fieldSchema,
+      confidence: z.number().min(0).max(1),
+      modelVersion: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      state: z.literal("needs_review"),
+      reason: z.enum(["low_confidence", "multiple", "judgment", "other"]),
+      confidence: z.number().min(0).max(1),
+      modelVersion: z.string(),
+    })
+    .strict(),
+  z.object({ state: z.literal("unavailable"), code: z.string().max(80) }).strict(),
+]);
+export type RoutingSuggestion = z.infer<typeof routingSuggestion>;
+
 /** Only these sales capabilities may be exposed to or executed by the specialist agent. */
 export const approvedSalesTool = z.enum(["show_card", "prepare_draft"]);
 
@@ -70,6 +92,8 @@ export const inlineCard = z.discriminatedUnion("kind", [
     question: z.string(),
     assigneeId: z.string(),
     nextAction: z.string(),
+    routingRevision: z.number().int().min(0),
+    suggestion: routingSuggestion.optional(),
   }),
   z.object({
     kind: z.literal("handoff"),

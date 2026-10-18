@@ -528,6 +528,9 @@ test(
       await db.query(
         "delete from signal_desk.assistance_drafts where opportunity_id like 'assist-%'",
       );
+      await db.query(
+        "delete from signal_desk.inquiry_suggestions where inquiry_id in (select id from signal_desk.inquiries where opportunity_id like 'assist-%')",
+      );
       await db.query("delete from signal_desk.inquiries where opportunity_id like 'assist-%'");
       await db.query("delete from signal_desk.sources where opportunity_id like 'assist-%'");
       await db.query("delete from signal_desk.import_jobs where opportunity_id like 'assist-%'");

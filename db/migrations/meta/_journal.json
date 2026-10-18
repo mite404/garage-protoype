@@ -71,6 +71,20 @@
       "when": 1792306071489,
       "tag": "0009_stream-activity",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792310800964,
+      "tag": "0010_jev-routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792310815590,
+      "tag": "0011_jev-routing-policies",
+      "breakpoints": true
     }
   ]
 }
