@@ -29,7 +29,9 @@
     "db:migrate": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/migrate.ts",
     "db:seed:municipality": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/seed-municipality.ts",
     "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts",
-    "streaming": "npm run streaming -w @signal-desk/web"
+    "streaming": "npm run streaming -w @signal-desk/web",
+    "eval:latency": "npm run eval:latency -w @signal-desk/web --",
+    "eval:latency:control": "npm run eval:latency:control -w @signal-desk/web --"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",

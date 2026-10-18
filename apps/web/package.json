@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "worker": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/worker.ts",
     "mcp": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/mcp.ts",
-    "streaming": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/streaming-worker.ts"
+    "streaming": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/streaming-worker.ts",
+    "eval:latency": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/turn-latency.ts",
+    "eval:latency:control": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/provider-control.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.3.0",
