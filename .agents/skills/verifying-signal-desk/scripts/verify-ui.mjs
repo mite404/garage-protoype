@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -9,16 +9,143 @@ const origin = process.argv[2] ?? "http://localhost:6106";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const output = join(root, ".amp/in/artifacts/legibility");
 const session = `verify-${process.pid}`;
-const variants = [
-  "cited-answer",
-  "conflict",
-  "needs-review",
-  "unknown",
-  "human-review",
-  "offer-not-accepted",
-  "empty-conditions",
-  "unsent-draft",
-  "stale-draft",
+const pinnedNode = `v${readFileSync(join(root, ".node-version"), "utf8").trim()}`;
+const played = 'window.__STORYBOOK_PREVIEW__?.currentRender?.phase === "finished"';
+const errorShown =
+  '[...document.querySelectorAll(".sb-errordisplay,vite-error-overlay")].some(e=>e.checkVisibility())';
+
+// Every Storybook story, keyed by id. A story missing here fails the run, so new stories
+// cannot ship unverified. `text` must be visible; play functions supply the interactions.
+const stories = {
+  "agent-catalog-assistance-cards--cited-answer": {
+    selector: '[data-card="answer"]',
+    text: ["Pump capacity", "1,250 GPM", "Synthetic brochure · Page 4"],
+  },
+  "agent-catalog-assistance-cards--conflict": {
+    selector: '[data-card="review"]',
+    text: ["What is the tank capacity?", "Compare both sources before answering."],
+  },
+  "agent-catalog-assistance-cards--needs-review": {
+    selector: '[data-card="review"]',
+    text: ["Review the seller statement before sharing any value."],
+  },
+  "agent-catalog-assistance-cards--unknown": {
+    selector: '[data-card="review"]',
+    text: ["Request a source for the missing pump-test result."],
+  },
+  "agent-catalog-assistance-cards--human-review": {
+    selector: '[data-card="review"]',
+    text: ["Human interpretation required"],
+  },
+  "agent-catalog-assistance-cards--offer-not-accepted": {
+    selector: '[data-card="handoff"]',
+    text: ["Offer recorded · Not accepted", "$165,000.00"],
+  },
+  "agent-catalog-assistance-cards--empty-conditions": {
+    selector: '[data-card="handoff"]',
+    text: ["No additional conditions supplied.", "No unanswered questions supplied."],
+  },
+  "agent-catalog-assistance-cards--unsent-draft": {
+    selector: '[data-card="draft"]',
+    text: [
+      "Unsent draft · Human review required",
+      "No delivery action exists. Recipient identity is not verified.",
+    ],
+  },
+  "agent-catalog-assistance-cards--stale-draft": {
+    selector: '[data-card="draft"]',
+    text: ["Unsent draft · Evidence changed, review again"],
+  },
+  "agent-catalog-assistance-cards--evidence-review": {
+    selector: '[data-card="answer"]',
+    text: ["Evidence review", "Synthetic specimen · Not connected to records"],
+  },
+  "workspace-dispatch--evidence-review": {
+    selector: ".dispatch-shell",
+    text: ["Keep the next step clear.", "Unsent draft · Human review required"],
+  },
+  "primitives-foundations--palette-and-type": {
+    selector: "#storybook-root h1",
+    text: ["Evidence before answers."],
+  },
+  "primitives-foundations--actions-and-states": {
+    selector: "button[disabled]",
+    text: ["Review evidence", "Unavailable", "Conflict"],
+  },
+  "primitives-foundations--evidence-form": {
+    selector: "form #source-name",
+    text: ["Request a source", "Story specimen only. Nothing is saved or sent."],
+  },
+  "conversation-reading--structured-response": { selector: ".quiet-prose h4" },
+  "conversation-reading--literal-evidence": { selector: ".literal-prose" },
+  "conversation-reading--connected-turn": { selector: ".conversation-turn" },
+  "conversation-chat-workspace--light": {
+    selector: '.chat-workspace[data-theme="light"]',
+    text: ["What is blocking this purchase?"],
+  },
+  "conversation-chat-workspace--dark": {
+    selector: '.chat-workspace[data-theme="dark"]',
+    text: ["What is blocking this purchase?"],
+  },
+  "conversation-chat-workspace--email-editor": {
+    selector: '.chat-workspace[data-editor-open="true"]',
+    text: ["Local preview only. Closing keeps your edits until reload."],
+  },
+  "conversation-chat-workspace--dark-email-editor": {
+    selector: '.chat-workspace[data-theme="dark"][data-editor-open="true"]',
+    text: ["Local preview only. Closing keeps your edits until reload."],
+  },
+  "conversation-chat-workspace--minimized": {
+    selector: '.chat-workspace[data-theme="light"]',
+    dialogsHidden: true,
+  },
+  "conversation-chat-workspace--dark-minimized": {
+    selector: '.chat-workspace[data-theme="dark"]',
+    dialogsHidden: true,
+  },
+  "conversation-chat-workspace--retains-draft-edits": {
+    selector: ".chat-workspace",
+    text: ["Please include the test date and pump serial number."],
+  },
+  "conversation-chat-workspace--dark-retains-draft-edits": {
+    selector: '.chat-workspace[data-theme="dark"]',
+    text: ["Please include the test date and pump serial number."],
+  },
+  "conversation-chat-workspace--composes-local-message": {
+    selector: ".chat-workspace",
+    text: ["Preview message added. No model connected."],
+  },
+  "municipal-sales-workspace--default": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["Austin Fire Department", "Simulated deal. No payment or escrow funds held."],
+  },
+  "municipal-sales-workspace--dark": {
+    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
+    text: ["Austin Fire Department"],
+  },
+  "municipal-sales-workspace--chat-open": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["Austin Fire Department", "What is blocking this purchase?"],
+  },
+  "municipal-sales-workspace--dark-chat-open": {
+    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
+    text: ["What is blocking this purchase?"],
+  },
+  "municipal-sales-workspace--empty-activity-and-listings": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["No favorites or seller contact activity recorded.", "No owned listings recorded."],
+  },
+  "municipal-sales-workspace--no-deal-terms": {
+    selector: 'nav[aria-label="Municipal sales"]',
+    text: ["No proposed amount or conditions recorded."],
+  },
+};
+
+// Stories whose layout must also hold at a 390px phone width.
+const narrow = [
+  "conversation-reading--connected-turn",
+  "conversation-chat-workspace--light",
+  "municipal-sales-workspace--default",
 ];
 
 function browser(...args) {
@@ -35,52 +162,58 @@ function browser(...args) {
 function evaluate(source) {
   return browser("eval", source).result;
 }
+
+function catalog() {
+  const entries = JSON.parse(
+    execFileSync("curl", ["--fail", "--silent", `${origin}/index.json`], { encoding: "utf8" }),
+  ).entries; // → Record<string, { type: string }>
+  return Object.keys(entries).filter((id) => entries[id].type === "story"); // → string[]
+}
+
 function open(id, selector) {
   browser("open", `${origin}/iframe.html?id=${id}&viewMode=story`);
+  browser("wait", "--fn", played);
+  assert.equal(evaluate(errorShown), false, `${id}: render or play function failed`);
   browser("wait", selector);
-  assert.equal(
-    evaluate(
-      '[...document.querySelectorAll(".sb-errordisplay,vite-error-overlay")].some(e=>e.checkVisibility())',
-    ),
-    false,
-  );
 }
+
+function assertVisibleText(id, text) {
+  // innerText applies CSS text-transform, so uppercase eyebrows compare case-insensitively.
+  const page = evaluate("document.body.innerText").toLowerCase(); // → string
+  for (const expected of text) {
+    assert.ok(page.includes(expected.toLowerCase()), `${id}: missing "${expected}"`);
+  }
+}
+
+function assertDialogsHidden(id) {
+  const visible = evaluate(
+    '[...document.querySelectorAll("[role=dialog],dialog")].filter(d=>d.checkVisibility()).length',
+  );
+  assert.equal(visible, 0, `${id}: a minimized window is still visible`);
+}
+
 function capture(name) {
   browser("screenshot", "--full", join(output, `${name}.png`));
 }
 
-mkdirSync(output, { recursive: true });
-try {
-  for (const variant of variants) {
-    open(`agent-catalog-assistance-cards--${variant}`, "[data-card]");
-    browser("set", "viewport", "1280", "900", "2");
-    assert.equal(evaluate('document.querySelectorAll("[data-card]").length'), 1);
-    if (variant === "conflict") {
-      assert.equal(
-        evaluate('document.querySelector("[data-card] h3").textContent'),
-        "What is the tank capacity?",
-      );
-      assert.equal(evaluate('document.querySelectorAll(".card-next-action li").length'), 2);
-      assert.equal(
-        evaluate('document.querySelector(".card-next-action strong").textContent'),
-        "Compare both sources before answering.",
-      );
-      assert.equal(
-        evaluate('document.querySelector(".card-next-action em").textContent'),
-        "Neither value is approved for a buyer reply.",
-      );
-    }
-    capture(variant === "conflict" ? "conflict" : variant);
-  }
-  open("conversation-reading--structured-response", ".quiet-prose h4");
+function checkConflict() {
+  assert.equal(evaluate('document.querySelectorAll(".card-next-action li").length'), 2);
+  assert.equal(
+    evaluate('document.querySelector(".card-next-action em").textContent'),
+    "Neither value is approved for a buyer reply.",
+  );
+}
+
+function checkProseRhythm() {
   assert.deepEqual(
     evaluate(
       '({size:getComputedStyle(document.querySelector(".quiet-prose")).fontSize,line:getComputedStyle(document.querySelector(".quiet-prose")).lineHeight,gap:getComputedStyle(document.querySelector(".quiet-prose p")).marginBottom})',
     ),
     { size: "15px", line: "24px", gap: "16px" },
   );
-  capture("prose");
-  open("conversation-reading--literal-evidence", ".literal-prose");
+}
+
+function checkLiteralEvidence() {
   assert.equal(
     evaluate('document.querySelectorAll(".literal-prose strong,.literal-prose script").length'),
     0,
@@ -90,17 +223,52 @@ try {
       "<script>not executable</script>",
     ),
   );
-  open("conversation-reading--connected-turn", ".conversation-turn");
+}
+
+function checkConnectedTurn() {
   assert.equal(
     evaluate('document.querySelectorAll(".conversation-response > .quiet-prose > p").length'),
     2,
   );
-  capture("conversation");
-  browser("set", "viewport", "390", "844", "2");
+}
+
+const extraChecks = {
+  "agent-catalog-assistance-cards--conflict": checkConflict,
+  "conversation-reading--structured-response": checkProseRhythm,
+  "conversation-reading--literal-evidence": checkLiteralEvidence,
+  "conversation-reading--connected-turn": checkConnectedTurn,
+};
+
+function verifyStory(id) {
+  const spec = stories[id];
+  open(id, spec.selector);
+  assertVisibleText(id, spec.text ?? []);
+  if (spec.dialogsHidden) assertDialogsHidden(id);
+  extraChecks[id]?.();
+  capture(id.replace(/^[a-z-]+--/, (prefix) => `${prefix.slice(0, -2)}.`));
+}
+
+function verifyNarrow(id) {
+  open(id, stories[id].selector);
   evaluate("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
-  assert.equal(evaluate("document.documentElement.scrollWidth"), 390);
-  capture("narrow");
-  console.log(`UI checks passed. Review screenshots in ${output}`);
+  assert.equal(evaluate("document.documentElement.scrollWidth"), 390, `${id}: overflows 390px`);
+  capture(`narrow.${id}`);
+}
+
+assert.equal(process.version, pinnedNode, `run with the pinned Node ${pinnedNode}`);
+const ids = catalog(); // → string[]
+const unmapped = ids.filter((id) => !(id in stories));
+const removed = Object.keys(stories).filter((id) => !ids.includes(id));
+assert.deepEqual(unmapped, [], "stories missing from verify-ui.mjs; add a check for each");
+assert.deepEqual(removed, [], "verify-ui.mjs lists stories Storybook no longer has");
+
+mkdirSync(output, { recursive: true });
+try {
+  browser("set", "viewport", "1280", "900", "2");
+  for (const id of ids) verifyStory(id);
+  browser("set", "viewport", "390", "844", "2");
+  for (const id of narrow) verifyNarrow(id);
+  console.log(`UI checks passed for ${ids.length} stories. Review screenshots in ${output}`);
 } finally {
   browser("close");
 }
