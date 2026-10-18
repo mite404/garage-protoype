@@ -4,10 +4,21 @@
     "apps/web/src/worker.ts",
     "apps/web/src/streaming-worker.ts",
     "apps/web/src/mcp.ts",
+    "apps/web/cloudflare/src/app.ts",
+    "apps/web/cloudflare/src/cloudflare.ts",
+    "apps/web/cloudflare/src/agents/specialist.ts",
+    "apps/web/cloudflare/vite.config.ts",
+    "apps/web/cloudflare/test/seams.ts",
     "apps/web/flue.config.ts",
     "packages/**/*.stories.tsx",
     "apps/storybook/.storybook/main.ts"
   ],
   "health": { "coverage": "coverage" },
-  "ignorePatterns": [".next/**", "storybook-static/**", ".amp/**", "next-env.d.ts"]
+  "ignorePatterns": [
+    ".next/**",
+    "apps/web/cloudflare/dist/**",
+    "storybook-static/**",
+    ".amp/**",
+    "next-env.d.ts"
+  ]
 }
