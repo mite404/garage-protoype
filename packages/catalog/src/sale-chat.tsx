@@ -4,6 +4,13 @@ import type { StreamView } from "@signal-desk/contracts/assistance-schema";
 import AssistanceCard from "./assistance-cards";
 import { ChatIcon, ChatWindowHeader } from "./chat-window";
 import { Prose } from "./prose";
+import {
+  isActiveTurn,
+  progressLabel,
+  sendingMessage,
+  TurnProgress,
+  type SentTurn,
+} from "./turn-progress";
 
 const labels = {
   queued: "Waiting for the assistant…",
@@ -24,14 +31,102 @@ function GenerationError({ code }: { code: string }) {
   );
 }
 
+function UserMessage({ text }: { text: string }) {
+  return (
+    <div className="chat-message chat-message-user">
+      <p className="chat-message-label">You</p>
+      <div className="chat-bubble">
+        <p className="whitespace-pre-wrap text-sm break-words">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+// Shown from the frame Send is pressed until the saved turn arrives to replace it.
+function SendingTurn({ message }: { message: string }) {
+  return (
+    <article className="space-y-3" aria-busy="true">
+      <UserMessage text={message} />
+      <div className="chat-message">
+        <p className="chat-message-label">Sale assistant</p>
+        <div className="chat-bubble">
+          <TurnProgress label="Sending" />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ActiveProgress({ turn }: { turn: StreamView }) {
+  if (!isActiveTurn(turn)) return null;
+  // Space the status from streamed text or cards above it, not from an empty bubble's edge.
+  const below = turn.text !== "" || turn.cards.length > 0;
+  return <TurnProgress label={progressLabel(turn)} spaced={below} />;
+}
+
+function TurnState({ turn }: { turn: StreamView }) {
+  if (isActiveTurn(turn)) return null;
+  return <p className="mt-1 pl-1 text-xs text-muted-foreground">{labels[turn.state]}</p>;
+}
+
+function StopButton({
+  turn,
+  pending,
+  onStop,
+}: {
+  turn: StreamView;
+  pending: boolean;
+  onStop: (id: string) => void;
+}) {
+  if (!["queued", "running"].includes(turn.state)) return null;
+  return (
+    <button className="quiet-button mt-2" disabled={pending} onClick={() => onStop(turn.id)}>
+      Stop generation
+    </button>
+  );
+}
+
+function SavedTurn({
+  turn,
+  pending,
+  onStop,
+}: {
+  turn: StreamView;
+  pending: boolean;
+  onStop: (id: string) => void;
+}) {
+  return (
+    <article className="space-y-3" aria-busy={isActiveTurn(turn)}>
+      <UserMessage text={turn.message} />
+      <div className="chat-message">
+        <p className="chat-message-label">Sale assistant</p>
+        <div className="chat-bubble">
+          <Prose text={turn.text} />
+          <div className="space-y-3">
+            {turn.cards.map((card, index) => (
+              <AssistanceCard key={index} card={card} />
+            ))}
+          </div>
+          <ActiveProgress turn={turn} />
+        </div>
+        <TurnState turn={turn} />
+        {turn.errorCode && <GenerationError code={turn.errorCode} />}
+        <StopButton turn={turn} pending={pending} onStop={onStop} />
+      </div>
+    </article>
+  );
+}
+
 function ChatHistory({
   streams,
+  sending,
   pending,
   onStop,
   history,
   onScroll,
 }: {
   streams: StreamView[];
+  sending: string | undefined;
   pending: boolean;
   onStop: (id: string) => void;
   history: RefObject<HTMLElement | null>;
@@ -44,53 +139,15 @@ function ChatHistory({
       className="chat-transcript space-y-5"
       onScroll={onScroll}
     >
-      {!streams.length && (
+      {!streams.length && !sending && (
         <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
           What is blocking this acquisition? Ask about its conditions or the evidence still needed.
         </p>
       )}
       {streams.map((turn) => (
-        <article key={turn.id} className="space-y-3">
-          <div className="chat-message chat-message-user">
-            <p className="chat-message-label">You</p>
-            <div className="chat-bubble">
-              <p className="whitespace-pre-wrap text-sm break-words">{turn.message}</p>
-            </div>
-          </div>
-          <div className="chat-message">
-            <p className="chat-message-label">Sale assistant</p>
-            <div className="chat-bubble">
-              <Prose text={turn.text} />
-              <div className="space-y-3">
-                {turn.cards.map((card, index) => (
-                  <AssistanceCard key={index} card={card} />
-                ))}
-              </div>
-            </div>
-            <p className="mt-1 pl-1 text-xs text-muted-foreground">{labels[turn.state]}</p>
-            {["queued", "running", "cancelling"].includes(turn.state) && (
-              <output className="pl-1 text-xs text-muted-foreground">
-                <span aria-hidden="true" className="mr-2 inline-flex gap-1 align-middle">
-                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
-                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:150ms]" />
-                  <span className="size-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:300ms]" />
-                </span>
-                Sale assistant is working…
-              </output>
-            )}
-            {turn.errorCode && <GenerationError code={turn.errorCode} />}
-            {["queued", "running"].includes(turn.state) && (
-              <button
-                className="quiet-button mt-2"
-                disabled={pending}
-                onClick={() => onStop(turn.id)}
-              >
-                Stop generation
-              </button>
-            )}
-          </div>
-        </article>
+        <SavedTurn key={turn.id} turn={turn} pending={pending} onStop={onStop} />
       ))}
+      {sending && <SendingTurn message={sending} />}
     </section>
   );
 }
@@ -172,11 +229,14 @@ export default function SaleChat({
 }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  // The submitted message and the turns saved before it, until its own saved turn arrives.
+  const [sent, setSent] = useState<SentTurn>();
   const launcher = useRef<HTMLButtonElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const history = useRef<HTMLElement>(null);
   const follow = useRef(true);
-  const active = streams.some((turn) => ["queued", "running", "cancelling"].includes(turn.state));
+  const sending = sendingMessage(sent, streams);
+  const active = Boolean(sending) || streams.some(isActiveTurn);
   useEffect(() => {
     if (!open) return;
     const button = launcher.current;
@@ -186,21 +246,23 @@ export default function SaleChat({
   useEffect(() => {
     if (open && follow.current && history.current)
       history.current.scrollTop = history.current.scrollHeight;
-  }, [streams, open]);
+  }, [streams, sending, open]);
   function minimize() {
     setOpen(false);
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!input.trim() || active || pending) return;
-    await onSubmit(input.trim()).then(
-      () => {
-        setInput("");
-        follow.current = true;
-      },
-      // The adapter reports the failure through connection; preserve the draft for retry.
-      () => {},
-    );
+    const message = input.trim();
+    if (!message || active || pending) return;
+    // Acknowledge in the same frame as Send; the saved turn replaces this row when it arrives.
+    setSent({ message, known: streams.map((turn) => turn.id) });
+    setInput("");
+    follow.current = true;
+    await onSubmit(message).catch(() => {
+      // The adapter reports the failure through connection; restore the draft for retry.
+      setSent(undefined);
+      setInput(message);
+    });
   }
   return (
     <>
@@ -240,6 +302,7 @@ export default function SaleChat({
           <>
             <ChatHistory
               streams={streams}
+              sending={sending}
               pending={pending}
               history={history}
               onScroll={() => {

@@ -6,6 +6,13 @@ import type { Workbench } from "@/server/evidence";
 import { fieldSchema, fieldLabels } from "@signal-desk/contracts/evidence-schema";
 import AssistanceCard from "@signal-desk/catalog/assistance-card";
 import { ConversationTurn, Prose } from "@signal-desk/catalog/prose";
+import {
+  isActiveTurn,
+  progressLabel,
+  sendingMessage,
+  TurnProgress,
+  type SentTurn,
+} from "@signal-desk/catalog/turn-progress";
 import { postPrototypeCommand } from "@/app/prototype-command";
 import { streamView, type StreamView } from "@signal-desk/contracts/assistance-schema";
 
@@ -19,6 +26,87 @@ const streamLabels = {
   interrupted: "Incomplete · interrupted",
   cancelled: "Incomplete · cancelled",
 } satisfies Record<StreamView["state"], string>;
+
+// The saved turns after an accepted command, or undefined when they cannot be reloaded yet.
+async function savedStreams(endpoint: string) {
+  try {
+    const response = await fetch(`${endpoint}?view=snapshot`);
+    if (!response.ok) return undefined;
+    return streamView.array().parse((await response.json()).data);
+  } catch {
+    return undefined;
+  }
+}
+
+function StreamStatus({ turn }: { turn: StreamView }) {
+  if (isActiveTurn(turn)) return <TurnProgress label={progressLabel(turn)} />;
+  return <span className="state state-unknown">{streamLabels[turn.state]}</span>;
+}
+
+function StreamError({ code }: { code: string | null }) {
+  if (!code) return null;
+  return (
+    <p className="text-sm text-destructive">
+      {code === "SPEND_UNCERTAIN"
+        ? "Provider outcome uncertain. Budget remains reserved; no automatic paid retry."
+        : "Generation stopped. Review current evidence before starting a new turn."}
+    </p>
+  );
+}
+
+function StopGeneration({
+  turn,
+  pending,
+  onCancel,
+}: {
+  turn: StreamView;
+  pending: boolean;
+  onCancel: (turnId: string) => void;
+}) {
+  if (turn.state !== "queued" && turn.state !== "running") return null;
+  return (
+    <button className="quiet-button" disabled={pending} onClick={() => onCancel(turn.id)}>
+      Stop generation
+    </button>
+  );
+}
+
+function StreamTurns({
+  streams,
+  sending,
+  pending,
+  onCancel,
+}: {
+  streams: StreamView[];
+  sending: string | undefined;
+  pending: boolean;
+  onCancel: (turnId: string) => void;
+}) {
+  return (
+    <>
+      {streams.map((turn) => (
+        <ConversationTurn key={turn.id} request={turn.message}>
+          <Prose text={turn.text} />
+          <div className="mt-4 space-y-4">
+            {turn.cards.map((card, i) => (
+              <AssistanceCard card={card} key={i} />
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <StreamStatus turn={turn} />
+            <StopGeneration turn={turn} pending={pending} onCancel={onCancel} />
+            <StreamError code={turn.errorCode} />
+          </div>
+        </ConversationTurn>
+      ))}
+      {sending && (
+        <ConversationTurn request={sending}>
+          <TurnProgress label="Sending" />
+        </ConversationTurn>
+      )}
+    </>
+  );
+}
 
 /** Specialist conversation and human handoff controls call the shared authorized operations only. */
 export default function Conversation({
@@ -36,10 +124,12 @@ export default function Conversation({
   const [streams, setStreams] = useState(initialStreams);
   const [connection, setConnection] = useState("Connecting to saved progress…");
   const [denied, setDenied] = useState(false);
+  // The submitted question and the turns saved before it, until its own saved turn arrives.
+  const streamEndpoint = `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/stream`;
+  const [sent, setSent] = useState<SentTurn>();
+  const sending = sendingMessage(sent, streams);
   useEffect(() => {
-    const observer = new EventSource(
-      `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/stream`,
-    );
+    const observer = new EventSource(streamEndpoint);
     observer.onmessage = (event) => {
       const parsed = streamView.array().safeParse(JSON.parse(event.data));
       if (parsed.success) {
@@ -49,9 +139,7 @@ export default function Conversation({
     };
     observer.onerror = async () => {
       setConnection("Connection interrupted. Reconnecting to saved progress…");
-      const check = await fetch(
-        `/api/v1/desk/opportunities/${encodeURIComponent(view.opportunityId)}/stream?view=snapshot`,
-      ).catch(() => null);
+      const check = await fetch(`${streamEndpoint}?view=snapshot`).catch(() => null);
       if (check && [401, 403, 404].includes(check.status)) {
         setDenied(true);
         setStreams([]);
@@ -64,7 +152,7 @@ export default function Conversation({
       observer.close();
     });
     return () => observer.close();
-  }, [view.opportunityId]);
+  }, [streamEndpoint]);
   const retry = useRef({ body: "", key: "" });
   async function save(body: unknown, endpoint: "assistance" | "stream" = "assistance") {
     if (pending) return;
@@ -84,16 +172,29 @@ export default function Conversation({
         "Saved inside this prototype. You can return without resubmitting. Nothing was sent.",
       );
       router.refresh();
+      return true;
     } catch (error) {
       setMessage(String(error));
+      return false;
     } finally {
       setPending(false);
     }
   }
   function chat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void save({ kind: "chat", message: form.get("message") }, "stream");
+    const field = event.currentTarget.elements.namedItem("message") as HTMLTextAreaElement;
+    const question = field.value;
+    // Acknowledge in the same frame as Send; the saved turn replaces this row when it arrives.
+    setSent({ message: question, known: streams.map((turn) => turn.id) });
+    field.value = "";
+    void save({ kind: "chat", message: question }, "stream").then(async (saved) => {
+      // Show the accepted turn now rather than after the observer's next poll.
+      const reloaded = saved ? await savedStreams(streamEndpoint) : undefined;
+      if (reloaded) setStreams(reloaded);
+      if (saved) return;
+      setSent(undefined);
+      field.value = question;
+    });
   }
   if (denied)
     return (
@@ -119,7 +220,7 @@ export default function Conversation({
       </div>
       <output className="mt-3 block text-xs text-muted-foreground">{connection}</output>
       <section className="my-5 space-y-5" aria-label="Conversation history">
-        {!view.turns.length && !streams.length && (
+        {!view.turns.length && !streams.length && !sending && (
           <p className="rounded-md bg-muted p-5 text-sm text-muted-foreground">
             Start with the question blocking this sale. Answers use only reviewed, shareable
             evidence.
@@ -146,35 +247,12 @@ export default function Conversation({
               )}
             </ConversationTurn>
           ))}
-        {streams.map((turn) => (
-          <ConversationTurn key={turn.id} request={turn.message}>
-            {turn.text && <Prose text={turn.text} />}
-            <div className="mt-4 space-y-4">
-              {turn.cards.map((card, i) => (
-                <AssistanceCard card={card} key={i} />
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <span className="state state-unknown">{streamLabels[turn.state]}</span>
-              {(turn.state === "queued" || turn.state === "running") && (
-                <button
-                  className="quiet-button"
-                  disabled={pending}
-                  onClick={() => void save({ kind: "cancel", turnId: turn.id }, "stream")}
-                >
-                  Stop generation
-                </button>
-              )}
-              {turn.errorCode && (
-                <p className="text-sm text-destructive">
-                  {turn.errorCode === "SPEND_UNCERTAIN"
-                    ? "Provider outcome uncertain. Budget remains reserved; no automatic paid retry."
-                    : "Generation stopped. Review current evidence before starting a new turn."}
-                </p>
-              )}
-            </div>
-          </ConversationTurn>
-        ))}
+        <StreamTurns
+          streams={streams}
+          sending={sending}
+          pending={pending}
+          onCancel={(turnId) => void save({ kind: "cancel", turnId }, "stream")}
+        />
       </section>
       <form onSubmit={chat}>
         <fieldset disabled={pending}>

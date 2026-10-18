@@ -62,19 +62,19 @@ const workspace: Workspace = {
   ],
 };
 
-function PreviewChat() {
-  const [streams, setStreams] = useState<StreamView[]>([
-    {
-      id: "synthetic-conversation",
-      inquiryId: "synthetic-question",
-      message: "What is blocking this purchase?",
-      state: "completed",
-      text: "The pump-test report is missing. The proposed $84,000 purchase remains contingent on its review. I can help prepare a request for the seller.",
-      cards: [],
-      errorCode: null,
-      activity: null,
-    },
-  ]);
+const completedTurn: StreamView = {
+  id: "synthetic-conversation",
+  inquiryId: "synthetic-question",
+  message: "What is blocking this purchase?",
+  state: "completed",
+  text: "The pump-test report is missing. The proposed $84,000 purchase remains contingent on its review. I can help prepare a request for the seller.",
+  cards: [],
+  errorCode: null,
+  activity: null,
+};
+
+function PreviewChat({ initial = [completedTurn] }: { initial?: StreamView[] }) {
+  const [streams, setStreams] = useState<StreamView[]>(initial);
   return (
     <SaleChat
       context="Austin · Engine 001"
@@ -163,3 +163,32 @@ export const NoDealTerms: Story = {
     ).toBeVisible();
   },
 };
+
+// A saved turn mid-way through the owner's steps, after its first streamed text.
+export const ChatWorking: Story = {
+  args: {
+    chat: (
+      <PreviewChat
+        initial={[
+          completedTurn,
+          {
+            ...completedTurn,
+            id: "synthetic-working",
+            message: "Prepare a seller request for the pump-test report.",
+            state: "running",
+            text: "I'll check the recorded deal conditions before preparing anything.",
+            activity: "checking_evidence",
+          },
+        ]}
+      />
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: /Sale assistant/ }));
+    const dialog = canvas.getByRole("dialog", { name: "Sale assistant" });
+    await expect(within(dialog).getByText("Checking evidence…")).toBeVisible();
+    await expect(within(dialog).queryByText("Writing a draft…")).toBeNull();
+  },
+};
+export const DarkChatWorking: Story = { ...ChatWorking, parameters: { theme: "dark" } };
