@@ -178,7 +178,7 @@ export function admittedProvider(
             input: JSON.stringify(permittedContext),
             photos: [],
           },
-          async ({ signal, maxOutputTokens }) => {
+          async ({ signal, maxOutputTokens, inputMicroUsd, outputMicroUsd }) => {
             const providerStream = transport(kimi, permittedContext, {
               apiKey: process.env.OPENROUTER_API_KEY,
               maxRetries: 0,
@@ -186,7 +186,12 @@ export function admittedProvider(
               signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]),
               onPayload: (payload) => ({
                 ...z.record(z.string(), z.unknown()).parse(payload),
-                provider: { allow_fallbacks: false },
+                // Route only to endpoints priced within the reserved rates, fastest first.
+                provider: {
+                  allow_fallbacks: false,
+                  sort: "latency",
+                  max_price: { prompt: inputMicroUsd, completion: outputMicroUsd },
+                },
                 stream_options: { include_usage: true },
               }),
             });

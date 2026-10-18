@@ -134,6 +134,24 @@ transport against a synthetic local provider. It does not spend tokens or verify
 authentication. See the [trial result](plans/008-flue-specialist-trial.md#implementation-evidence)
 for the remaining permissioned live-provider check.
 
+### Turn latency evaluation
+
+`npm run eval:latency` measures real specialist turns with paid OpenRouter Kimi K3 requests.
+It recreates a disposable local `*_test` database named by `EVAL_DATABASE_URL`, applies the
+ordered migrations, the demo seed and the synthetic municipality seed, then starts the real owner.
+Each scenario is submitted and observed through `submitStream` and `readStreams` at the stream
+route's 350 ms interval. It refuses non-loopback databases and never reads `DATABASE_URL`.
+Pass `--db-rtt-ms 25` to add a hosted-pooler round trip to every local database reply.
+Results record time to first text, first card and completion, then each request's TTFT,
+duration, tokens, reasoning tokens and OpenRouter-reported cost. They also count database
+queries by caller and phase.
+
+`npm run eval:latency:control` replays the captured request bodies directly against OpenRouter,
+without Flue, the database or admission, so model time can be separated from Signal Desk work.
+It also compares routing and Yaklabs-style reasoning variants. Both commands stop before a shared
+ledger under `.amp/in/latency/` exceeds `LATENCY_EVAL_CAP_USD`, US$1 by default. Artifacts are
+written to the ignored `.amp/in/artifacts/latency/` directory. Running either command spends money.
+
 ## One gate, separate responsibilities
 
 | Command | Checks |

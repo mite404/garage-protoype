@@ -470,6 +470,20 @@ export async function getAssistance(actor: Actor, opportunityId: string) {
   );
 }
 
+/** Reads only the current evidence revision, with the same access checks and shared locks as
+ * getAssistance, for staleness checks that do not need inquiries, turns or drafts.
+ * @throws {AppError} For revoked access or an inaccessible record.
+ */
+export async function getAssistanceRevision(actor: Actor, opportunityId: string) {
+  return evidenceTransaction(
+    actor,
+    opportunityId,
+    async (db) => (await header(db, opportunityId)).revision,
+    actor.role,
+    "read",
+  );
+}
+
 /** Appends a specialist routing correction without rewriting input or converting ambiguous prose into an offer.
  * @throws {AppError} For stale corrections, invalid fields or denied access.
  */
