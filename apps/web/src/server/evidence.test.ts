@@ -859,33 +859,85 @@ test(
         },
       );
       await t.test(
-        "invalid citations commit no claims and never publish a model assertion",
+        "server-derived locators commit verified claims and drop unverifiable ones alone",
         async () => {
-          const text = await source("Bad citation", "Tank capacity: 200 gallons.");
+          const text = await source(
+            "Derived locators",
+            "Tank capacity: 200 gallons.\nOdometer: 48,210 mi.\nSpare note: 200 gallons.",
+          );
           const queued = await queueImport(actor, "evidence-deal", {
             sourceIds: [text.id],
             model: "evidence-controlled",
-            key: "bad-citation",
+            key: "derived-locators",
           });
           const lease = await claimImport(queued.id);
           assert.ok(lease);
+          const claim = (field: string, value: string, unit: string, excerpt: string) => ({
+            sourceId: text.id,
+            field,
+            value,
+            unit,
+            page: 1,
+            // Provider offsets are wrong on purpose; the worker must not trust them.
+            start: 3,
+            end: 9,
+            excerpt,
+          });
           await processImport(lease, async () => ({
             ...(await provider()),
             output: JSON.stringify({
-              claims: [{ ...output.claims[0], sourceId: text.id, excerpt: "Invented citation" }],
+              claims: [
+                claim("tankCapacity", "200", "gal", "Tank capacity: 200 gallons."),
+                claim("mileage", "48,210", "mi", "Odometer: 48,210 mi."),
+                claim("tankCapacity", "200", "gal", "200 gallons."),
+                claim("tankCapacity", "200", "gal", "Invented citation"),
+                claim("mileage", "about 48k", "mi", "Odometer: 48,210 mi."),
+              ],
               classifications: [{ ...output.classifications[0], sourceId: text.id }],
             }),
           }));
           const view = await getWorkbench(actor, "evidence-deal");
-          assert.equal(view.jobs.find((j) => j.id === queued.id)?.error, "INVALID_EXTRACTION");
-          assert.equal(
-            view.claims.some((c) => c.sourceId === text.id),
-            false,
+          const job = view.jobs.find((j) => j.id === queued.id);
+          assert.equal(job?.state, "ready");
+          assert.equal(job?.droppedClaims, 3, "repeated, invented and hedged claims drop alone");
+          assert.deepEqual(
+            view.claims
+              .filter((c) => c.sourceId === text.id)
+              .map((c) => [c.field, c.value, c.start, c.end, c.excerpt])
+              .sort(),
+            [
+              ["mileage", "48210", 28, 48, "Odometer: 48,210 mi."],
+              ["tankCapacity", "200", 0, 27, "Tank capacity: 200 gallons."],
+            ],
           );
           assert.deepEqual((await getPublicVehicle("evidence-truck")).facts, []);
-          await assert.rejects(retryImport(actor, queued.id), { code: "INVALID_TRANSITION" });
         },
       );
+      await t.test("an incomplete envelope commits no claims and stays terminal", async () => {
+        const text = await source("Bad envelope", "Tank capacity: 200 gallons.");
+        const queued = await queueImport(actor, "evidence-deal", {
+          sourceIds: [text.id],
+          model: "evidence-controlled",
+          key: "bad-envelope",
+        });
+        const lease = await claimImport(queued.id);
+        assert.ok(lease);
+        await processImport(lease, async () => ({
+          ...(await provider()),
+          output: JSON.stringify({
+            claims: [{ ...output.claims[0], sourceId: text.id, excerpt: "Tank capacity: 200" }],
+            classifications: [],
+          }),
+        }));
+        const view = await getWorkbench(actor, "evidence-deal");
+        assert.equal(view.jobs.find((j) => j.id === queued.id)?.error, "INVALID_EXTRACTION");
+        assert.equal(
+          view.claims.some((c) => c.sourceId === text.id),
+          false,
+        );
+        assert.deepEqual((await getPublicVehicle("evidence-truck")).facts, []);
+        await assert.rejects(retryImport(actor, queued.id), { code: "INVALID_TRANSITION" });
+      });
       await t.test(
         "saved synthetic output is exact, labeled and never admitted as paid work",
         async () => {

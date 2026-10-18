@@ -129,6 +129,7 @@ const jobView = z.object({
   attempt: z.number(),
   mode: z.enum(["provider", "saved_example"]),
   model: z.string(),
+  droppedClaims: z.number(),
 });
 const blockerView = z.object({
   id: z.string(),
@@ -549,6 +550,7 @@ export async function getWorkbench(actor: Actor, opportunityId: string) {
             attempt: importJobs.attempt,
             mode: importJobs.mode,
             model: importJobs.model,
+            droppedClaims: importJobs.dropped_claims,
           })
           .from(importJobs)
           .where(

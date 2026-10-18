@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { extractionSchema } from "@signal-desk/contracts/evidence-schema";
+import { providerExtractionSchema } from "@signal-desk/contracts/evidence-schema";
 import type { runInference } from "./model";
 
 type Provider = NonNullable<Parameters<typeof runInference>[2]>;
@@ -94,7 +94,7 @@ const responseFormat = {
   json_schema: {
     name: "evidence_extraction",
     strict: true,
-    schema: structure(z.toJSONSchema(extractionSchema)),
+    schema: structure(z.toJSONSchema(providerExtractionSchema)),
   },
 };
 

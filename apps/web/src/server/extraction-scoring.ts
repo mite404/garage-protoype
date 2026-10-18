@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   canonicalValue,
-  extractionSchema,
   fieldSchema,
+  providerExtractionSchema,
 } from "@signal-desk/contracts/evidence-schema";
 import { examples, savedExtraction } from "./saved-evidence";
 
@@ -89,10 +89,13 @@ const lenientClaim = z.object({
   value: z.coerce.string(),
   unit: z.string().default(""),
   page: z.number(),
-  start: z.number(),
-  end: z.number(),
+  // Providers no longer return offsets; older saved outputs still carry them.
+  start: z.number().default(0),
+  end: z.number().default(0),
   excerpt: z.string().default(""),
 });
+// Matches the worker: the envelope must be valid, while claims are checked one by one.
+const envelope = providerExtractionSchema.extend({ claims: z.array(z.unknown()) });
 const savedClaims = z.object({
   claims: z.array(lenientClaim.extend({ field: fieldSchema, unit: z.string() })),
 });
@@ -173,11 +176,6 @@ function percentile(values: number[], p: number) {
 
 // Private notes and inquiries are context; the worker rejects any claim citing them.
 const contextKinds = new Set(["private_note", "inquiry"]);
-
-function exactLocator(claim: Predicted, pages: Map<string, string[]>) {
-  const page = pages.get(claim.document)?.[claim.page - 1] ?? "";
-  return claim.end > claim.start && page.slice(claim.start, claim.end) === claim.excerpt;
-}
 
 function validValue(claim: Predicted) {
   return key(claim.document, claim.field, claim.value, claim.unit) !== null;
@@ -260,18 +258,18 @@ export function predictedClaims(raw: string, documents: Map<string, string>) {
   return { claims, unusable: list.data.claims.length - claims.length };
 }
 
-// Names each check the import worker's validation would fail for this output. One failure
-// rejects the whole import, so a single bad locator discards every correct claim.
+// Names why the worker rejects this import (schema, classifications) or drops some of its claims
+// (unknown source, context claim, excerpt not found exactly once, invalid value).
 function rejectionReasons(packet: Packet, run: RunResult) {
   const output = json(run.output);
-  if (!extractionSchema.safeParse(output).success) return ["schema"];
+  if (!envelope.safeParse(output).success) return ["schema"];
   const kinds = new Map(packet.documents.map((doc) => [doc.id, doc.kind]));
   const { claims, unusable } = predictedClaims(run.output, run.documents);
   const checks: [string, boolean][] = [
     ["classifications", classificationGap(output, run.documents)],
     ["unknown-source", unusable > 0],
     ["context-claim", claims.some((c) => contextKinds.has(kinds.get(c.document) ?? ""))],
-    ["offsets", claims.some((c) => !exactLocator(c, run.pages))],
+    ["excerpt", claims.some((c) => !derivedLocator(c, run.pages).length)],
     ["value-format", claims.some((c) => !validValue(c))],
   ];
   return checks.filter(([, failed]) => failed).map(([reason]) => reason);
@@ -304,7 +302,7 @@ export function scoreRun(packet: Packet, run: RunResult) {
   const kinds = classified.safeParse(json(run.output));
   return {
     json: json(run.output) !== undefined,
-    schema: extractionSchema.safeParse(json(run.output)).success,
+    schema: envelope.safeParse(json(run.output)).success,
     raw: { ...raw, value: { ...raw.value, fp: raw.value.fp + parsed.unusable } },
     committed: scoreClaims(packet, run.committed, run.reached),
     derivable: scoreClaims(packet, derivableClaims(packet, run), run.reached),

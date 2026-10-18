@@ -56,6 +56,12 @@ export const extractionSchema = z
       .max(20),
   })
   .strict();
+/** A provider claim cites a page and verbatim excerpt; the server derives its offsets. */
+export const providerClaim = extractedClaim.omit({ start: true, end: true });
+/** Provider output contract; the worker validates each claim and drops invalid ones alone. */
+export const providerExtractionSchema = extractionSchema.extend({
+  claims: z.array(providerClaim).max(200),
+});
 const selection = z.object({ field: fieldSchema, claimId: z.string(), shareable: z.boolean() });
 /** Human commands append decisions without modifying source assertions. */
 export const reviewSchema = z.discriminatedUnion("kind", [

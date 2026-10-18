@@ -85,6 +85,20 @@
       "when": 1792310815590,
       "tag": "0011_jev-routing-policies",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792335997883,
+      "tag": "0012_derived-locators",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792335998549,
+      "tag": "0013_derived-locators-access",
+      "breakpoints": true
     }
   ]
 }
