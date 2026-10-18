@@ -127,8 +127,9 @@ Buyer-visible answers still require evidence and citation checks before disclosu
 label does not authorize unsupported claims or private content. Streaming never grants publication,
 message-delivery, or commercial authority.
 
-Streaming is required independently of the runtime choice. Flue is approved for the bounded trial
-below, not full adoption. Pi Durable, Mastra, and Temporal remain unapproved alternatives.
+Streaming is required independently of the runtime choice. Flue is kept for the bounded specialist
+conversation below (ADR-025), not adopted as the whole runtime. Pi Durable, Mastra, and Temporal
+remain unapproved alternatives.
 
 The [product plan][plan] owns requirement R13 and acceptance example AE9. Hold a controlled provider
 stream open and verify text and a validated card appear before generation finishes. Test split
@@ -137,13 +138,14 @@ Markdown, fragmented tool arguments, interruption, and reconnect without another
 ## Trial Flue without transferring sales authority
 
 ADR-020 approves [ticket 008][flue-trial] for one specialist conversation using Dispatch components
-and existing sales operations. This is a trial decision, not implemented functionality or approval
-for a full runtime migration. Flue's documented durable conversations, PostgreSQL integration, and
-separate submission and observation fit the experiment; verify them in this application.
+and existing sales operations. ADR-025 keeps Flue for this bounded use after the trial; it is not
+approval for a full runtime migration. Flue's durable conversations, PostgreSQL
+integration, and separate submission and observation fit the experiment; plan 008 records how
+they were verified in this application.
 
 Use Kimi K3 through OpenRouter for the initial trial, as Ethan selected on October 16, 2026.
 OpenRouter's model catalog lists `moonshotai/kimi-k3` with tool calling and structured outputs.
-Keep `OPENROUTER_API_KEY` server-only. Catalog availability is not a verified live integration.
+Keep `OPENROUTER_API_KEY` server-only. Plan 008 records the permissioned live OpenRouter run.
 
 Next.js authenticates submission, observation, and cancellation. One Node execution owner runs the
 conversation, as required by [Flue's database guidance][flue-database]. Flue persists conversation

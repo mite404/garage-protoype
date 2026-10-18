@@ -74,7 +74,7 @@ filed: 2026-10-17
 
 - Synthetic municipality and vehicle data are not real municipal activity or escrow.
 - Live schema writes need explicit authorization; local migration verification does not deploy them.
-- Source remains local until separately authorized for publication.
+- Publication was authorized separately; the work shipped to `main` on October 18, 2026.
 
 ## Verification receipt, 2026-10-17
 
@@ -113,4 +113,4 @@ filed: 2026-10-17
 - A hosted browser turn quoted the recorded pump-report condition and survived reload. At 390px,
   document width stayed 390px and the composer remained within the viewport. Escape restored
   launcher focus. These checks do not establish that all free-form model prose is factual.
-- Nothing is committed or pushed.
+- This receipt predates publication. The work later shipped to `main` at `9b71d7a`.
