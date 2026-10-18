@@ -1,7 +1,7 @@
 // Bindings declared in wrangler.jsonc and secrets set with `wrangler secret put`.
 interface Env {
   HYPERDRIVE: Hyperdrive;
-  STREAM_WORKER_TOKEN: string;
+  STREAM_WORKER_TOKEN?: string;
   OPENROUTER_API_KEY: string;
   TURN_DRIVER: DurableObjectNamespace<import("./cloudflare").TurnDriver>;
   TURN_SWEEPER: DurableObjectNamespace<import("./cloudflare").TurnSweeper>;

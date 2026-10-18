@@ -11,11 +11,21 @@ import "./database";
 setProvider(admittedProvider(currentConversationStore, transport));
 instrument({ observe: () => {}, dispose: () => {}, interceptor: salesInterceptor });
 
+const encoder = new TextEncoder();
+
+// Fails closed without a configured token and compares in constant time.
+function authorized(header: string | undefined, token: string | undefined) {
+  if (!token || !header) return false;
+  const given = encoder.encode(header);
+  const expected = encoder.encode(`Bearer ${token}`);
+  return given.byteLength === expected.byteLength && crypto.subtle.timingSafeEqual(given, expected);
+}
+
 const app = new Hono();
 
 // Internal adapter for the web app. It never reads or returns conversation content.
 app.use("/internal/*", async (c, next) => {
-  if (c.req.header("authorization") !== `Bearer ${env.STREAM_WORKER_TOKEN}`)
+  if (!authorized(c.req.header("authorization"), env.STREAM_WORKER_TOKEN))
     return c.json({ error: "unauthorized" }, 401);
   await next();
 });
