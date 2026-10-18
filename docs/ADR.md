@@ -49,6 +49,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-027: Generate and apply migrations with Drizzle Kit from `db-schema.ts`, keeping functions,
   grants, and row security as custom SQL migrations in the same journal, because one schema
   definition should drive both typed queries and table changes.
+- ADR-029: Use Jev only to suggest an evidence field for unmatched specialist questions, behind
+  spending admission and specialist acceptance, because routing is a consequential human
+  decision and a confident wrong suggestion must not misroute a deal.
 
 ## Proposed
 
