@@ -142,6 +142,21 @@ single mistyped character in a source UUID (`4f7d` for `4f5d`), which fails the 
 envelope. Giving sources short aliases such as `S1` in the frozen input, mapped back by the
 worker, would remove that failure mode without loosening validation.
 
+### Short source aliases
+
+Both remaining rejections were a single mistyped character in a source UUID (`4f7d` for `4f5d`).
+The worker now shows each source to the provider as `S1`, `S2` and maps citations back to the
+real IDs. Luna at effort `none`, rerun through that worker:
+
+| Set                      | Accepted | Committed precision / recall | Conflicts |
+| ------------------------ | -------- | ---------------------------- | --------- |
+| ETH-79, 3 runs           | 3/3      | 1.00 / 1.00 (9/0/0)          | 3/3       |
+| Synthetic corpus, 2 runs | 10/10    | 0.90 / 0.90 (94/10/10)       | 7/8       |
+| Public documents, 1 run  | 2/2      | 0.75 / 0.75 (9/3/3)          | n/a       |
+
+Corpus latency p50 was about 6s, and the 15 imports cost $0.0063 in provider-reported usage. The
+ledger after all reruns is $0.431.
+
 ## Original proposal
 
 The worker should keep validation strict but stop asking the model for character offsets:
