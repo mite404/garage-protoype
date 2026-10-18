@@ -8,10 +8,12 @@ export interface OwnerCommands {
   kickTurn(turnId: string): Promise<unknown>;
   /** Asks the turn's object to stop it. */
   cancelTurn(turnId: string): Promise<unknown>;
+  /** Hands one import job to the owner's queue. */
+  enqueueImport(jobId: string): Promise<unknown>;
 }
 
-// Node reaches a Cloudflare owner over HTTP when configured; unset keeps the Node owner, which
-// finds work itself.
+// Node reaches a Cloudflare owner over HTTP when configured; unset keeps the Node owner and the
+// polling import worker, which find work themselves.
 const post = async (path: string) => {
   const origin = process.env.STREAM_WORKER_URL;
   if (!origin) return;
@@ -25,6 +27,7 @@ const post = async (path: string) => {
 const httpOwner: OwnerCommands = {
   kickTurn: (id) => post(`/internal/turns/${id}`),
   cancelTurn: (id) => post(`/internal/turns/${id}/cancel`),
+  enqueueImport: (id) => post(`/internal/imports/${id}`),
 };
 
 // Kept on globalThis because Next.js bundles instrumentation and routes with separate module copies.
@@ -37,7 +40,7 @@ export function configureOwner(next: OwnerCommands) {
   state.commands = next;
 }
 
-/** Sends one wake and ignores failure: the owner's cron sweep recovers unfinished turns. */
+/** Sends one wake and ignores failure: the owner's cron sweep recovers unfinished turns and jobs. */
 export async function wakeOwner(command: keyof OwnerCommands, id: string) {
   await state.commands[command](id).catch(() => undefined);
 }

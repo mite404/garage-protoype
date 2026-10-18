@@ -19,5 +19,6 @@ export function useCloudflareRuntime() {
   configureOwner({
     kickTurn: (id) => env().STREAM_OWNER.kickTurn(id),
     cancelTurn: (id) => env().STREAM_OWNER.cancelTurn(id),
+    enqueueImport: (id) => env().STREAM_OWNER.enqueueImport(id),
   });
 }

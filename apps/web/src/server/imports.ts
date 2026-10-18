@@ -37,6 +37,7 @@ import {
 } from "@signal-desk/contracts/evidence-schema";
 import { examples, savedExtraction } from "./saved-evidence";
 import { refreshPhotoBlockers } from "./photos";
+import { wakeOwner } from "./owner";
 
 const configuration = "evidence-v4-source-aliases";
 const requestSchema = z
@@ -369,7 +370,7 @@ async function ensureJob(
  */
 export async function queueImport(actor: Actor, opportunityId: string, raw: unknown) {
   const input = parseInput(requestSchema, raw);
-  return evidenceTransaction(actor, opportunityId, async (db) => {
+  const queued = await evidenceTransaction(actor, opportunityId, async (db) => {
     await requireSpending(actor, db);
     await orm(db).execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${actor.userId + ":" + input.key},75001))`,
@@ -391,10 +392,12 @@ export async function queueImport(actor: Actor, opportunityId: string, raw: unkn
       .onConflictDoNothing();
     return { id };
   });
+  await wakeOwner("enqueueImport", queued.id);
+  return queued;
 }
 
-// Jobs `claimImport` may take: queued, or processing with an expired lease.
-const claimableImports = or(
+/** Selects jobs `claimImport` may take: queued, or processing with an expired lease. */
+export const claimableImports = or(
   eq(importJobs.state, "queued"),
   and(eq(importJobs.state, "processing"), lt(importJobs.lease_until, sql`clock_timestamp()`)),
 );
@@ -701,7 +704,7 @@ export async function retryImport(actor: Actor, id: string) {
   const result = await orm().select().from(importJobs).where(eq(importJobs.id, id));
   if (!result.length) throw new AppError(404, "NOT_FOUND", "Job not found.");
   const job = jobSchema.parse(result[0]);
-  return evidenceTransaction(actor, job.opportunity_id, async (db) => {
+  const queued = await evidenceTransaction(actor, job.opportunity_id, async (db) => {
     await requireSpending(actor, db);
     requireRequester(job, actor);
     const original = await jobActor(job);
@@ -719,6 +722,8 @@ export async function retryImport(actor: Actor, id: string) {
       .where(eq(importJobs.id, id));
     return { id };
   });
+  await wakeOwner("enqueueImport", queued.id);
+  return queued;
 }
 
 /** Adds the exact synthetic saved packet to an existing opportunity without a provider call.

@@ -53,7 +53,7 @@ jobs:
               exit 1
             }
           npm run check
-      - name: Check streaming guarantees on the Cloudflare Worker
+      - name: Check streaming and import guarantees on the Cloudflare Worker
         run: npm run test:cloudflare
       - name: Show Cloudflare Worker logs
         if: failure()
