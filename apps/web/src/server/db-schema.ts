@@ -143,9 +143,7 @@ export const sourceClassifications = privateSchema.table("source_classifications
 /** Buyer questions; stored input is parsed against the inquiry contract on read. */
 export const inquiries = privateSchema.table("inquiries", {
   id: text("id").primaryKey(),
-  // Exactly one subject: a deal turn or a sourcing turn (checked in the database).
-  opportunity_id: text("opportunity_id"),
-  sourcing_case_id: text("sourcing_case_id").references((): AnyPgColumn => sourcingCases.id),
+  opportunity_id: text("opportunity_id").notNull(),
   actor_id: uuid("actor_id").notNull(),
   request_key: text("request_key").notNull(),
   input: jsonb("input").$type<z.infer<typeof inquiryInput>>().notNull(),
@@ -174,9 +172,7 @@ export const inquiryRouting = privateSchema.table("inquiry_routing", {
 /** Human-approved local drafts; JSON is validated by assistance contracts on read. */
 export const assistanceDrafts = privateSchema.table("assistance_drafts", {
   id: text("id").primaryKey(),
-  // Exactly one subject: a deal turn or a sourcing turn (checked in the database).
-  opportunity_id: text("opportunity_id"),
-  sourcing_case_id: text("sourcing_case_id").references((): AnyPgColumn => sourcingCases.id),
+  opportunity_id: text("opportunity_id").notNull(),
   actor_id: uuid("actor_id").notNull(),
   request_key: text("request_key").notNull(),
   input: jsonb("input").$type<z.infer<typeof draftCommand>>().notNull(),

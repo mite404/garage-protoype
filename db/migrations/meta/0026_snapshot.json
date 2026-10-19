@@ -1,5 +1,5 @@
 {
-  "id": "74cfdf30-a8b4-4d86-aab5-e8b6dc5603d3",
+  "id": "bf15ca95-67b4-4401-81e5-14476a1ed781",
   "prevId": "5c599c77-a5b7-40bf-b79a-155fc7287394",
   "version": "7",
   "dialect": "postgresql",
@@ -80,13 +80,7 @@
           "name": "opportunity_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "sourcing_case_id": {
-          "name": "sourcing_case_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "actor_id": {
           "name": "actor_id",
@@ -157,22 +151,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "assistance_drafts_sourcing_case_id_sourcing_cases_id_fk": {
-          "name": "assistance_drafts_sourcing_case_id_sourcing_cases_id_fk",
-          "tableFrom": "assistance_drafts",
-          "tableTo": "sourcing_cases",
-          "schemaTo": "signal_desk",
-          "columnsFrom": [
-            "sourcing_case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2281,13 +2260,7 @@
           "name": "opportunity_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "sourcing_case_id": {
-          "name": "sourcing_case_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "actor_id": {
           "name": "actor_id",
@@ -2316,22 +2289,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "inquiries_sourcing_case_id_sourcing_cases_id_fk": {
-          "name": "inquiries_sourcing_case_id_sourcing_cases_id_fk",
-          "tableFrom": "inquiries",
-          "tableTo": "sourcing_cases",
-          "schemaTo": "signal_desk",
-          "columnsFrom": [
-            "sourcing_case_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

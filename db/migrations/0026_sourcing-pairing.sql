@@ -60,15 +60,11 @@ CREATE TABLE "signal_desk"."sourcing_cases" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "signal_desk"."assistance_drafts" ALTER COLUMN "opportunity_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "signal_desk"."chat_turns" ALTER COLUMN "opportunity_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "signal_desk"."inquiries" ALTER COLUMN "opportunity_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "signal_desk"."stream_turns" ALTER COLUMN "opportunity_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "signal_desk"."stream_turns" ALTER COLUMN "inquiry_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "signal_desk"."assistance_drafts" ADD COLUMN "sourcing_case_id" text;--> statement-breakpoint
 ALTER TABLE "signal_desk"."chat_turns" ADD COLUMN "sourcing_case_id" text;--> statement-breakpoint
 ALTER TABLE "signal_desk"."inference_operations" ADD COLUMN "sourcing_case_id" text;--> statement-breakpoint
-ALTER TABLE "signal_desk"."inquiries" ADD COLUMN "sourcing_case_id" text;--> statement-breakpoint
 ALTER TABLE "signal_desk"."stream_turns" ADD COLUMN "sourcing_case_id" text;--> statement-breakpoint
 ALTER TABLE "signal_desk"."buyer_needs" ADD CONSTRAINT "buyer_needs_owner_id_identities_user_id_fk" FOREIGN KEY ("owner_id") REFERENCES "signal_desk"."identities"("user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "signal_desk"."buyer_needs" ADD CONSTRAINT "buyer_needs_buyer_organization_id_organizations_id_fk" FOREIGN KEY ("buyer_organization_id") REFERENCES "signal_desk"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -82,8 +78,6 @@ ALTER TABLE "signal_desk"."sourcing_cases" ADD CONSTRAINT "sourcing_cases_seller
 ALTER TABLE "signal_desk"."sourcing_cases" ADD CONSTRAINT "sourcing_cases_owner_id_identities_user_id_fk" FOREIGN KEY ("owner_id") REFERENCES "signal_desk"."identities"("user_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "source_change_case_key" ON "signal_desk"."source_changes" USING btree ("case_id","dedupe_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "sourcing_case_pairing" ON "signal_desk"."sourcing_cases" USING btree ("need_id","seller_prospect_id");--> statement-breakpoint
-ALTER TABLE "signal_desk"."assistance_drafts" ADD CONSTRAINT "assistance_drafts_sourcing_case_id_sourcing_cases_id_fk" FOREIGN KEY ("sourcing_case_id") REFERENCES "signal_desk"."sourcing_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "signal_desk"."chat_turns" ADD CONSTRAINT "chat_turns_sourcing_case_id_sourcing_cases_id_fk" FOREIGN KEY ("sourcing_case_id") REFERENCES "signal_desk"."sourcing_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "signal_desk"."inference_operations" ADD CONSTRAINT "inference_operations_sourcing_case_id_sourcing_cases_id_fk" FOREIGN KEY ("sourcing_case_id") REFERENCES "signal_desk"."sourcing_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "signal_desk"."inquiries" ADD CONSTRAINT "inquiries_sourcing_case_id_sourcing_cases_id_fk" FOREIGN KEY ("sourcing_case_id") REFERENCES "signal_desk"."sourcing_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "signal_desk"."stream_turns" ADD CONSTRAINT "stream_turns_sourcing_case_id_sourcing_cases_id_fk" FOREIGN KEY ("sourcing_case_id") REFERENCES "signal_desk"."sourcing_cases"("id") ON DELETE no action ON UPDATE no action;
