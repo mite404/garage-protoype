@@ -28,7 +28,10 @@ CI=true npm exec -- lefthook run pre-commit --force
 ```
 
 Set `TEST_DATABASE_URL` to a disposable test database and `TEST_APP_URL` to the running production
-app. With `CI=true`, missing database or HTTP prerequisites fail instead of silently skipping.
+app. Never point a seeded harness at that database. If the gate reports leftover fixtures, run
+`npm run db:test:status`, stop only the workflow you started, then `npm run db:test:reset`.
+See [disposable test databases](../../../docs/development.md#disposable-test-databases).
+With `CI=true`, missing database or HTTP prerequisites fail instead of silently skipping.
 Use `--force` for manual verification so an unstaged worktree cannot produce a skipped hook.
 The installed pre-commit hook runs `npm run check`. That command owns docs, Oxfmt, Oxlint,
 TypeScript across workspaces, native tests and Fallow. CI runs the build and same check on PRs.
