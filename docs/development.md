@@ -276,8 +276,9 @@ harness that seeds fixtures uses another name, such as `signal_desk_harness_test
 file must delete what it creates. `npm run db:test:status` names connected sessions, the lock
 holder and leftover tables. `npm run db:test:reset` drops and recreates the database; tests
 migrate it again on first use. Both act only on the database in `TEST_DATABASE_URL`, refuse
-non-loopback hosts and names without the `_test` suffix, and never read `DATABASE_URL`. Reset also
-refuses while any other session is connected, so stop the owning workflow first.
+names without the `_test` suffix, and never read `DATABASE_URL`. Reset also refuses non-loopback
+hosts, any `host` query parameter, and any other connected session, so stop the owning workflow
+first.
 
 ## Formatting and analysis
 
