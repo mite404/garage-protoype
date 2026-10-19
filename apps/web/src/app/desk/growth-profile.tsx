@@ -4,7 +4,11 @@ import { feedbackSurvey } from "@signal-desk/contracts/feedback-schema";
 import { AppError } from "@/server/errors";
 import { GrowthCommand } from "./growth-command";
 import type { AccountTab } from "@signal-desk/catalog/desk-shell";
-import { outreachSteps, prospectOutreachStep } from "@signal-desk/catalog/desk-state";
+import {
+  outreachSteps,
+  prospectOutreachStep,
+  qualificationLabel,
+} from "@signal-desk/catalog/desk-state";
 
 type Profile = Awaited<ReturnType<typeof getGrowthProfile>>;
 const dueDate = new Intl.DateTimeFormat("en-US", {
@@ -29,8 +33,8 @@ function AccountMetrics({ account }: Pick<Profile, "account">) {
         <span>Contact permission</span>
       </p>
       <p>
-        <strong>{account.qualified ? "Qualified" : "Not qualified"}</strong>
-        <span>Deal qualification</span>
+        <strong>{qualificationLabel(account)}</strong>
+        <span>Seller qualification</span>
       </p>
     </div>
   );
@@ -334,8 +338,18 @@ function DeliveryReview({ account, outreach }: Pick<Profile, "account" | "outrea
 function DealFeedback({ account, feedback }: Pick<Profile, "account" | "feedback">) {
   return (
     <section className="growth-card">
-      <h2>Connect the deal</h2>
-      {account.opportunityId ? (
+      <h2>Qualify the seller</h2>
+      {account.listingVehicleId ? (
+        <>
+          <p>
+            Qualified seller. Its draft listing stays unpublished until the listing is reviewed.
+          </p>
+          <Link className="quiet-button mt-4" href="?tab=fit#listing">
+            Connect a buyer →
+          </Link>
+        </>
+      ) : account.opportunityId ? (
+        // Accounts qualified before listings existed hold a buyer opportunity instead.
         <Link
           className="quiet-button mt-4"
           href={`/desk/municipalities/${encodeURIComponent(account.organizationId!)}`}
@@ -343,17 +357,21 @@ function DealFeedback({ account, feedback }: Pick<Profile, "account" | "feedback
           Open account workspace →
         </Link>
       ) : (
-        <GrowthCommand kind="qualify" accountId={account.id} label="Create reviewed opportunity">
+        <GrowthCommand
+          kind="qualify"
+          accountId={account.id}
+          label="Qualify seller and draft listing"
+        >
+          <p className="text-sm text-muted-foreground">
+            A qualified prospect is a seller. This drafts an unpublished listing for the vehicle it
+            offers; it creates no buyer deal and publishes nothing.
+          </p>
           <label>
-            Published vehicle ID
-            <input name="vehicleId" required maxLength={200} />
+            Vehicle offered for sale
+            <input name="vehicleTitle" required maxLength={200} />
           </label>
           <label>
-            Existing assigned opportunity ID, for a matched buyer
-            <input name="existingOpportunityId" maxLength={200} />
-          </label>
-          <label>
-            Original qualified reply
+            Original qualifying reply
             <textarea name="reply" required maxLength={1000} />
           </label>
           <label>

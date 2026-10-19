@@ -181,7 +181,7 @@ const stories = {
   },
   "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',
-    text: ["Proposed updates · Not yet approved", "Reject this pairing, not the seller account"],
+    text: ["Proposed updates · Not yet approved", "Reject this connection, not the seller account"],
   },
 };
 

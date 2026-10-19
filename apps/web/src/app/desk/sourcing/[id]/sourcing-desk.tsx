@@ -44,6 +44,13 @@ function revive(view: View): View {
         ...account.decision,
         decidedAt: date(account.decision.decidedAt),
       },
+      connection: {
+        ...account.connection,
+        milestones: account.connection.milestones.map((milestone) => ({
+          ...milestone,
+          at: date(milestone.at),
+        })),
+      },
     },
   };
 }
@@ -143,7 +150,7 @@ export default function SourcingDesk({
       );
     return (
       <section className="desk-card desk-chat-card">
-        <h3>Pairing decision</h3>
+        <h3>Connection decision</h3>
         <p>
           {account.decision
             ? `${account.decision.decision}: ${account.decision.reason}`
@@ -168,6 +175,7 @@ export default function SourcingDesk({
       onSaveDraft={(draft) => command({ kind: "draft", ...draft })}
       onAccept={(factIds) => command({ kind: "accept", factIds })}
       onDecide={(decision) => command({ kind: "decide", ...decision })}
+      onMilestone={(kind, note) => command({ kind, note })}
       onRecordNote={async (text) => {
         await command({ kind: "record_original", text });
         setStep(3);
@@ -178,7 +186,7 @@ export default function SourcingDesk({
           composerRef={composer}
           subject="sourcing"
           subjectId={view.caseId}
-          context={`${account.account.name} · Seller research`}
+          context={`${account.account.name} · ${account.need.buyer} connection`}
           initialStreams={streams}
           copy={copy}
           renderSourcingCard={renderCard}
