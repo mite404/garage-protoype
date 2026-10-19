@@ -410,3 +410,165 @@
     height: 56px;
   }
 }
+
+.sourcing-identity {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px 24px;
+}
+.sourcing-owner {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted-foreground);
+}
+.sourcing-owner dd {
+  margin: 0;
+  color: var(--foreground);
+  font-weight: 500;
+}
+.sourcing-next {
+  margin-bottom: 28px;
+  font-size: 16px;
+}
+.sourcing-next .reading-label {
+  margin-bottom: 2px;
+}
+.sourcing-why {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.sourcing-card {
+  gap: 16px;
+  padding: 20px;
+}
+.sourcing-card > .state {
+  font-size: 12px;
+}
+.sourcing-link {
+  align-self: flex-start;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sourcing-fit {
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+  /* Chat messages wrap anywhere; requirements, amounts and statuses stay whole. */
+  overflow-wrap: normal;
+  container-type: inline-size;
+}
+.sourcing-fit table {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--card);
+}
+.sourcing-fit :is(th, td) {
+  padding: 10px 16px;
+  text-align: left;
+  vertical-align: middle;
+}
+.sourcing-fit thead th {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+.sourcing-fit tbody > tr > * {
+  border-top: 1px solid var(--border);
+}
+.sourcing-fit tbody th {
+  font-weight: 500;
+}
+.sourcing-fit .state {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sourcing-status {
+  margin-bottom: 10px;
+}
+.sourcing-status .state {
+  font-size: 12px;
+}
+.sourcing-readiness {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  padding-top: 0;
+  border-top: 0;
+}
+.sourcing-card textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.sourcing-card > button {
+  align-self: flex-start;
+}
+.sourcing-why h3 a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sourcing-proposals,
+.sourcing-choices {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sourcing-proposal,
+.sourcing-choices label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 400;
+}
+.sourcing-choices label {
+  border-top: 0;
+  padding: 4px 0;
+}
+:is(.sourcing-proposal, .sourcing-choices) input {
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+.sourcing-basis {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.sourcing-problem {
+  margin: -16px 0 28px;
+  padding: 10px 14px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+  color: var(--destructive);
+}
+.sourcing-note {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.sourcing-note label {
+  margin: 0;
+}
+.sourcing-note button {
+  justify-self: start;
+}
+@container (max-width: 520px) {
+  .sourcing-fit :is(th, td) {
+    padding: 8px 10px;
+  }
+}

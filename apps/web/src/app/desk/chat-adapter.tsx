@@ -1,28 +1,55 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { streamView, type StreamView } from "@signal-desk/contracts/assistance-schema";
+import type { ComponentProps } from "react";
+import {
+  sourcingStreamView,
+  streamView,
+  type SourcingStreamView,
+  type StreamView,
+} from "@signal-desk/contracts/assistance-schema";
 import SaleChat from "@signal-desk/catalog/sale-chat";
 import { postPrototypeCommand } from "@/app/prototype-command";
 
-async function savedStreams(endpoint: string) {
+type Turn = StreamView | SourcingStreamView;
+// Each subject has its own stream endpoint and card contract.
+const subjects = {
+  opportunity: { base: "/api/v1/desk/opportunities", schema: streamView.array() },
+  sourcing: { base: "/api/v1/desk/sourcing", schema: sourcingStreamView.array() },
+};
+
+async function savedStreams(
+  endpoint: string,
+  schema: (typeof subjects)[keyof typeof subjects]["schema"],
+) {
   const response = await fetch(`${endpoint}?view=snapshot`);
   if (!response.ok)
     throw new Error("Could not reload saved progress. Reconnect before submitting again.");
   const result = await response.json();
-  return streamView.array().parse(result.data);
+  return schema.parse(result.data) as Turn[];
 }
 
-/** Connects the shared popup to authorized saved streams and commands. */
-export default function SaleChatAdapter({
-  opportunityId,
+const countFinished = (turns: Turn[]) =>
+  turns.filter((turn) => turn.state === "completed" || turn.state === "interrupted").length;
+
+/** Connects the shared popup to one subject's authorized saved streams and commands. */
+export default function ChatAdapter({
+  subject = "opportunity",
+  subjectId,
   context,
   initialStreams,
+  copy,
+  renderSourcingCard,
+  onSettled,
 }: {
-  opportunityId: string;
+  subject?: keyof typeof subjects;
+  subjectId: string;
   context: string;
-  initialStreams: StreamView[];
-}) {
-  const base = `/api/v1/desk/opportunities/${encodeURIComponent(opportunityId)}`;
+  initialStreams: Turn[];
+  /** Called when a saved turn finishes, so the page can reload records the assistant changed. */
+  onSettled?: () => void;
+} & Pick<ComponentProps<typeof SaleChat>, "copy" | "renderSourcingCard">) {
+  const { base: root, schema } = subjects[subject];
+  const base = `${root}/${encodeURIComponent(subjectId)}`;
   const endpoint = `${base}/stream`;
   const assistanceEndpoint = `${base}/assistance`;
   const [streams, setStreams] = useState(initialStreams);
@@ -30,6 +57,16 @@ export default function SaleChatAdapter({
   const [denied, setDenied] = useState(false);
   const [pending, setPending] = useState(false);
   const retry = useRef({ body: "", key: "" });
+  const settled = useRef(onSettled);
+  const finished = useRef(countFinished(initialStreams));
+  useEffect(() => {
+    settled.current = onSettled;
+  });
+  useEffect(() => {
+    const count = countFinished(streams);
+    if (count > finished.current) settled.current?.();
+    finished.current = count;
+  }, [streams]);
   useEffect(() => {
     const observer = new EventSource(endpoint);
     let disposed = false;
@@ -41,7 +78,7 @@ export default function SaleChatAdapter({
     }
     observer.onmessage = (event) => {
       try {
-        setStreams(streamView.array().parse(JSON.parse(event.data)));
+        setStreams(schema.parse(JSON.parse(event.data)));
         setConnection("Connected · History saved");
       } catch {
         setConnection("Could not read saved progress. Reconnecting…");
@@ -57,7 +94,7 @@ export default function SaleChatAdapter({
       disposed = true;
       observer.close();
     };
-  }, [endpoint]);
+  }, [endpoint, schema]);
   async function command(
     target: string,
     body:
@@ -74,7 +111,7 @@ export default function SaleChatAdapter({
     try {
       await postPrototypeCommand(target, serialized, retry.current.key);
       retry.current = { body: "", key: "" };
-      await savedStreams(endpoint).then(setStreams, () =>
+      await savedStreams(endpoint, schema).then(setStreams, () =>
         setConnection("Message accepted. Reconnecting to saved progress…"),
       );
     } catch (failure) {
@@ -86,6 +123,8 @@ export default function SaleChatAdapter({
   }
   return (
     <SaleChat
+      copy={copy}
+      renderSourcingCard={renderSourcingCard}
       context={context}
       streams={streams}
       pending={pending}

@@ -7,6 +7,9 @@ import { WorkspaceShell } from "@signal-desk/catalog/workspace-shell";
 const destinations = [
   { href: "/", label: "Overview" },
   { href: "/desk", label: "Workspace" },
+  { href: "/desk/prospects", label: "Prospect inbox" },
+  { href: "/desk/sourcing", label: "Sourcing" },
+  { href: "/desk/growth", label: "Growth operations" },
   { href: "/vehicles/demo-pumper", label: "Public record" },
   { href: "/desk/tokens", label: "MCP tokens" },
   { href: "/account", label: "Account" },
@@ -16,7 +19,7 @@ const destinations = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   if (["/sign-in", "/sign-up", "/account"].includes(pathname)) return children;
-  if (/^\/desk\/municipalities\/[^/]+\/?$/.test(pathname)) return children;
+  if (/^\/desk\/(municipalities|sourcing)\/[^/]+\/?$/.test(pathname)) return children;
   const active = destinations.findLast(
     ({ href }) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)),
   );

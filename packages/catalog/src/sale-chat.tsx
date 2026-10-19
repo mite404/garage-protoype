@@ -1,6 +1,19 @@
 "use client";
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
-import type { StreamView } from "@signal-desk/contracts/assistance-schema";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import type {
+  SourcingCardRef,
+  SourcingStreamView,
+  StreamView,
+} from "@signal-desk/contracts/assistance-schema";
 import AssistanceCard from "./assistance-cards";
 import { ChatIcon, ChatWindowHeader } from "./chat-window";
 import { Prose } from "./prose";
@@ -11,6 +24,19 @@ import {
   TurnProgress,
   type SentTurn,
 } from "./turn-progress";
+
+// Deal and sourcing turns share one presentation; only their reference cards differ.
+type Turn = StreamView | SourcingStreamView;
+type Copy = { title: string; empty: string; placeholder: string };
+const saleCopy: Copy = {
+  title: "Sale assistant",
+  empty:
+    "What is blocking this acquisition? Ask about its conditions or the evidence still needed.",
+  placeholder: "Ask about this sale…",
+};
+const ChatCopy = createContext(saleCopy);
+// Renders sourcing references from the page's current records; deal cards render themselves.
+const SourcingCard = createContext<(card: SourcingCardRef) => ReactNode>(() => null);
 
 const labels = {
   queued: "Waiting for the assistant…",
@@ -44,11 +70,12 @@ function UserMessage({ text }: { text: string }) {
 
 // Shown from the frame Send is pressed until the saved turn arrives to replace it.
 function SendingTurn({ message }: { message: string }) {
+  const copy = useContext(ChatCopy);
   return (
     <article className="space-y-3" aria-busy="true">
       <UserMessage text={message} />
       <div className="chat-message">
-        <p className="chat-message-label">Sale assistant</p>
+        <p className="chat-message-label">{copy.title}</p>
         <div className="chat-bubble">
           <TurnProgress label="Sending" />
         </div>
@@ -57,14 +84,14 @@ function SendingTurn({ message }: { message: string }) {
   );
 }
 
-function ActiveProgress({ turn }: { turn: StreamView }) {
+function ActiveProgress({ turn }: { turn: Turn }) {
   if (!isActiveTurn(turn)) return null;
   // Space the status from streamed text or cards above it, not from an empty bubble's edge.
   const below = turn.text !== "" || turn.cards.length > 0;
   return <TurnProgress label={progressLabel(turn)} spaced={below} />;
 }
 
-function TurnState({ turn }: { turn: StreamView }) {
+function TurnState({ turn }: { turn: Turn }) {
   if (isActiveTurn(turn)) return null;
   return <p className="mt-1 pl-1 text-xs text-muted-foreground">{labels[turn.state]}</p>;
 }
@@ -74,7 +101,7 @@ function StopButton({
   pending,
   onStop,
 }: {
-  turn: StreamView;
+  turn: Turn;
   pending: boolean;
   onStop: (id: string) => void;
 }) {
@@ -92,26 +119,32 @@ function SavedTurn({
   onStop,
   onAcceptSuggestion,
 }: {
-  turn: StreamView;
+  turn: Turn;
   pending: boolean;
   onStop: (id: string) => void;
   onAcceptSuggestion: (inquiryId: string, routingRevision: number) => void;
 }) {
+  const copy = useContext(ChatCopy);
+  const renderSourcing = useContext(SourcingCard);
   return (
     <article className="space-y-3" aria-busy={isActiveTurn(turn)}>
       <UserMessage text={turn.message} />
       <div className="chat-message">
-        <p className="chat-message-label">Sale assistant</p>
+        <p className="chat-message-label">{copy.title}</p>
         <div className="chat-bubble">
           <Prose text={turn.text} />
           <div className="space-y-3">
-            {turn.cards.map((card, index) => (
-              <AssistanceCard
-                key={index}
-                card={card}
-                onAcceptSuggestion={pending ? undefined : onAcceptSuggestion}
-              />
-            ))}
+            {turn.cards.map((card, index) =>
+              card.kind === "sourcing" ? (
+                <div key={index}>{renderSourcing(card)}</div>
+              ) : (
+                <AssistanceCard
+                  key={index}
+                  card={card}
+                  onAcceptSuggestion={pending ? undefined : onAcceptSuggestion}
+                />
+              ),
+            )}
           </div>
           <ActiveProgress turn={turn} />
         </div>
@@ -132,7 +165,7 @@ function ChatHistory({
   history,
   onScroll,
 }: {
-  streams: StreamView[];
+  streams: Turn[];
   sending: string | undefined;
   pending: boolean;
   onStop: (id: string) => void;
@@ -140,6 +173,7 @@ function ChatHistory({
   history: RefObject<HTMLElement | null>;
   onScroll: () => void;
 }) {
+  const copy = useContext(ChatCopy);
   return (
     <section
       ref={history}
@@ -148,9 +182,7 @@ function ChatHistory({
       onScroll={onScroll}
     >
       {!streams.length && !sending && (
-        <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
-          What is blocking this acquisition? Ask about its conditions or the evidence still needed.
-        </p>
+        <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">{copy.empty}</p>
       )}
       {streams.map((turn) => (
         <SavedTurn
@@ -183,6 +215,7 @@ function ChatComposer({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   status: string;
 }) {
+  const copy = useContext(ChatCopy);
   return (
     <form onSubmit={onSubmit} className="chat-compose-area">
       <label className="sr-only" htmlFor="sale-message">
@@ -198,7 +231,7 @@ function ChatComposer({
           disabled={pending}
           value={input}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Ask about this sale…"
+          placeholder={copy.placeholder}
           className="bg-transparent text-foreground"
         />
         <div className="chat-composer-toolbar">
@@ -207,7 +240,7 @@ function ChatComposer({
             type="submit"
             className="chat-send"
             disabled={pending || active || !input.trim()}
-            aria-label="Send to sale assistant"
+            aria-label={`Send to ${copy.title.toLowerCase()}`}
           >
             <ChatIcon name="send" />
           </button>
@@ -252,8 +285,36 @@ function ChatPanel({
   );
 }
 
-/** Minimizable conversation presentation; commands and saved progress belong to the caller. */
-export default function SaleChat({
+// Composer draft and the optimistic sent row, until the saved turn for it arrives.
+function useComposer(
+  streams: Turn[],
+  pending: boolean,
+  onSend: () => void,
+  onSubmit: (message: string) => Promise<void>,
+) {
+  const [input, setInput] = useState("");
+  // The submitted message and the turns saved before it, until its own saved turn arrives.
+  const [sent, setSent] = useState<SentTurn>();
+  const sending = sendingMessage(sent, streams);
+  const active = Boolean(sending) || streams.some(isActiveTurn);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = input.trim();
+    if (!message || active || pending) return;
+    // Acknowledge in the same frame as Send; the saved turn replaces this row when it arrives.
+    setSent({ message, known: streams.map((turn) => turn.id) });
+    setInput("");
+    onSend();
+    await onSubmit(message).catch(() => {
+      // The adapter reports the failure through connection; restore the draft for retry.
+      setSent(undefined);
+      setInput(message);
+    });
+  }
+  return { input, setInput, sending, active, submit };
+}
+
+function ChatWindow({
   context,
   streams,
   pending,
@@ -262,27 +323,21 @@ export default function SaleChat({
   onSubmit,
   onStop,
   onAcceptSuggestion,
-}: {
-  context: string;
-  streams: StreamView[];
-  pending: boolean;
-  connection: string;
-  denied: boolean;
-  onSubmit: (message: string) => Promise<void>;
-  onStop: (turnId: string) => void;
-  /** Records the specialist's acceptance of a Jev field suggestion; never generated by the model. */
-  onAcceptSuggestion: (inquiryId: string, routingRevision: number) => void;
-}) {
+  copy,
+}: Omit<ChatProps, "copy" | "renderSourcingCard"> & { copy: Copy }) {
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState("");
-  // The submitted message and the turns saved before it, until its own saved turn arrives.
-  const [sent, setSent] = useState<SentTurn>();
   const launcher = useRef<HTMLButtonElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const history = useRef<HTMLElement>(null);
   const follow = useRef(true);
-  const sending = sendingMessage(sent, streams);
-  const active = Boolean(sending) || streams.some(isActiveTurn);
+  const { input, setInput, sending, active, submit } = useComposer(
+    streams,
+    pending,
+    () => {
+      follow.current = true;
+    },
+    onSubmit,
+  );
   useEffect(() => {
     if (!open) return;
     const button = launcher.current;
@@ -296,20 +351,6 @@ export default function SaleChat({
   function minimize() {
     setOpen(false);
   }
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const message = input.trim();
-    if (!message || active || pending) return;
-    // Acknowledge in the same frame as Send; the saved turn replaces this row when it arrives.
-    setSent({ message, known: streams.map((turn) => turn.id) });
-    setInput("");
-    follow.current = true;
-    await onSubmit(message).catch(() => {
-      // The adapter reports the failure through connection; restore the draft for retry.
-      setSent(undefined);
-      setInput(message);
-    });
-  }
   return (
     <>
       <button
@@ -321,25 +362,20 @@ export default function SaleChat({
         onClick={() => setOpen(true)}
       >
         <ChatIcon name="chat" />
-        Sale assistant {active && <span className="text-xs">· Working</span>}
+        {copy.title} {active && <span className="text-xs">· Working</span>}
       </button>
       <dialog
         id="sale-chat"
         open={open}
         aria-modal="false"
-        aria-label="Sale assistant"
+        aria-label={copy.title}
         hidden={!open}
         onKeyDown={(event) => {
           if (event.key === "Escape") minimize();
         }}
         className="chat-window sale-chat"
       >
-        <ChatWindowHeader
-          title="Sale assistant"
-          subtitle={context}
-          icon="chat"
-          onMinimize={minimize}
-        />
+        <ChatWindowHeader title={copy.title} subtitle={context} icon="chat" onMinimize={minimize} />
         <ChatPanel
           denied={denied}
           historyProps={{
@@ -363,5 +399,36 @@ export default function SaleChat({
         />
       </dialog>
     </>
+  );
+}
+
+type ChatProps = {
+  context: string;
+  streams: Turn[];
+  pending: boolean;
+  connection: string;
+  denied: boolean;
+  onSubmit: (message: string) => Promise<void>;
+  onStop: (turnId: string) => void;
+  /** Records the specialist's acceptance of a Jev field suggestion; never generated by the model. */
+  onAcceptSuggestion: (inquiryId: string, routingRevision: number) => void;
+  /** Assistant name and prompts; defaults to the sale assistant. */
+  copy?: Copy;
+  /** Renders a sourcing reference card from the page's current saved records. */
+  renderSourcingCard?: (card: SourcingCardRef) => ReactNode;
+};
+
+/** Minimizable conversation presentation; commands and saved progress belong to the caller. */
+export default function SaleChat({
+  copy = saleCopy,
+  renderSourcingCard = () => null,
+  ...props
+}: ChatProps) {
+  return (
+    <ChatCopy value={copy}>
+      <SourcingCard value={renderSourcingCard}>
+        <ChatWindow {...props} copy={copy} />
+      </SourcingCard>
+    </ChatCopy>
   );
 }

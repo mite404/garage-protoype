@@ -9,7 +9,7 @@ import { setTimeout } from "node:timers/promises";
  * Never represents live Supabase verification; accepts only this run's exact synthetic token.
  * @throws If the build is absent or the app cannot start.
  */
-export async function startTestApp(userId: string, sessionId: string) {
+export async function startTestApp(userId: string, sessionId: string, port = 0) {
   const user = { id: userId, email: "review@example.test", is_anonymous: false };
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
@@ -31,14 +31,21 @@ export async function startTestApp(userId: string, sessionId: string) {
   let logs = "";
   const app = spawn(
     process.execPath,
-    ["../../node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "0"],
+    [
+      "../../node_modules/next/dist/bin/next",
+      "start",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(port),
+    ],
     {
       cwd: new URL("../../", import.meta.url),
       env: {
         ...process.env,
         SUPABASE_URL: `http://127.0.0.1:${address.port}`,
         SUPABASE_PUBLISHABLE_KEY: "synthetic-test-key",
-        APP_ORIGIN: "http://signal.test",
+        APP_ORIGIN: port ? `http://127.0.0.1:${port}` : "http://signal.test",
         NODE_OPTIONS: "--enable-source-maps",
       },
       stdio: ["ignore", "pipe", "pipe"],

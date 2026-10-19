@@ -22,6 +22,23 @@ const probes: Record<string, string> = {
     "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='import_jobs' and column_name='dropped_claims') as name",
   "0013_derived-locators-access":
     "select (select conname from pg_constraint where conname='import_jobs_dropped_claims_check') as name",
+  "0014_growth-discovery": "select to_regclass('signal_desk.growth_accounts') as name",
+  "0015_growth-access": "select to_regclass('signal_desk.growth_accounts_owner') as name",
+  "0016_growth-outreach": "select to_regclass('signal_desk.growth_messages') as name",
+  "0017_growth-outreach-access": "select to_regclass('signal_desk.growth_messages_due') as name",
+  "0018_growth-account-deals":
+    "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='opportunities' and column_name='organization_id') as name",
+  "0019_growth-deal-access": "select to_regclass('signal_desk.opportunities_organization') as name",
+  "0020_growth-feedback": "select to_regclass('signal_desk.growth_feedback') as name",
+  "0021_growth-feedback-access":
+    "select to_regclass('signal_desk.growth_feedback_invitation') as name",
+  "0022_growth-background": "select to_regclass('signal_desk.growth_insights') as name",
+  "0023_growth-background-access":
+    "select to_regclass('signal_desk.inference_operations_prospect') as name",
+  "0024_growth-schedules": "select to_regclass('signal_desk.growth_schedules') as name",
+  "0025_growth-schedule-access": "select to_regclass('signal_desk.growth_schedules_due') as name",
+  "0026_sourcing-pairing": "select to_regclass('signal_desk.sourcing_cases') as name",
+  "0027_sourcing-access": "select to_regclass('signal_desk.sourcing_cases_owner') as name",
 };
 const migrations = new URL("../../../../db/migrations/", import.meta.url);
 

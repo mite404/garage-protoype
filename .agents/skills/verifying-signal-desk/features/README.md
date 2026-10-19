@@ -4,6 +4,7 @@
 - [Conversation](conversation.md): reading hierarchy, literal evidence and responsive text.
 - [Chat workspace](chat-workspace.md): popup windows, email draft editing and local messages.
 - [Municipal workspace](municipal-workspace.md): department page, acquisition and sale chat.
+- [Sourcing workspace](sourcing-workspace.md): buyer-need fit, reply review and pairing decision.
 - [Shell and primitives](shell-and-primitives.md): dispatch layout, palette, actions and forms.
 - [Sales workflow](sales-workflow.md): authorization, evidence review, persistence and draft safety.
 - [MCP tokens](mcp-tokens.md): local token management and the MCP client.
