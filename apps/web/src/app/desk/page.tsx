@@ -65,19 +65,19 @@ function ReviewQueue({ items }: { items: WorkItem[] }) {
   );
 }
 
-function DealRooms({
+function ActiveDeals({
   municipalities,
   opportunities,
 }: {
   municipalities: Awaited<ReturnType<typeof listMunicipalities>>;
   opportunities: Awaited<ReturnType<typeof listEvidenceOpportunities>>;
 }) {
-  const rooms = [
+  const deals = [
     ...municipalities.map((organization) => ({
       href: `/desk/municipalities/${encodeURIComponent(organization.id)}`,
       name: organization.name,
       detail: `${organization.city}, ${organization.region} · ${organization.unit}`,
-      kind: "Buyer deal room",
+      kind: "Department account",
     })),
     ...opportunities.map((opportunity) => ({
       href: `/desk/opportunities/${encodeURIComponent(opportunity.id)}`,
@@ -88,33 +88,33 @@ function DealRooms({
   ];
   return (
     <section className="desk-card mt-6">
-      <h2>Deal rooms</h2>
+      <h2>Active deals</h2>
       <p className="desk-note">Qualified accounts continue here with their evidence packets.</p>
-      {rooms.length ? (
+      {deals.length ? (
         <div className="desk-table-scroll mt-4">
           <table className="desk-table">
             <thead>
               <tr>
                 <th scope="col">Deal</th>
                 <th scope="col">Next step</th>
-                <th scope="col">Room</th>
+                <th scope="col">Workspace</th>
               </tr>
             </thead>
             <tbody>
-              {rooms.map((room) => (
-                <tr key={room.href}>
+              {deals.map((deal) => (
+                <tr key={deal.href}>
                   <th scope="row">
-                    <Link href={room.href}>{room.name}</Link>
+                    <Link href={deal.href}>{deal.name}</Link>
                   </th>
-                  <td>{room.detail}</td>
-                  <td>{room.kind}</td>
+                  <td>{deal.detail}</td>
+                  <td>{deal.kind}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        <p className="mt-4">No deal rooms yet. Qualifying a reviewed reply opens one.</p>
+        <p className="mt-4">No active deals yet. Qualifying a reviewed reply opens one.</p>
       )}
     </section>
   );
@@ -180,7 +180,7 @@ export default async function Desk() {
             .map((data) => ({ kind: "prospect" as const, data })),
         ]}
       />
-      <DealRooms municipalities={municipalities} opportunities={opportunities} />
+      <ActiveDeals municipalities={municipalities} opportunities={opportunities} />
       <section className="desk-card mt-6">
         <h2>Background work</h2>
         <p className="desk-note">

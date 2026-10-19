@@ -14,7 +14,7 @@ const pipeline = [
   "Contact permission",
   "Sequence",
   "Reply",
-  "Deal room",
+  "Active deal",
 ];
 // One next review per pipeline stage, indexed like `pipeline`.
 const actions = [
@@ -24,7 +24,7 @@ const actions = [
   ["Review contact", "Record the contact's source and permission before any outreach."],
   ["Review outreach", "Approve a reviewed sequence. Delivery stays disabled in this workspace."],
   ["Review reply", "Read the original answer before changing qualification."],
-  ["Open deal room", "This account is qualified. Continue in its deal room."],
+  ["Open active deal", "This account is qualified. Continue in its deal workspace."],
 ] as const;
 
 function Pipeline({ current, organizationId }: { current: number; organizationId: string | null }) {

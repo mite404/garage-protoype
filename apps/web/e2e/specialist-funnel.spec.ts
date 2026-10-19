@@ -43,7 +43,7 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
   page.on("pageerror", (error) => pageErrors.push(error.message));
   const visited = new Set<string>();
 
-  await test.step("work queue lists pairings, prospects and deal rooms", async () => {
+  await test.step("work queue lists pairings, prospects and active deals", async () => {
     await page.goto("/desk");
     await expect(page.getByRole("heading", { name: "Work queue", level: 1 })).toBeVisible();
     for (const account of [
@@ -52,7 +52,10 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
       "Northfield Fire District",
     ])
       await expect(page.getByRole("link", { name: account })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Austin Fire Department" })).toBeVisible();
+    const deals = page.locator("section", {
+      has: page.getByRole("heading", { name: "Active deals" }),
+    });
+    await expect(deals.getByRole("link", { name: "Austin Fire Department" })).toBeVisible();
     await expect(page.getByText("closedLost")).toHaveCount(0);
   });
 
@@ -177,7 +180,7 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(page.getByText(/earliest due [A-Z][a-z]{2} \d{1,2}, \d{4}/).first()).toBeVisible();
   });
 
-  await test.step("deal rooms open their evidence review", async () => {
+  await test.step("active deals open their evidence review", async () => {
     await page.goto("/desk");
     await page.getByRole("link", { name: "Austin Fire Department" }).click();
     await expect(page.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
