@@ -43,6 +43,16 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
   page.on("pageerror", (error) => pageErrors.push(error.message));
   const visited = new Set<string>();
 
+  await test.step("sign-in stories rotate on their own and jump from a dot", async () => {
+    await page.goto("/sign-in");
+    const dots = page.getByRole("button", { name: /Go to slide/ });
+    await expect(dots).toHaveCount(4);
+    await expect(dots.nth(0)).toHaveAttribute("aria-current", "true");
+    await expect(dots.nth(1)).toHaveAttribute("aria-current", "true", { timeout: 7_000 });
+    await dots.nth(3).click();
+    await expect(page.getByText("Elba-Salem Fire Protection District, Illinois")).toBeVisible();
+  });
+
   await test.step("work queue lists pairings, prospects and active deals", async () => {
     await page.goto("/desk");
     await expect(page.getByRole("heading", { name: "Work queue", level: 1 })).toBeVisible();
