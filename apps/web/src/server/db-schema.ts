@@ -440,6 +440,8 @@ export const growthAccounts = privateSchema.table("growth_accounts", {
     .references(() => identities.userId),
   organizationId: text("organization_id").references(() => organizations.id),
   opportunityId: text("opportunity_id").references(() => opportunities.id),
+  // The draft listing that qualifying this seller created; a qualified prospect is a seller.
+  listingVehicleId: text("listing_vehicle_id").references(() => vehicles.id),
   directory: jsonb("directory").$type<unknown>().notNull(),
   review: jsonb("review").$type<unknown>(),
   routing: text("routing").notNull().default("Unassigned; review territory"),
@@ -625,7 +627,8 @@ export const buyerNeeds = privateSchema.table("buyer_needs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** One buyer need paired with one seller prospect; rejection closes only this pairing. */
+/** A connection between one buyer need and one seller, and once known the seller's vehicle; it
+ * moves from investigating toward a closed sale, and rejection closes only this connection. */
 export const sourcingCases = privateSchema.table(
   "sourcing_cases",
   {
@@ -636,6 +639,7 @@ export const sourcingCases = privateSchema.table(
     sellerProspectId: text("seller_prospect_id")
       .notNull()
       .references(() => growthAccounts.id),
+    vehicleId: text("vehicle_id").references(() => vehicles.id),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => identities.userId),

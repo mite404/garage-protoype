@@ -41,6 +41,9 @@ const probes: Record<string, string> = {
   "0027_sourcing-access": "select to_regclass('signal_desk.sourcing_cases_owner') as name",
   "0028_posthog-measurement": "select to_regclass('signal_desk.growth_telemetry') as name",
   "0029_posthog-access": "select to_regclass('signal_desk.growth_telemetry_pending') as name",
+  "0030_buyer-seller-connections":
+    "select (select column_name from information_schema.columns where table_schema='signal_desk' and table_name='sourcing_cases' and column_name='vehicle_id') as name",
+  "0031_connection-stages": "select to_regclass('signal_desk.sourcing_cases_vehicle_sale') as name",
 };
 const migrations = new URL("../../../../db/migrations/", import.meta.url);
 

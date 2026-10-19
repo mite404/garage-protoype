@@ -1,0 +1,4 @@
+ALTER TABLE "signal_desk"."growth_accounts" ADD COLUMN "listing_vehicle_id" text;--> statement-breakpoint
+ALTER TABLE "signal_desk"."sourcing_cases" ADD COLUMN "vehicle_id" text;--> statement-breakpoint
+ALTER TABLE "signal_desk"."growth_accounts" ADD CONSTRAINT "growth_accounts_listing_vehicle_id_vehicles_id_fk" FOREIGN KEY ("listing_vehicle_id") REFERENCES "signal_desk"."vehicles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "signal_desk"."sourcing_cases" ADD CONSTRAINT "sourcing_cases_vehicle_id_vehicles_id_fk" FOREIGN KEY ("vehicle_id") REFERENCES "signal_desk"."vehicles"("id") ON DELETE no action ON UPDATE no action;
