@@ -12,6 +12,7 @@ import { enrollSequence, stopOutreach, reconcileMessage } from "@/server/outreac
 import { inviteFeedback } from "@/server/feedback";
 import { configureGrowthSchedule } from "@/server/growth-scheduler";
 import { parseInput } from "@/server/validation";
+import { prepareOutreachExperiment } from "@/server/outreach-experiment";
 
 const command = z
   .object({
@@ -21,6 +22,7 @@ const command = z
       "link",
       "route",
       "enroll",
+      "experiment",
       "stop",
       "reconcile",
       "qualify",
@@ -37,6 +39,7 @@ const accountCommands = {
   link: linkProspectAccount,
   route: routeProspect,
   enroll: enrollSequence,
+  experiment: prepareOutreachExperiment,
   stop: stopOutreach,
   reconcile: reconcileMessage,
   qualify: qualifyProspect,

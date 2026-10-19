@@ -86,14 +86,16 @@ async function createWorkerRole(url: string) {
 
 // First requests trigger dependency optimization reloads; wait until the Worker answers.
 async function waitUntilReady(origin: string, child: ChildProcess, logs: () => string) {
+  let status: number | undefined;
   for (let i = 0; i < 600 && running(child); i++) {
     const response = await fetch(`${origin}/internal/ready`, {
       headers: { authorization: `Bearer ${token}` },
     }).catch(() => undefined);
+    status = response?.status;
     if (response?.status === 404 && !/program reload\s*$/.test(logs())) return;
     await setTimeout(200);
   }
-  throw new Error(`The Worker did not start\n${logs()}`);
+  throw new Error(`The Worker did not start; last readiness status ${status}\n${logs()}`);
 }
 
 // Turns submitted while no Worker ran lost their kick; production's cron sweep recovers them.

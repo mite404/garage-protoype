@@ -697,3 +697,39 @@ export const pairingEvents = privateSchema.table("pairing_events", {
   detail: text("detail").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** One immutable account allocation, independent of contacts, flag changes and sourcing cases. */
+export const outreachExperiments = privateSchema.table("outreach_experiments", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => growthAccounts.id),
+  scopeId: uuid("scope_id")
+    .notNull()
+    .references(() => identities.userId),
+  synthetic: boolean("synthetic").notNull(),
+  variant: text("variant").$type<"control" | "evidence_first">().notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  enrollmentKey: text("enrollment_key"),
+  exposedAt: timestamp("exposed_at", { withTimezone: true }),
+  qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+});
+
+/** Minimal committed observations with historical scope; private originals never enter this queue. */
+export const growthTelemetry = privateSchema.table("growth_telemetry", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => growthAccounts.id),
+  scopeId: uuid("scope_id")
+    .notNull()
+    .references(() => identities.userId),
+  synthetic: boolean("synthetic").notNull(),
+  kind: text("kind").notNull(),
+  variant: text("variant").$type<"control" | "evidence_first">(),
+  messageId: text("message_id"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+});

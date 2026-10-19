@@ -15,6 +15,8 @@ import {
 import { AppError } from "./errors";
 import { changeProspect, recordGrowthEvent, requireProspect } from "./growth";
 import { parseInput } from "./validation";
+import { bindOutreachExperiment } from "./outreach-experiment";
+import { recordGrowthMeasurement } from "./growth-measurement";
 
 const sourcingKey =
   /^pairing:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9]+$/i;
@@ -22,6 +24,7 @@ const enrollmentSchema = z
   .object({
     key: z.string().min(1).max(100),
     purpose: z.enum(["buyer", "sourcing"]).default("buyer"),
+    experiment: z.boolean().default(false),
     invitationId: z.uuid().optional(),
     subject: z.string().trim().min(1).max(200),
     body: z
@@ -188,6 +191,7 @@ export async function enrollSequence(actor: Actor, id: string, raw: unknown) {
         "SEQUENCE_ACTIVE",
         "Stop or reconcile the existing sequence before enrolling again.",
       );
+    await bindOutreachExperiment(client, account, input);
     const base = createHash("sha256").update(`${id}:${input.key}`).digest("hex");
     const first = {
       id: `${base}:0`,
@@ -490,6 +494,7 @@ export async function dispatchMessage(id: string, controlled?: MailProvider) {
           original: receipt,
         })
         .onConflictDoNothing();
+      await recordGrowthMeasurement(client, admitted.accountId, `sent:${id}`, "sent");
       const updated = await orm(client)
         .update(growthMessages)
         .set({ state: "sent", providerId: receipt.id, sentAt: new Date() })

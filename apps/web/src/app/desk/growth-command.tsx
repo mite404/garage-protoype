@@ -42,7 +42,11 @@ const commandInputs = {
   stop: (fields) => fields.reason ?? "reply",
   reconcile: (fields, input) => ({ ...input, ...fields, providerId: fields.providerId || null }),
   import: (fields) => JSON.parse(String(fields.snapshot)),
-  enroll: keyedInput,
+  enroll: (fields, input, key) => ({
+    ...keyedInput(fields, input, key),
+    experiment: fields.experiment === "true",
+  }),
+  experiment: mergeInput,
   outcome: keyedInput,
   link: mergeInput,
   route: mergeInput,
@@ -54,7 +58,13 @@ const commandInputs = {
   (fields: Fields, input: Record<string, unknown>, key: string) => unknown
 >;
 
-async function postCommand(payload: unknown) {
+function commandStatus(kind: string, data: unknown) {
+  return kind === "experiment" && data === null
+    ? "Assignment unavailable. Normal reviewed outreach remains available."
+    : "Saved. No external delivery or paid provider was activated.";
+}
+
+async function postCommand(payload: unknown, kind: string) {
   const response = await fetch("/api/v1/desk/growth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,6 +72,7 @@ async function postCommand(payload: unknown) {
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error?.message ?? "Command was not accepted.");
+  return commandStatus(kind, result.data);
 }
 
 /** Submits a reviewed command through the same-origin, currently authorized growth boundary. */
@@ -90,9 +101,12 @@ export function GrowthCommand({
     const fields = Object.fromEntries(new FormData(event.currentTarget));
     try {
       const prepare = commandInputs[kind];
-      await postCommand({ kind, accountId, input: prepare(fields, input, key) });
+      const status = await postCommand(
+        { kind, accountId, input: prepare(fields, input, key) },
+        kind,
+      );
       setKey(crypto.randomUUID());
-      setStatus("Saved. No external delivery or paid provider was activated.");
+      setStatus(status);
       router.refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Request failed. Review before retrying.");
