@@ -1,5 +1,6 @@
 import {
   boolean,
+  type AnyPgColumn,
   customType,
   integer,
   jsonb,
@@ -58,6 +59,7 @@ export const inferenceOperations = privateSchema.table("inference_operations", {
   request_key: text("request_key").notNull(),
   opportunity_id: text("opportunity_id"),
   prospect_id: text("prospect_id").references(() => growthAccounts.id),
+  sourcing_case_id: text("sourcing_case_id").references(() => sourcingCases.id),
   fingerprint: text("fingerprint").notNull(),
   model_id: text("model_id").notNull(),
   max_attempts: integer("max_attempts").notNull(),
@@ -196,7 +198,9 @@ export const assistanceDrafts = privateSchema.table("assistance_drafts", {
 /** Durable conversation requests. */
 export const chatTurns = privateSchema.table("chat_turns", {
   id: text("id").primaryKey(),
-  opportunity_id: text("opportunity_id").notNull(),
+  // Exactly one subject: a deal turn or a sourcing turn (checked in the database).
+  opportunity_id: text("opportunity_id"),
+  sourcing_case_id: text("sourcing_case_id").references((): AnyPgColumn => sourcingCases.id),
   actor_id: uuid("actor_id").notNull(),
   request_key: text("request_key").notNull(),
   message: text("message").notNull(),
@@ -410,10 +414,13 @@ export const identities = privateSchema.table("identities", {
 /** Application-owned admission and read projection; Flue retains its canonical execution log. */
 export const streamTurns = privateSchema.table("stream_turns", {
   id: text("id").primaryKey(),
-  opportunityId: text("opportunity_id").notNull(),
+  // Exactly one subject: a deal conversation or a pre-opportunity sourcing case.
+  opportunityId: text("opportunity_id"),
+  sourcingCaseId: text("sourcing_case_id").references(() => sourcingCases.id),
   actorId: uuid("actor_id").notNull(),
   credential: jsonb("credential").$type<z.infer<typeof credentialSchema>>().notNull(),
-  inquiryId: text("inquiry_id").notNull(),
+  // Deal turns answer one inquiry; sourcing turns have none.
+  inquiryId: text("inquiry_id"),
   message: text("message").notNull(),
   revision: integer("revision").notNull(),
   state: text("state").$type<z.infer<typeof streamState>>().notNull(),
@@ -596,4 +603,97 @@ export const growthSchedules = privateSchema.table("growth_schedules", {
   lastCode: text("last_code"),
   durationMs: integer("duration_ms"),
   watermark: timestamp("watermark", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A confirmed buyer requirement owned by one specialist; it never implies a vehicle or deal. */
+export const buyerNeeds = privateSchema.table("buyer_needs", {
+  id: text("id").primaryKey(),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => identities.userId),
+  buyerOrganizationId: text("buyer_organization_id").references(() => organizations.id),
+  buyerLabel: text("buyer_label").notNull(),
+  // The confirmed statement and its permissioned provenance, retained verbatim.
+  statement: text("statement").notNull(),
+  provenance: text("provenance").notNull(),
+  revision: integer("revision").notNull().default(1),
+  constraints: jsonb("constraints").$type<unknown>().notNull(),
+  state: text("state").notNull().default("active"),
+  inventory: jsonb("inventory").$type<unknown>(),
+  reviewAt: timestamp("review_at", { withTimezone: true }),
+  synthetic: boolean("synthetic").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One buyer need paired with one seller prospect; rejection closes only this pairing. */
+export const sourcingCases = privateSchema.table(
+  "sourcing_cases",
+  {
+    id: text("id").primaryKey(),
+    needId: text("need_id")
+      .notNull()
+      .references(() => buyerNeeds.id),
+    sellerProspectId: text("seller_prospect_id")
+      .notNull()
+      .references(() => growthAccounts.id),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => identities.userId),
+    stage: text("stage").notNull().default("investigate"),
+    nextAction: text("next_action").notNull(),
+    decision: jsonb("decision").$type<unknown>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("sourcing_case_pairing").on(table.needId, table.sellerProspectId)],
+);
+
+/** A cited source change that triggered research; never proof of availability or permission. */
+export const sourceChanges = privateSchema.table(
+  "source_changes",
+  {
+    id: text("id").primaryKey(),
+    caseId: text("case_id")
+      .notNull()
+      .references(() => sourcingCases.id),
+    dedupeKey: text("dedupe_key").notNull(),
+    sourceLabel: text("source_label").notNull(),
+    url: text("url").notNull(),
+    excerpt: text("excerpt").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    disposition: text("disposition").notNull().default("open"),
+    synthetic: boolean("synthetic").notNull(),
+  },
+  // Dedupe per case, so the same public notice can trigger research for each owner's pairing.
+  (table) => [uniqueIndex("source_change_case_key").on(table.caseId, table.dedupeKey)],
+);
+
+/** Proposed and reviewed answers for one pairing, each tied to its original source. */
+export const pairingFacts = privateSchema.table("pairing_facts", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => sourcingCases.id),
+  field: text("field").notNull(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  basis: text("basis").notNull(),
+  sourceRef: text("source_ref").notNull(),
+  status: text("status").notNull().default("proposed"),
+  reviewedBy: uuid("reviewed_by").references(() => identities.userId),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Append-only pairing stages and reasons, separate from account-wide growth events. */
+export const pairingEvents = privateSchema.table("pairing_events", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => sourcingCases.id),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => identities.userId),
+  kind: text("kind").notNull(),
+  detail: text("detail").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

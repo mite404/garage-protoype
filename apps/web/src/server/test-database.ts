@@ -37,6 +37,8 @@ const probes: Record<string, string> = {
     "select to_regclass('signal_desk.inference_operations_prospect') as name",
   "0024_growth-schedules": "select to_regclass('signal_desk.growth_schedules') as name",
   "0025_growth-schedule-access": "select to_regclass('signal_desk.growth_schedules_due') as name",
+  "0026_sourcing-pairing": "select to_regclass('signal_desk.sourcing_cases') as name",
+  "0027_sourcing-access": "select to_regclass('signal_desk.sourcing_cases_owner') as name",
 };
 const migrations = new URL("../../../../db/migrations/", import.meta.url);
 

@@ -183,6 +183,20 @@
       "when": 1792384038317,
       "tag": "0025_growth-schedule-access",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792397144303,
+      "tag": "0026_sourcing-pairing",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792397145255,
+      "tag": "0027_sourcing-access",
+      "breakpoints": true
     }
   ]
 }

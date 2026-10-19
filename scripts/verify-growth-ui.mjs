@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { openEvidenceSession } from "./browser-evidence.mjs";
 
 const origin = process.env.GROWTH_REVIEW_ORIGIN;
 const cookie = process.env.GROWTH_REVIEW_COOKIE;
@@ -12,35 +10,13 @@ assert.ok(
   origin && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) && cookie && account && organization,
   "Use only the disposable growth.test.ts fixture and its controlled local identity provider.",
 );
-const session = "growth-review";
-const output = resolve(".amp/in/artifacts/growth");
-const scratch = mkdtempSync(join(tmpdir(), "growth-browser-"));
-const browsers = join(process.env.HOME, ".agent-browser/browsers");
-const chrome = join(
-  browsers,
-  readdirSync(browsers)
-    .filter((name) => name.startsWith("chrome-"))
-    .sort()
-    .at(-1),
-  "chrome",
-);
-const wrapper = join(scratch, "chrome.sh");
-writeFileSync(
-  wrapper,
-  `#!/bin/sh\nexec '${chrome}' '--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4' "$@"\n`,
-  { mode: 0o700 },
-);
-mkdirSync(output, { recursive: true });
-const browser = (...args) =>
-  execFileSync("agent-browser", ["--session", session, ...args], {
-    encoding: "utf8",
-    timeout: 45000,
-  });
+const { browser, output, capture, finish } = openEvidenceSession({
+  session: "growth-review",
+  folder: "growth",
+  origin,
+  cookie,
+});
 const check = (expression) => assert.equal(browser("eval", expression).trim(), "true", expression);
-const capture = (name) => {
-  browser("eval", "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))");
-  browser("screenshot", join(output, `${name}.png`));
-};
 const pointAt = (selector) => {
   const point = JSON.parse(
     browser(
@@ -63,21 +39,8 @@ const pointAt = (selector) => {
     "24",
   );
 };
+let failure;
 try {
-  browser("--executable-path", wrapper, "open", origin);
-  const separator = cookie.indexOf("=");
-  browser(
-    "cookies",
-    "set",
-    cookie.slice(0, separator),
-    cookie.slice(separator + 1),
-    "--url",
-    origin,
-    "--httpOnly",
-    "--sameSite",
-    "Lax",
-  );
-  browser("set", "viewport", "1280", "960", "2");
   browser("open", `${origin}/desk/prospects/${account}`);
   browser("wait", "--text", "Expected effort is uncertain");
   check("devicePixelRatio === 2 && matchMedia('(hover: hover)').matches");
@@ -194,15 +157,8 @@ try {
     "Browser passed: persisted review, suppression error, direct account enrichment, operations, narrow overflow and unavailable-account privacy. Controlled identity provider only.",
   );
 } catch (error) {
-  console.error(browser("get", "url"));
-  console.error(browser("get", "text", "body"));
+  failure = error;
   throw error;
 } finally {
-  try {
-    browser("record", "stop");
-  } catch {
-    /* Recording may already be closed. */
-  }
-  browser("close");
-  rmSync(scratch, { recursive: true, force: true });
+  finish(failure);
 }

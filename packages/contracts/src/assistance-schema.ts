@@ -25,7 +25,7 @@ export const routingSuggestion = z.discriminatedUnion("state", [
 export type RoutingSuggestion = z.infer<typeof routingSuggestion>;
 
 /** Only these sales capabilities may be exposed to or executed by the specialist agent. */
-export const approvedSalesTool = z.enum(["show_card", "prepare_draft"]);
+export const approvedSalesTool = z.enum(["show_card", "prepare_draft", "propose_fact"]);
 
 /** Unsent drafts reference current evidence and inquiries; clients cannot fabricate a cited answer. */
 export const draftCommand = z.discriminatedUnion("kind", [
@@ -140,6 +140,15 @@ export const streamView = z.object({
   activity: streamActivity.nullable(),
 });
 export type StreamView = z.infer<typeof streamView>;
+/** Sourcing cards carry only a view name; the page renders them from current saved records. */
+export const sourcingCardRef = z.object({
+  kind: z.literal("sourcing"),
+  view: z.enum(["source_change", "fit", "information_request", "reply_review", "decision"]),
+});
+export type SourcingCardRef = z.infer<typeof sourcingCardRef>;
+/** A sourcing-assistant turn: the same stream state with reference-only sourcing cards. */
+export const sourcingStreamView = streamView.extend({ cards: z.array(sourcingCardRef) });
+export type SourcingStreamView = z.infer<typeof sourcingStreamView>;
 
 /** Recognizes only whole, single-field questions. Other prose requires human interpretation. */
 export function routeQuestion(question: string): z.infer<typeof fieldSchema> | null {

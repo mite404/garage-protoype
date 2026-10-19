@@ -15,6 +15,7 @@ import {
 } from "./db-schema";
 import { AppError } from "./errors";
 import { requireProspect } from "./growth";
+import { requireSourcingCase } from "./sourcing";
 
 const commonRequest = z
   .object({
@@ -28,6 +29,7 @@ const commonRequest = z
 const requestSchema = z.union([
   commonRequest.extend({ opportunityId: z.string().min(1).max(200) }),
   commonRequest.extend({ prospectId: z.string().min(1).max(200) }),
+  commonRequest.extend({ sourcingCaseId: z.string().min(1).max(200) }),
 ]);
 const integer = z.number().int().nonnegative().safe();
 const usageSchema = z.object({
@@ -99,11 +101,18 @@ async function transaction<T>(client: PoolClient, action: () => Promise<T>) {
   }
 }
 
+// Every admitted request is bound to exactly one authorized subject.
+async function requireSubject(actor: Actor, request: Request, db?: PoolClient) {
+  if ("prospectId" in request) await requireProspect(actor, request.prospectId, db);
+  else if ("sourcingCaseId" in request)
+    await requireSourcingCase(actor, request.sourcingCaseId, db);
+  else await requireOpportunity(actor, request.opportunityId, undefined, db);
+}
+
 async function currentAccess(actor: Actor, request: Request, db: PoolClient) {
   await orm(db).execute(sql`select signal_desk.lock_inference_access()`);
   await requireSpending(actor, db);
-  if ("prospectId" in request) await requireProspect(actor, request.prospectId, db);
-  else await requireOpportunity(actor, request.opportunityId, undefined, db);
+  await requireSubject(actor, request, db);
 }
 
 async function operation(
@@ -125,6 +134,7 @@ async function operation(
       request_key: request.key,
       opportunity_id: "opportunityId" in request ? request.opportunityId : null,
       prospect_id: "prospectId" in request ? request.prospectId : null,
+      sourcing_case_id: "sourcingCaseId" in request ? request.sourcingCaseId : null,
       fingerprint,
       model_id: request.model,
       max_attempts: policy.max_attempts,
@@ -443,8 +453,7 @@ export async function runInference(actor: Actor, raw: unknown, provider?: Provid
   } finally {
     if (timer) clearTimeout(timer);
   }
-  if ("prospectId" in request) await requireProspect(actor, request.prospectId);
-  else await requireOpportunity(actor, request.opportunityId);
+  await requireSubject(actor, request);
   return outcome(report);
 }
 
