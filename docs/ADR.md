@@ -61,6 +61,14 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-031: Serve the website as its own OpenNext Worker on Workers Paid, calling the owner Worker
   through a service binding, and run imports as a Queue consumer on the owner, because the Free
   plan's 10 ms CPU limit fails authenticated pages and the two Workers together exceed its 3 MiB.
+- ADR-033: Make buyer-demand-led seller sourcing the connected growth workflow because confirmed
+  unmet buyer requirements give prospect discovery a purpose beyond increasing lead volume.
+- ADR-034: Support sourcing and deal progress with human-reviewed, evidence-backed fit decision
+  packets because helping buyers proceed, investigate, or reject unsuitable vehicles matters more
+  than producing faster answers or shifting work onto sellers.
+- ADR-035: Use source-backed changes as triggers to reassess demand and possible seller availability
+  within that workflow because timely evidence can justify a next action without treating a signal
+  as verified intent, consent, or authority to send outreach.
 
 ## Proposed
 
