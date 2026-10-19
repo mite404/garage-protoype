@@ -163,23 +163,23 @@ const stories = {
     selector: 'nav[aria-label="Municipal sales"]',
     text: ["No proposed amount or conditions recorded."],
   },
-  "sourcing-account-workspace--research": {
+  "sourcing-department-workspace--research": {
     selector: 'nav[aria-label="Sales workspace"]',
     text: ["Research trigger only", "Reviewed draft · Not sent"],
   },
-  "sourcing-account-workspace--reply-rejects-pairing": {
+  "sourcing-department-workspace--reply-rejects-pairing": {
     selector: 'nav[aria-label="Sales workspace"]',
     text: ["Does not meet", "Recorded Oct 19, 2026"],
   },
-  "sourcing-account-workspace--conflict-and-stale": {
+  "sourcing-department-workspace--conflict-and-stale": {
     selector: 'nav[aria-label="Sales workspace"]',
     text: ["Conflicting", "Stale: the need or reviewed evidence changed, decide again"],
   },
-  "sourcing-account-workspace--dark": {
+  "sourcing-department-workspace--dark": {
     selector: '[data-theme="dark"] nav[aria-label="Sales workspace"]',
     text: ["Does not meet"],
   },
-  "sourcing-account-workspace--chat-cards": {
+  "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',
     text: ["Proposed updates · Not yet approved", "That rejects this pairing"],
   },
@@ -190,7 +190,7 @@ const narrow = [
   "conversation-reading--connected-turn",
   "conversation-chat-workspace--light",
   "municipal-sales-workspace--default",
-  "sourcing-account-workspace--reply-rejects-pairing",
+  "sourcing-department-workspace--reply-rejects-pairing",
 ];
 
 function browser(...args) {

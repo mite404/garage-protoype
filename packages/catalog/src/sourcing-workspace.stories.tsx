@@ -95,7 +95,7 @@ function Interactive({ data }: { data: SourcingAccount }) {
 }
 
 const meta = {
-  title: "Sourcing/Account workspace",
+  title: "Sourcing/Department workspace",
   component: Interactive,
   parameters: { layout: "fullscreen", theme: "light" },
   decorators: [

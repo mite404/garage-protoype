@@ -35,7 +35,7 @@ function WhyHere({ data }: { data: SourcingAccount }) {
   const { need, inventorySearch } = data;
   return (
     <section aria-labelledby="why-heading" className="municipal-section">
-      <h2 id="why-heading">Why this account is here</h2>
+      <h2 id="why-heading">Why this department is here</h2>
       <div className="sourcing-why">
         <div className="municipal-list">
           <div className="municipal-list-row">
@@ -75,7 +75,7 @@ function Topbar({ data }: { data: SourcingAccount }) {
           Signal Desk
         </a>
         <a className="municipal-section-link" href="/desk/prospects">
-          Accounts
+          Departments
         </a>
       </nav>
       <div className="municipal-topbar-context">

@@ -1,15 +1,15 @@
-# Sourcing account workspace
+# Sourcing department workspace
 
 ## Sub-features
 
-Seller-candidate account page for one buyer need: next action, why the account is here (buyer
+Seller-candidate department page for one buyer need: next action, why the department is here (buyer
 need, inventory search, cited source change as a research trigger), fit table with explicit
 unknowns, outreach status with an editable information request, original replies with
 selected-field acceptance, and the pairing decision. The same cards render narrow for chat.
 
 ## How to get to it (user POV)
 
-Storybook only: Sourcing / Account workspace. No app route or persistence exists yet; server
+Storybook only: Sourcing / Department workspace. No app route or persistence exists yet; server
 wiring waits for the growth owner's frozen snapshot and an approved pairing migration.
 
 ## Driving it with agent-browser
