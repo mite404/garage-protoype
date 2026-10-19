@@ -31,6 +31,19 @@ export function pairingAction(data: SourcingAccount) {
   } as const;
 }
 
+/** Outreach step a prospect has reached from its pipeline stage (see `pipelineStage`). */
+export function prospectOutreachStep(stage: number, hasMessages: boolean) {
+  if (stage >= 5) return 3;
+  if (stage < 4) return 0;
+  return hasMessages ? 2 : 1;
+}
+
+/** Qualification creates a buyer opportunity, so a qualified prospect is a buyer account. */
+export const prospectRole = (qualified: boolean) => (qualified ? "Qualified buyer" : "Prospect");
+
+/** Reads a pipeline count key such as `closedLost` as "closed lost". */
+export const countLabel = (key: string) => key.replace(/([A-Z])/g, " $1").toLowerCase();
+
 /** Stage labels shared by the queue and buyer-need pairings. */
 export const pairingStages: Record<string, string> = {
   evidence_review: "Evidence review",

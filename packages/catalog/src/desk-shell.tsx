@@ -154,9 +154,18 @@ type Identity = {
   synthetic: boolean;
   context: string;
   secondary?: string;
+  // Relationship to Garage this record establishes, e.g. a sourcing seller or a qualified buyer.
+  role?: string;
 };
 
-function AccountHeader({ name, place, synthetic, context, secondary }: Identity) {
+function AccountHeader({
+  name,
+  place,
+  synthetic,
+  context,
+  secondary,
+  role = "Potential seller",
+}: Identity) {
   return (
     <header className="desk-account-header">
       <a href="/desk/prospects" className="desk-back">
@@ -165,7 +174,7 @@ function AccountHeader({ name, place, synthetic, context, secondary }: Identity)
       <div className="desk-identity">
         <div>
           <h1>{name}</h1>
-          <span className="desk-role">Potential seller</span>
+          <span className="desk-role">{role}</span>
           <p>
             {place} · {synthetic ? "Synthetic fixture" : "USFA directory"}
           </p>
@@ -187,6 +196,7 @@ export function AccountFrame({
   synthetic,
   context,
   secondary,
+  role,
   tab,
   onTab,
   children,
@@ -206,6 +216,7 @@ export function AccountFrame({
           synthetic={synthetic}
           context={context}
           secondary={secondary}
+          role={role}
         />
         <AccountTabs tab={tab} onTab={onTab} />
         <div className="desk-account-content">{children}</div>

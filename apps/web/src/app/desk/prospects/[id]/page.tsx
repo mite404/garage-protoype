@@ -3,7 +3,7 @@ import { requireActor } from "@/server/auth";
 import { getGrowthProfile } from "@/server/growth-views";
 import { listSourcingCases } from "@/server/sourcing";
 import { AccountFrame, NextAction, accountTab } from "@signal-desk/catalog/desk-shell";
-import { pipelineStage, pairingStages } from "@signal-desk/catalog/desk-state";
+import { pipelineStage, pairingStages, prospectRole } from "@signal-desk/catalog/desk-state";
 import { GrowthAccountContent, GrowthUnavailable } from "../../growth-profile";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,12 @@ function Pipeline({ current, organizationId }: { current: number; organizationId
       </ol>
     </>
   );
+}
+
+// `?step=` selects an outreach section; anything else falls back to the reached step.
+function outreachStepParam(value: string | undefined) {
+  const step = Number(value);
+  return Number.isInteger(step) && step >= 0 && step <= 3 ? step : undefined;
 }
 
 type Profile = Awaited<ReturnType<typeof getGrowthProfile>>;
@@ -130,11 +136,13 @@ export default async function ProspectPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; step?: string }>;
 }) {
   let profile;
   let cases;
-  const tab = accountTab((await searchParams).tab);
+  const query = await searchParams;
+  const tab = accountTab(query.tab);
+  const step = outreachStepParam(query.step);
   try {
     const actor = await requireActor();
     [profile, cases] = await Promise.all([
@@ -160,11 +168,12 @@ export default async function ProspectPage({
       place={`${account.directory.city}, NY`}
       synthetic={account.directory.synthetic}
       context="Prospect review"
+      role={prospectRole(account.qualified)}
       tab={tab}
       dock={<ProspectDock insights={profile.insights} pairings={pairings} />}
     >
       {tab === "overview" && <Pipeline current={current} organizationId={account.organizationId} />}
-      <GrowthAccountContent profile={profile} tab={tab} current={current} />
+      <GrowthAccountContent profile={profile} tab={tab} current={current} step={step} />
       {["overview", "fit"].includes(tab) && <Pairings cases={pairings} />}
     </AccountFrame>
   );

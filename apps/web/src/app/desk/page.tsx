@@ -5,7 +5,7 @@ import { listEvidenceOpportunities } from "@/server/evidence";
 import { listMunicipalities } from "@/server/municipalities";
 import { listSourcingCases } from "@/server/sourcing";
 import { getGrowthOperations } from "@/server/growth-views";
-import { pairingStages, stagePriority } from "@signal-desk/catalog/desk-state";
+import { countLabel, pairingStages, stagePriority } from "@signal-desk/catalog/desk-state";
 
 export const dynamic = "force-dynamic";
 
@@ -162,12 +162,12 @@ export default async function Desk() {
           {Object.entries(operations.counts).map(([label, count]) => (
             <p key={label}>
               <strong>{count}</strong>
-              <span>{label.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+              <span>{countLabel(label)}</span>
             </p>
           ))}
         </div>
         <p className="desk-note">
-          Columns are distinct conditions, not a funnel. Counts describe this account page.
+          Counts cover up to 100 of your accounts. Columns are distinct conditions, not a funnel.
         </p>
       </section>
       <ReviewQueue

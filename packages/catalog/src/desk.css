@@ -534,6 +534,23 @@
   font-size: 14px;
   line-height: 1.5;
 }
+.desk-message h3 {
+  margin-top: 12px;
+  font-size: 15px;
+}
+.desk-field-hint {
+  display: block;
+  color: #5f6670;
+  font-size: 12px;
+  font-weight: 400;
+}
+.desk-frozen-body {
+  white-space: pre-wrap;
+  border-left: 3px solid #d9dde3;
+  padding-left: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
 .desk-additional {
   display: flex;
   flex-wrap: wrap;

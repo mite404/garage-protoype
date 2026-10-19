@@ -46,6 +46,7 @@ const snapshotSchema = z
     rows: z.array(directoryRow).min(1).max(10000),
   })
   .strict();
+const quoteRule = "Copy the supporting quote word for word from the original buying-signal text.";
 const reviewSchema = z
   .object({
     name: text.max(200),
@@ -58,7 +59,7 @@ const reviewSchema = z
         quote: text,
         permission: z.enum(["synthetic", "permissioned"]),
       })
-      .refine((v) => v.text.includes(v.quote), "Quote must occur in original text")
+      .refine((v) => v.text.includes(v.quote), quoteRule)
       .nullable(),
     contact: z
       .object({
@@ -262,6 +263,11 @@ export async function getProspect(actor: Actor, id: string) {
  */
 export async function reviewProspect(actor: Actor, id: string, raw: unknown) {
   requireSession(actor);
+  // The one rule a reviewer can't see from the field itself gets a specific message.
+  const quoteIssue = reviewSchema
+    .safeParse(raw)
+    .error?.issues.some((issue) => issue.message === quoteRule);
+  if (quoteIssue) throw new AppError(422, "INVALID_INPUT", quoteRule);
   const review = parseInput(reviewSchema, raw);
   return changeProspect(actor, id, async (client) => {
     await orm(client)

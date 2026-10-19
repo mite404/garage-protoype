@@ -4,8 +4,14 @@ import { getGrowthOperations } from "@/server/growth-views";
 import { GrowthCommand } from "../growth-command";
 import { GrowthUnavailable } from "../growth-profile";
 import { readExperimentReport } from "@/server/outreach-experiment";
+import { countLabel } from "@signal-desk/catalog/desk-state";
 
 export const dynamic = "force-dynamic";
+const dueDate = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
 
 function SpendingStatus({
   budget,
@@ -93,7 +99,7 @@ export default async function GrowthPage({
           {Object.entries(operations.counts).map(([name, count]) => (
             <p key={name}>
               <strong>{count}</strong>
-              <span>{name}</span>
+              <span>{countLabel(name)}</span>
             </p>
           ))}
         </div>
@@ -113,7 +119,7 @@ export default async function GrowthPage({
         {operations.backlog.map((row) => (
           <p className="growth-quote" key={row.state}>
             {row.count} {row.state} messages · earliest due{" "}
-            {String(row.oldestDue ?? "not recorded")}
+            {row.oldestDue ? `${dueDate.format(new Date(row.oldestDue))} UTC` : "not recorded"}
           </p>
         ))}
         <SpendingStatus budget={operations.budget} />

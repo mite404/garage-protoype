@@ -4,9 +4,14 @@ import { feedbackSurvey } from "@signal-desk/contracts/feedback-schema";
 import { AppError } from "@/server/errors";
 import { GrowthCommand } from "./growth-command";
 import type { AccountTab } from "@signal-desk/catalog/desk-shell";
-import { outreachSteps } from "@signal-desk/catalog/desk-state";
+import { outreachSteps, prospectOutreachStep } from "@signal-desk/catalog/desk-state";
 
 type Profile = Awaited<ReturnType<typeof getGrowthProfile>>;
+const dueDate = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
 
 function AccountMetrics({ account }: Pick<Profile, "account">) {
   return (
@@ -143,7 +148,15 @@ function AccountReview({ account }: { account: Profile["account"] }) {
         </label>
         <label>
           Verbatim supporting quote
-          <input name="quote" maxLength={1000} defaultValue={signal.quote} />
+          <input
+            name="quote"
+            maxLength={1000}
+            defaultValue={signal.quote}
+            aria-describedby="quote-rule"
+          />
+          <span id="quote-rule" className="desk-field-hint">
+            Copy it word for word from the original text above.
+          </span>
         </label>
         <label>
           Source / provenance
@@ -270,7 +283,6 @@ function ReviewedSequenceForm({ account, experiment }: Pick<Profile, "account" |
 function DeliveryReview({ account, outreach }: Pick<Profile, "account" | "outreach">) {
   return (
     <section id="delivery">
-      <h3>Delivery</h3>
       <p className="desk-lock">External delivery disabled</p>
       <GrowthCommand kind="stop" accountId={account.id} label="Stop queued outreach">
         <label>
@@ -288,7 +300,10 @@ function DeliveryReview({ account, outreach }: Pick<Profile, "account" | "outrea
           <p className="text-sm">
             {message.state} · step {message.step + 1} · {message.recipient}
           </p>
-          <p className="text-xs">Due {message.dueAt.toISOString()}</p>
+          <p className="text-xs">
+            Due{" "}
+            <time dateTime={message.dueAt.toISOString()}>{dueDate.format(message.dueAt)} UTC</time>
+          </p>
           {["uncertain", "dispatched"].includes(message.state) && (
             <GrowthCommand
               kind="reconcile"
@@ -534,22 +549,38 @@ function AccountActivity({ profile }: { profile: Profile }) {
   );
 }
 
-function AccountOutreach({ profile, current }: { profile: Profile; current: number }) {
-  const active = current >= 5 ? 3 : current >= 4 ? (profile.outreach.length ? 2 : 1) : 0;
+function ProspectStepper({ active, reached }: { active: number; reached: number }) {
+  return (
+    <nav className="desk-stepper" aria-label="Outreach progress">
+      {outreachSteps.map((label, index) => (
+        <Link
+          key={label}
+          href={`?tab=outreach&step=${index}`}
+          scroll={false}
+          aria-current={active === index ? "step" : undefined}
+        >
+          <span>{index < reached ? "✓" : index + 1}</span>
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function AccountOutreach({
+  profile,
+  current,
+  step,
+}: {
+  profile: Profile;
+  current: number;
+  step?: number;
+}) {
+  const reached = prospectOutreachStep(current, profile.outreach.length > 0);
+  const active = step ?? reached;
   return (
     <>
-      <nav className="desk-stepper" aria-label="Outreach progress">
-        {outreachSteps.map((label, index) => (
-          <a
-            key={label}
-            href={`#outreach-${index}`}
-            aria-current={active === index ? "step" : undefined}
-          >
-            <span>{index + 1}</span>
-            {label}
-          </a>
-        ))}
-      </nav>
+      <ProspectStepper active={active} reached={reached} />
       <details className="desk-card" id="outreach-0" open={active === 0}>
         <summary>Contact review</summary>
         <AccountReview account={profile.account} />
@@ -585,13 +616,15 @@ export function GrowthAccountContent({
   profile,
   tab,
   current,
+  step,
 }: {
   profile: Profile;
   tab: AccountTab;
   current: number;
+  step?: number;
 }) {
   const Panel = accountPanels[tab];
-  return <Panel profile={profile} current={current} />;
+  return <Panel profile={profile} current={current} step={step} />;
 }
 
 /** Shows only sanitized access failures; unexpected failures reach the application boundary.
