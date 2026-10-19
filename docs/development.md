@@ -202,8 +202,19 @@ package scripts or from `apps/web/cloudflare/` directly: `npx` in a workspace ru
 package root and picks up the wrong configuration.
 
 Both Workers run on Workers Paid: the website exceeds the Free plan's 10 ms CPU per request (see
-[the OpenNext spike](opennext-spike.md)). To deploy, with `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` set:
+[the OpenNext spike](opennext-spike.md)). The checked-in configs target the existing
+`garage-prototype` website and `garage-prototype-worker` owner. Both use the staging database
+through the existing Hyperdrive config; the owner retains `signal-desk-imports-staging` and its
+Durable Object namespaces. Do not create replacement resources when updating these Workers.
+
+For Cloudflare Git builds, connect `mite404/garage-protoype`, branch `main`, with repository root
+`/`, build command `npm run website:build`, and deploy command
+`npm run website:deploy -w @signal-desk/web`. Keep runtime secrets on the Worker, not in build
+variables. Server measurement uses PostHog US Cloud; browser replay and outreach remain disabled.
+Keep `signal-desk-web-staging` available until a separate retirement is approved.
+
+To provision a separate environment, copy the configs and select its Worker names and resources
+first. With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set:
 
 1. Create the Hyperdrive config with caching disabled, since a cached read could keep showing a
    revoked observer a conversation for up to a minute:
