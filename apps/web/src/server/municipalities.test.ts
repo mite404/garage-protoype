@@ -224,6 +224,8 @@ test(
       await db.query(
         "delete from signal_desk.organizations where id in ('austin-fire-department','san-antonio-fire-department')",
       );
+      await db.query("delete from signal_desk.inference_denials where user_id=$1", [user]);
+      await db.query("delete from signal_desk.inference_models where id='moonshotai/kimi-k3'");
       await db.query("delete from auth.sessions where user_id=$1", [user]);
       await db.query("delete from signal_desk.identities where user_id in ($1,$2)", [user, buyer]);
       db.release();

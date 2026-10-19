@@ -264,6 +264,22 @@ Live Supabase sign-in, extraction, and vision require separate private prototype
 tests using controlled external boundaries must be labeled accordingly. Never use Garage's data
 or credentials as fixtures. Provider-dependent evaluation reports unavailable trials explicitly.
 
+## Disposable test databases
+
+Test fixtures use fixed IDs and installation-wide rows such as the `installation` budget, so two
+workflows cannot share one database, at once or one after another. Give each workflow its own
+loopback database ending in `_test`: `npm test` owns `TEST_DATABASE_URL`, and a dev or browser
+harness that seeds fixtures uses another name, such as `signal_desk_harness_test`.
+
+`npm test` refuses to start while a test run or harness holds the fixture lock, or while the
+`signal_desk` or `auth` schemas hold rows. A run that passes but leaves rows fails, so each test
+file must delete what it creates. `npm run db:test:status` names connected sessions, the lock
+holder and leftover tables. `npm run db:test:reset` drops and recreates the database; tests
+migrate it again on first use. Both act only on the database in `TEST_DATABASE_URL`, refuse
+names without the `_test` suffix, and never read `DATABASE_URL`. Reset also refuses non-loopback
+hosts, any `host` query parameter, and any other connected session, so stop the owning workflow
+first.
+
 ## Formatting and analysis
 
 Run `npm run format` to format code and configuration. Markdown is excluded from Oxfmt to preserve

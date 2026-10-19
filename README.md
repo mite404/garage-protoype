@@ -79,8 +79,9 @@ npm run check
 The native Node test runner loads TypeScript through `tsx`. Its recursive globs include application
 and shared-package tests. Set `TEST_DATABASE_URL` to an operator connection for a disposable
 PostgreSQL database whose name ends in `_test` to run integration checks.
-Tests bootstrap the schema and clean up their
-fixtures. A minimal local `auth.sessions` table supports permission checks.
+Tests bootstrap the schema and clean up their fixtures; see
+[disposable test databases](docs/development.md#disposable-test-databases).
+A minimal local `auth.sessions` table supports permission checks.
 The HTTP review regression launches the production build with a loopback-only controlled identity
 provider, not live Supabase. `CI=true` requires the database configuration.
 Tests regenerate V8 coverage for Fallow automatically.

@@ -35,6 +35,7 @@ async function removeFixtures(db: PoolClient, users: string[]) {
   for (const statement of [
     "delete from signal_desk.inference_attempts where operation_id in (select id from signal_desk.inference_operations where user_id = any($1))",
     "delete from signal_desk.inference_operations where user_id = any($1)",
+    "delete from signal_desk.inference_denials where user_id = any($1)",
     "delete from signal_desk.inference_budgets where scope = 'installation' or scope = any($1::text[])",
     "delete from signal_desk.chat_turns where actor_id = any($1)",
     `delete from signal_desk.pairing_events where case_id in (${cases})`,
@@ -53,6 +54,7 @@ async function removeFixtures(db: PoolClient, users: string[]) {
     "delete from signal_desk.identities where user_id = any($1)",
   ])
     await db.query(statement, [users]);
+  await db.query("delete from signal_desk.inference_models where id='moonshotai/kimi-k3'");
 }
 
 test(

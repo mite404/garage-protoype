@@ -876,6 +876,8 @@ test(
         [user],
       );
       await db.query("delete from signal_desk.inference_operations where user_id=$1", [user]);
+      await db.query("delete from signal_desk.inference_denials where user_id=$1", [user]);
+      await db.query("delete from signal_desk.inference_models where id='moonshotai/kimi-k3'");
       await db.query(
         "delete from signal_desk.inference_budgets where scope in ('installation',$1)",
         [user],
