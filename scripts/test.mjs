@@ -52,7 +52,12 @@ for (const name of readdirSync(coverage)) {
 let status = result.status ?? 1;
 if (database) {
   const report = await inspect(database);
-  if (!isClean(report)) {
+  // This run's files have exited, so a lock holder is another workflow whose rows are not ours.
+  if (report.lockHolder)
+    console.error(
+      `Skipped the leak check: another workflow owns the database.\n${describe(report)}`,
+    );
+  else if (!isClean(report)) {
     const verdict = status
       ? "Failed tests left fixtures behind."
       : "Passing tests leaked fixtures.";
