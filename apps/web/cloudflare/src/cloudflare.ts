@@ -7,6 +7,7 @@ import { executeTurn } from "../../src/server/streaming-turn";
 import { SpecialistStream } from "./agents/specialist";
 import { withDatabaseOwner } from "./database";
 import { consumeImports, enqueueImport, sweepImports, type ImportMessage } from "./imports";
+import { sweepGrowth } from "../../src/server/growth-scheduler";
 
 const cancelRetryMs = 500;
 const settleWaitMs = 5000;
@@ -131,6 +132,7 @@ export class TurnSweeper extends DurableObject<Env> {
         .where(inArray(streamTurns.state, ["queued", "running", "cancelling"]));
       for (const row of rows) await kickTurn(row.id);
       await sweepImports();
+      await sweepGrowth();
     });
   }
 }

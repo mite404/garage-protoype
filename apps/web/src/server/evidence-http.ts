@@ -4,7 +4,7 @@ import { AppError } from "./errors";
 /** Bounds streamed request bodies before multipart or JSON parsing, including chunked uploads.
  * @throws {AppError} For a body exceeding the caller's fixed limit.
  */
-export async function boundedBody(request: Request, maxBytes: number) {
+export async function boundedBody(request: Request | Response, maxBytes: number) {
   const reader = request.body?.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;

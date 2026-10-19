@@ -141,9 +141,11 @@ function MunicipalityInventory({
 export default function MunicipalityWorkspace({
   workspace,
   chat,
+  enrichment,
 }: {
   workspace: Workspace;
   chat?: ReactNode;
+  enrichment?: ReactNode;
 }) {
   const { organization, acquisitions, thumbnails } = workspace;
   return (
@@ -181,6 +183,7 @@ export default function MunicipalityWorkspace({
             <Acquisition key={deal.id} deal={deal} thumbnail={thumbnails?.[deal.vehicleId]} />
           ))}
         </section>
+        {enrichment && <div className="municipal-section">{enrichment}</div>}
         <MunicipalityInventory
           organization={organization}
           activity={workspace.activity}

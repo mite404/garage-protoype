@@ -5,6 +5,9 @@ implemented functionality, and proposed entries remain open for review.
 
 ## Accepted
 
+- ADR-032: Give pre-opportunity prospects explicit specialist ownership and separate background
+  analysis because discovery must not weaken deal membership or turn contacts into application
+  users.
 - ADR-001: Keep commercial commitments with humans because model output must not bind a buyer,
   seller, or Garage to an offer or delivery promise.
 - ADR-002: Preserve source evidence alongside extracted claims because reviewed answers must remain

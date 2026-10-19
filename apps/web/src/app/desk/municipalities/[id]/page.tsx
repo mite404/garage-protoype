@@ -3,6 +3,8 @@ import MunicipalityWorkspace from "@signal-desk/catalog/municipality-workspace";
 import { requireActor } from "@/server/auth";
 import { getMunicipalityWorkspace } from "@/server/municipalities";
 import { readStreams } from "@/server/streaming";
+import { getOrganizationGrowth } from "@/server/growth-views";
+import { GrowthSummary } from "../../growth-profile";
 import { AppError } from "@/server/errors";
 import SaleChat from "./sale-chat";
 
@@ -12,10 +14,15 @@ export const dynamic = "force-dynamic";
 export default async function MunicipalityPage({ params }: { params: Promise<{ id: string }> }) {
   let workspace;
   let streams;
+  let growth;
   try {
     const actor = await requireActor();
     workspace = await getMunicipalityWorkspace(actor, (await params).id);
     streams = await readStreams(actor, workspace.acquisitions[0].id);
+    growth =
+      actor.role === "specialist"
+        ? await getOrganizationGrowth(actor, workspace.organization.id)
+        : null;
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return (
@@ -32,6 +39,7 @@ export default async function MunicipalityPage({ params }: { params: Promise<{ i
   return (
     <MunicipalityWorkspace
       workspace={workspace}
+      enrichment={growth ? <GrowthSummary profile={growth} /> : undefined}
       chat={
         <SaleChat
           opportunityId={acquisitions[0].id}

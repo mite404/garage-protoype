@@ -104,6 +104,8 @@ test(
           assert.deepEqual(tools.sort(), [
             "create_draft",
             "get_assistance",
+            "get_growth_operations",
+            "get_growth_profile",
             "get_job",
             "get_workbench",
             "list_opportunities",

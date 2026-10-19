@@ -14,17 +14,21 @@ import {
   inferenceOperations,
 } from "./db-schema";
 import { AppError } from "./errors";
+import { requireProspect } from "./growth";
 
-const requestSchema = z
+const commonRequest = z
   .object({
     key: z.string().min(1).max(200),
     attempt: z.number().int().min(1).max(5).default(1),
-    opportunityId: z.string().min(1).max(200),
     model: z.string().min(1).max(200),
     input: z.string().max(10485760),
     photos: z.array(z.string().max(10485760)).max(20),
   })
   .strict();
+const requestSchema = z.union([
+  commonRequest.extend({ opportunityId: z.string().min(1).max(200) }),
+  commonRequest.extend({ prospectId: z.string().min(1).max(200) }),
+]);
 const integer = z.number().int().nonnegative().safe();
 const usageSchema = z.object({
   modelVersion: z.string().min(1).max(200),
@@ -98,7 +102,8 @@ async function transaction<T>(client: PoolClient, action: () => Promise<T>) {
 async function currentAccess(actor: Actor, request: Request, db: PoolClient) {
   await orm(db).execute(sql`select signal_desk.lock_inference_access()`);
   await requireSpending(actor, db);
-  await requireOpportunity(actor, request.opportunityId, undefined, db);
+  if ("prospectId" in request) await requireProspect(actor, request.prospectId, db);
+  else await requireOpportunity(actor, request.opportunityId, undefined, db);
 }
 
 async function operation(
@@ -118,7 +123,8 @@ async function operation(
       id: randomUUID(),
       user_id: actor.userId,
       request_key: request.key,
-      opportunity_id: request.opportunityId,
+      opportunity_id: "opportunityId" in request ? request.opportunityId : null,
+      prospect_id: "prospectId" in request ? request.prospectId : null,
       fingerprint,
       model_id: request.model,
       max_attempts: policy.max_attempts,
@@ -437,7 +443,8 @@ export async function runInference(actor: Actor, raw: unknown, provider?: Provid
   } finally {
     if (timer) clearTimeout(timer);
   }
-  await requireOpportunity(actor, request.opportunityId);
+  if ("prospectId" in request) await requireProspect(actor, request.prospectId);
+  else await requireOpportunity(actor, request.opportunityId);
   return outcome(report);
 }
 
