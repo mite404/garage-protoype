@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { TelemetryPreferences } from "./telemetry-preferences";
 
 /** Offers read-only evidence separately from invited workspace access. */
 export default function Home() {
   return (
-    <div className="grid items-start gap-12 md:grid-cols-[1.3fr_1fr]">
+    <div data-replay-safe className="grid items-start gap-12 md:grid-cols-[1.3fr_1fr]">
       <section className="max-w-xl py-5">
         <p className="eyebrow mb-5">Vehicle evidence, before the next step</p>
         <h1>
@@ -45,6 +46,7 @@ export default function Home() {
           </li>
         </ul>
       </aside>
+      {process.env.NEXT_PUBLIC_POSTHOG_ENABLED === "true" && <TelemetryPreferences />}
     </div>
   );
 }

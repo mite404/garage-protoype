@@ -21,6 +21,8 @@
     "eval:latency:control": "node --env-file-if-exists=../../.env.local --conditions=react-server --import tsx src/eval/provider-control.ts",
     "eval:jev": "node --conditions=react-server --import tsx scripts/eval-jev-routing.ts",
     "eval:extraction": "node --conditions=react-server --import tsx src/extraction-eval.ts",
+    "verify:posthog-privacy": "node --import tsx scripts/verify-posthog-privacy.ts",
+    "verify:posthog-consent": "node --import tsx scripts/verify-posthog-consent.ts",
     "compare:pdf": "node --conditions=react-server --import tsx scripts/compare-pdf-extractors.ts"
   },
   "dependencies": {
@@ -39,6 +41,8 @@
     "hono": "4.13.13",
     "next": "16.4.1",
     "pg": "8.23.1",
+    "posthog-js": "1.438.12",
+    "posthog-node": "5.56.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "server-only": "0.0.1",

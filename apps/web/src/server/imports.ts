@@ -21,6 +21,7 @@ import {
 import { requireSpending, requireWrite, resolveActor, resolveToken, type Actor } from "./access";
 import { getSource } from "./records";
 import { AppError } from "./errors";
+import { captureServerError } from "./posthog";
 import {
   addSource,
   recordEvidenceBlocker,
@@ -662,6 +663,7 @@ export async function processImport(lease: Lease, provider?: Provider) {
     await commitImport(actor, job, lease, sources, output);
   } catch (error) {
     await failImport(lease, error);
+    if (!(error instanceof AppError)) await captureServerError("import");
   }
 }
 

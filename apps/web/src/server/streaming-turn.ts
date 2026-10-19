@@ -8,6 +8,7 @@ import { streamTurns } from "./db-schema";
 import { noteActivity, streamActor, streamError, streamPrompt } from "./streaming";
 import { modelExecution, requireModelCheckpoint } from "./streaming-provider";
 import { AppError } from "./errors";
+import { captureServerError } from "./posthog";
 import type { SpecialistStream } from "../agents/specialist";
 
 // Truthful progress labels for the approved sales tools.
@@ -142,6 +143,7 @@ Current evidence revision: ${context.revision}`,
       })
       .where(and(eq(streamTurns.id, id), inArray(streamTurns.state, ["queued", "running"])));
     await handle.abort().catch(() => undefined);
+    if (!(error instanceof AppError)) await captureServerError("stream");
   }
 }
 

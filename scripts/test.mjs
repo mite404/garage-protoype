@@ -20,6 +20,8 @@ const result = spawnSync(
     stdio: "inherit",
     env: {
       ...process.env,
+      POSTHOG_ENABLED: "false",
+      NEXT_PUBLIC_POSTHOG_ENABLED: "false",
       NODE_V8_COVERAGE: coverage,
       TSX_TSCONFIG_PATH: fileURLToPath(new URL("../apps/web/tsconfig.json", import.meta.url)),
     },

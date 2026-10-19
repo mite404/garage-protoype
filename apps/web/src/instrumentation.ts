@@ -5,3 +5,9 @@ export async function register() {
   const { useCloudflareRuntime } = await import("./server/cloudflare-runtime");
   useCloudflareRuntime();
 }
+
+/** Reports only a fixed category. Request URLs, headers, bodies and raw errors stay local. */
+export async function onRequestError() {
+  const { captureServerError } = await import("./server/posthog");
+  await captureServerError("request");
+}
