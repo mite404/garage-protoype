@@ -289,6 +289,41 @@ test(
         needRevision: 1,
         factIds: [height!.id],
       });
+      // A decided pairing never enrolls again, and a stale request never reaches growth.
+      const draft = {
+        kind: "draft",
+        subject: "Again",
+        body: "Still for sale? Reply STOP to opt out.",
+      };
+      await assert.rejects(
+        runSourcingCommand(actor, caseId, { ...draft, revision: decided.revision }),
+        { code: "PAIRING_CLOSED" },
+      );
+      await assert.rejects(runSourcingCommand(actor, caseId, { ...draft, revision: 1 }), {
+        code: "STALE_REVIEW",
+      });
+      assert.equal(
+        (
+          await db.query(
+            "select count(*)::int as count from signal_desk.growth_messages where enrollment_key like $1",
+            [`pairing:${caseId}:%`],
+          )
+        ).rows[0].count,
+        (
+          await db.query(
+            "select count(*)::int as count from signal_desk.growth_messages where enrollment_key=$1",
+            [`pairing:${caseId}:2`],
+          )
+        ).rows[0].count,
+      );
+      await assert.rejects(
+        runSourcingCommand(actor, caseId, {
+          kind: "reject_fact",
+          revision: decided.revision,
+          factId: "fact:unknown",
+        }),
+        { code: "STALE_REVIEW" },
+      );
       assert.deepEqual(
         (await listSourcingCases(actor)).map((item) => [
           item.stage,

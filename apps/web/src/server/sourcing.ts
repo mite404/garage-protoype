@@ -101,6 +101,10 @@ const decisionActions: Record<string, string | undefined> = {
   proceed: "Share the reviewed pairing with the buyer for review.",
   reject: "Find another candidate for this buyer need.",
 };
+// A sequence reports its most significant step: uncertain, then stopped, then sent.
+const statePriority = ["queued", "dispatched", "sent", "stopped", "uncertain"];
+// Stages where asking the seller is still meaningful; a decided pairing must be reopened first.
+const openStages = new Set(["investigate", "awaiting_seller", "evidence_review"]);
 const outreachStates = {
   queued: "queued",
   dispatched: "sent",
@@ -122,13 +126,15 @@ const factId = (caseId: string, sourceRef: string, field: string, value: unknown
 
 // Explicit numeric heights with a unit are deterministic; everything else needs a reviewer.
 function heightProposals(text: string) {
+  if (!/\b(tall|height|high)\b/i.test(text)) return [];
   const inches = [...text.matchAll(/\b(\d{2,3}(?:\.\d)?)\s*(?:in\b|inch(?:es)?\b|")/gi)].map(
     (match) => Number(match[1]),
   );
   const feet = [
     ...text.matchAll(/\b(\d{1,2})\s*(?:ft|feet|')\s*(\d{1,2})?\s*(?:in\b|inch(?:es)?\b|")?/gi),
   ].map((match) => Number(match[1]) * 12 + Number(match[2] ?? 0));
-  return [...new Set([...inches, ...feet])].filter((value) => value > 0 && value <= 240);
+  // Apparatus heights only, so counts and partial measurements are not proposed.
+  return [...new Set([...inches, ...feet])].filter((value) => value >= 60 && value <= 240);
 }
 
 function factRow(row: typeof pairingFacts.$inferSelect): Fact {
@@ -255,12 +261,13 @@ function writeTransaction<T>(
 async function changeCase<T>(
   actor: Actor,
   caseId: string,
-  expected: number,
+  // null records something that already happened elsewhere, such as a growth enrollment.
+  expected: number | null,
   action: (client: PoolClient, row: Awaited<ReturnType<typeof requireSourcingCase>>) => Promise<T>,
 ) {
   return writeTransaction(actor, caseId, async (client) => {
     const row = await requireSourcingCase(actor, caseId, client);
-    if ((await caseRevision(client, caseId)) !== expected)
+    if (expected !== null && (await caseRevision(client, caseId)) !== expected)
       throw new AppError(
         412,
         "STALE_REVIEW",
@@ -326,7 +333,9 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     await caseRevision(undefined, caseId),
   ];
   const trigger = changes.find((change) => change.disposition !== "dismissed") ?? null;
-  const latest = messages.at(-1);
+  const latest = messages.toSorted(
+    (a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state),
+  )[0];
   const contact = seller.review?.contact;
   const account: SourcingAccount = {
     account: {
@@ -466,14 +475,24 @@ export async function runSourcingCommand(actor: Actor, caseId: string, raw: unkn
   const input = parseInput(command, raw);
   if (input.kind === "draft") {
     // Growth owns enrollment, suppression and stops; the key correlates replies to this case.
-    const { seller } = await requireSourcingCase(actor, caseId);
+    // Check the revision and stage first, so a stale or closed pairing never enrolls.
+    const { seller, pairing } = await requireSourcingCase(actor, caseId);
+    if ((await caseRevision(undefined, caseId)) !== input.revision)
+      throw new AppError(
+        412,
+        "STALE_REVIEW",
+        "This case changed. Review the current record again.",
+      );
+    if (!openStages.has(pairing.stage))
+      throw new AppError(409, "PAIRING_CLOSED", "Reopen this pairing before asking the seller.");
     await enrollSequence(actor, seller.id, {
       purpose: "sourcing",
       key: pairingKey(caseId, input.revision + 1),
       subject: input.subject,
       body: input.body,
     });
-    return changeCase(actor, caseId, input.revision, async (client, row) => {
+    // The enrollment exists now, so it is recorded even if the case changed meanwhile.
+    return changeCase(actor, caseId, null, async (client, row) => {
       await recordEvent(client, row.pairing, actor.userId, "draft_enrolled", input.subject);
       await orm(client)
         .update(sourcingCases)
@@ -485,10 +504,19 @@ export async function runSourcingCommand(actor: Actor, caseId: string, raw: unkn
     if (input.kind === "accept") return review(client, row, actor.userId, input.factIds);
     if (input.kind === "decide") return decide(client, row, actor.userId, input);
     if (input.kind === "reject_fact") {
-      await orm(client)
+      const rejected = await orm(client)
         .update(pairingFacts)
         .set({ status: "rejected", reviewedBy: actor.userId, reviewedAt: new Date() })
-        .where(and(eq(pairingFacts.caseId, caseId), eq(pairingFacts.id, input.factId)));
+        .where(
+          and(
+            eq(pairingFacts.caseId, caseId),
+            eq(pairingFacts.id, input.factId),
+            ne(pairingFacts.status, "rejected"),
+          ),
+        )
+        .returning({ id: pairingFacts.id });
+      if (!rejected.length)
+        throw new AppError(409, "STALE_REVIEW", "That answer is no longer current.");
       return recordEvent(client, row.pairing, actor.userId, "fact_rejected", input.factId);
     }
     if (input.kind === "source_disposition") {
@@ -565,15 +593,18 @@ export async function renderSourcingCard(
       ),
     );
   if (!turn) throw new AppError(404, "NOT_FOUND", "Turn not found.");
-  const [prior] = await orm()
-    .select({ id: cardCalls.call_id })
+  await orm()
+    .insert(cardCalls)
+    .values({ turn_id: turnId, call_id: callId, tool: view, input: {}, status: "accepted" })
+    .onConflictDoNothing();
+  const [stored] = await orm()
+    .select({ tool: cardCalls.tool })
     .from(cardCalls)
     .where(and(eq(cardCalls.turn_id, turnId), eq(cardCalls.call_id, callId)));
-  if (!prior)
-    await orm()
-      .insert(cardCalls)
-      .values({ turn_id: turnId, call_id: callId, tool: view, input: {}, status: "accepted" });
-  return { shown: view, note: "The specialist sees this card from current saved records." };
+  return {
+    shown: stored?.tool ?? view,
+    note: "The specialist sees this card from current saved records.",
+  };
 }
 
 /** Saves the assistant's proposal for a sourcing turn, never an accepted fact.
