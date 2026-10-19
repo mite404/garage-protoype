@@ -75,6 +75,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-036: Use [optional PostHog measurement](posthog.md) for pseudonymous committed outcomes and
   one account-stable reviewed-outreach trial because assignment, actual delivery, and qualified
   replies must remain distinct while PostgreSQL retains business state and permissions.
+- ADR-037: Compose the specialist desk account-first, with a work queue for prioritization and a
+  docked assistant whose cards open the same page sections, because decisions need the account's
+  evidence in view while chat stays a way to investigate and draft, not the only action surface.
 
 ## Proposed
 
