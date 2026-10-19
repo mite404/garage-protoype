@@ -164,24 +164,24 @@ const stories = {
     text: ["No proposed amount or conditions recorded."],
   },
   "sourcing-department-workspace--research": {
-    selector: 'nav[aria-label="Sales workspace"]',
-    text: ["Research trigger only", "Reviewed draft · Not sent"],
+    selector: 'nav[aria-label="Workspace"]',
+    text: ["Availability request", "Reviewed draft · Not sent"],
   },
   "sourcing-department-workspace--reply-rejects-pairing": {
-    selector: 'nav[aria-label="Sales workspace"]',
+    selector: 'nav[aria-label="Workspace"]',
     text: ["Does not meet", "Recorded Oct 19, 2026"],
   },
   "sourcing-department-workspace--conflict-and-stale": {
-    selector: 'nav[aria-label="Sales workspace"]',
+    selector: 'nav[aria-label="Workspace"]',
     text: ["Conflicting", "Stale: the need or reviewed evidence changed, decide again"],
   },
   "sourcing-department-workspace--dark": {
-    selector: '[data-theme="dark"] nav[aria-label="Sales workspace"]',
+    selector: '[data-theme="dark"] nav[aria-label="Workspace"]',
     text: ["Does not meet"],
   },
   "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',
-    text: ["Proposed updates · Not yet approved", "That rejects this pairing"],
+    text: ["Proposed updates · Not yet approved", "Reject this pairing, not the seller account"],
   },
 };
 

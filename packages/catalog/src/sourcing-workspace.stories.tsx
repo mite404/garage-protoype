@@ -9,6 +9,7 @@ import {
 } from "@signal-desk/contracts/sourcing-schema";
 import { DecisionPacket, FitTable, ReplyReview, SourceChangeCard } from "./sourcing-cards";
 import SourcingWorkspace from "./sourcing-workspace";
+import { DeskShell, type AccountTab } from "./desk-shell";
 
 const reviewedAt = new Date("2026-10-19T15:00:00Z");
 const cedarValley: SourcingAccount = {
@@ -82,9 +83,15 @@ const research: SourcingAccount = {
 
 function Interactive({ data }: { data: SourcingAccount }) {
   const [state, setState] = useState(data);
+  const [tab, setTab] = useState<AccountTab>("overview");
+  const [step, setStep] = useState<number>();
   return (
     <SourcingWorkspace
       data={state}
+      tab={tab}
+      onTab={setTab}
+      step={step}
+      onStep={setStep}
       onSaveDraft={() => setState((s) => ({ ...s, outreach: { ...s.outreach, state: "draft" } }))}
       onAccept={(ids) =>
         setState((s) => ({ ...s, facts: acceptSelected(s.facts, ids, reviewedAt) }))
@@ -106,7 +113,9 @@ const meta = {
   decorators: [
     (Story, { parameters }) => (
       <div data-theme={parameters.theme}>
-        <Story />
+        <DeskShell pathname="/desk/sourcing/synthetic">
+          <Story />
+        </DeskShell>
       </div>
     ),
   ],
@@ -124,8 +133,11 @@ export const Research: Story = {
     await expect(
       within(canvas.getByRole("table").parentElement!).getByText(/No recommendation until/),
     ).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
     await expect(canvas.getByRole("radio", { name: "Proceed" })).toBeDisabled();
-    const body = canvas.getByLabelText("Message");
+    await userEvent.click(canvas.getByRole("button", { name: "Outreach" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Review draft" }));
+    const body = canvas.getByLabelText("Body");
     await expect((body as HTMLTextAreaElement).value).toContain("exact overall height");
     await userEvent.clear(body);
     await userEvent.type(body, "Is it for sale?");
@@ -133,7 +145,7 @@ export const Research: Story = {
     await userEvent.type(body, " Reply STOP to opt out.");
     await userEvent.click(canvas.getByRole("button", { name: "Save reviewed draft" }));
     await expect(canvas.getByText("Reviewed draft · Not sent")).toBeVisible();
-    await expect(canvas.getByText("Reviewed draft, not sent")).toBeVisible();
+    await expect(canvas.getByText("External delivery disabled")).toBeVisible();
   },
 };
 
@@ -141,18 +153,18 @@ export const ReplyRejectsPairing: Story = {
   args: { data: cedarValley },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.getByText(/That rejects this pairing, not the seller account/),
-    ).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Outreach" }));
+    await expect(canvas.getByText(/Reject this pairing, not the seller account/)).toBeVisible();
     await userEvent.click(canvas.getByRole("checkbox", { name: /Height: 121 in/ }));
     await userEvent.click(canvas.getByRole("button", { name: "Save selected reviewed answers" }));
-    const fit = within(canvas.getByRole("table"));
-    await expect(fit.getByText("Does not meet")).toBeVisible();
-    await expect(fit.getByText("121 in")).toBeVisible();
     // Sale timing was not selected, so it remains an unresolved proposal.
     await expect(
       canvas.getByRole("checkbox", { name: /Sale status: Maybe later/ }),
     ).not.toBeChecked();
+    await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
+    const fit = within(canvas.getByRole("table"));
+    await expect(fit.getByText("Does not meet")).toBeVisible();
+    await expect(fit.getByText("121 in")).toBeVisible();
     await expect(canvas.getByRole("radio", { name: "Reject" })).toBeChecked();
     await userEvent.type(canvas.getByLabelText("Reason"), "Reviewed height 121 in exceeds 120 in.");
     await userEvent.click(canvas.getByRole("button", { name: "Record decision" }));
@@ -218,6 +230,7 @@ export const ConflictAndStale: Story = {
     const canvas = within(canvasElement);
     await expect(within(canvas.getByRole("table")).getByText("Conflicting")).toBeVisible();
     await expect(canvas.getByText(/Reviewed answers disagree: 118 vs 121/)).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
     await expect(canvas.getByText(/Stale: the need or reviewed evidence changed/)).toBeVisible();
     await expect(canvas.getByRole("radio", { name: "Investigate" })).toBeChecked();
   },
