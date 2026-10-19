@@ -31,7 +31,9 @@ const cedarValley: SourcingAccount = {
     buyer: "Pine Brook FD",
     buyerHref: "#pine-brook",
     vehicleClass: "Pumper",
-    maxAllInCents: 17_500_000,
+    revision: 1,
+    budgetBasis: "total",
+    maxBudgetCents: 17_500_000,
     maxHeightIn: 120,
   },
   inventorySearch: { searchedAt: new Date("2026-10-19T00:00:00Z"), reviewedMatches: 0 },
@@ -85,8 +87,8 @@ function Interactive({ data }: { data: SourcingAccount }) {
       onAccept={(ids) =>
         setState((s) => ({ ...s, facts: acceptSelected(s.facts, ids, reviewedAt) }))
       }
-      onDecide={(decision) =>
-        setState((s) => ({ ...s, decision: { ...decision, decidedAt: reviewedAt } }))
+      onDecide={(decision, basis) =>
+        setState((s) => ({ ...s, decision: { ...decision, basis, decidedAt: reviewedAt } }))
       }
     />
   );
@@ -149,7 +151,7 @@ export const ReplyRejectsPairing: Story = {
     await expect(canvas.getByRole("radio", { name: "Reject" })).toBeChecked();
     await userEvent.type(canvas.getByLabelText("Reason"), "Reviewed height 121 in exceeds 120 in.");
     await userEvent.click(canvas.getByRole("button", { name: "Record decision" }));
-    await expect(canvas.getByText("Recorded Oct 19, 2026")).toBeVisible();
+    await expect(canvas.getByText(/Recorded Oct 19, 2026 against need revision 1/)).toBeVisible();
     await expect(canvas.getByText(/need stays open after a rejection/)).toBeVisible();
   },
 };
@@ -177,3 +179,41 @@ export const ChatCards: Story = {
 };
 
 export const Dark: Story = { ...ReplyRejectsPairing, parameters: { theme: "dark" } };
+
+const reviewed = (id: string, value: number, sourceRef: string) =>
+  ({
+    id,
+    field: "heightIn",
+    value,
+    basis: "source_claim",
+    sourceRef,
+    status: "accepted",
+    reviewedAt,
+  }) as const;
+
+export const ConflictAndStale: Story = {
+  args: {
+    data: {
+      ...cedarValley,
+      need: { ...cedarValley.need, revision: 2 },
+      replies: [],
+      facts: [
+        reviewed("height-spec", 118, "synthetic-spec-sheet"),
+        reviewed("height-reply", 121, "synthetic-reply-1"),
+      ],
+      decision: {
+        decision: "investigate",
+        reason: "Waiting for a measured height.",
+        decidedAt: reviewedAt,
+        basis: { needRevision: 1, factIds: [] },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(within(canvas.getByRole("table")).getByText("Conflicting")).toBeVisible();
+    await expect(canvas.getByText(/Reviewed answers disagree: 118 vs 121/)).toBeVisible();
+    await expect(canvas.getByText(/Stale: the need or reviewed evidence changed/)).toBeVisible();
+    await expect(canvas.getByRole("radio", { name: "Investigate" })).toBeChecked();
+  },
+};

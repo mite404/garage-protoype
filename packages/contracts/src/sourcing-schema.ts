@@ -7,9 +7,13 @@ const cents = z.number().int().nonnegative();
 export const needSchema = z
   .object({
     id,
+    // A new revision makes every decision recorded against an older one stale.
+    revision: z.number().int().positive(),
     buyer: z.string().trim().min(1).max(200),
     vehicleClass: z.string().trim().min(1).max(100),
-    maxAllInCents: cents.positive(),
+    // USD with an explicit basis: a purchase-price limit never stands in for a total budget.
+    budgetBasis: z.enum(["purchase_price", "total"]),
+    maxBudgetCents: cents.positive(),
     maxHeightIn: z.number().positive().max(240),
   })
   .strict();
@@ -52,8 +56,10 @@ export type Need = z.infer<typeof needSchema>;
 export type Fact = z.infer<typeof factSchema>;
 export type Field = Fact["field"];
 export type Decision = z.infer<typeof decisionSchema>;
-export type Requirement = "available" | "height" | "allInCost" | "authority";
-export type FitStatus = "met" | "not_met" | "unknown" | "incomplete";
+export type Requirement = "available" | "height" | "budget" | "authority";
+export type FitStatus = "met" | "not_met" | "unknown" | "incomplete" | "conflicting";
+// The need revision and accepted evidence a decision was made against.
+export type DecisionBasis = { needRevision: number; factIds: string[] };
 export type FitRow = {
   requirement: Requirement;
   status: FitStatus;
@@ -72,7 +78,7 @@ const money = (value: number) => usd.format(value / 100);
 const questions: Record<Requirement, string> = {
   available: "Is the vehicle being offered for sale, and when?",
   height: "What is the exact overall height in inches?",
-  allInCost: "What are the asking price, transport cost and any other charges?",
+  budget: "What are the asking price, transport cost and any other charges?",
   authority: "Who can authorize the sale?",
 };
 
@@ -81,18 +87,37 @@ export const requirementLabel = (need: Need, requirement: Requirement) =>
   ({
     available: "Available for sale",
     height: `Height ≤${need.maxHeightIn} in`,
-    allInCost: `All-in cost ≤${money(need.maxAllInCents)}`,
+    budget: `${need.budgetBasis === "total" ? "All-in cost" : "Purchase price"} ≤${money(need.maxBudgetCents)}`,
     authority: "Seller authority",
   })[requirement];
 
-/** Latest accepted answer per field; proposed and rejected facts never count. */
+const requirementFields: Record<Requirement, Field[]> = {
+  available: ["saleStatus"],
+  height: ["heightIn"],
+  budget: [...costFields],
+  authority: ["authority"],
+};
+
+const accepted = (facts: Fact[]) => facts.filter((fact) => fact.status === "accepted");
+
+/** Accepted answer per field; proposed and rejected facts never count. */
 export function currentAnswers(facts: Fact[]): Answers {
   const answers: Answers = {};
-  const accepted = facts
-    .filter((fact) => fact.status === "accepted" && fact.reviewedAt)
-    .sort((a, b) => a.reviewedAt!.getTime() - b.reviewedAt!.getTime()); // → oldest first
-  for (const fact of accepted) Object.assign(answers, { [fact.field]: fact });
+  for (const fact of accepted(facts)) Object.assign(answers, { [fact.field]: fact });
   return answers;
+}
+
+// Accepted facts for one field that disagree stay unresolved until a reviewer rejects one.
+function conflictRow(fields: Field[], facts: Fact[]): Omit<FitRow, "requirement"> | null {
+  const clashing = fields
+    .map((field) => accepted(facts).filter((fact) => fact.field === field))
+    .find((group) => new Set(group.map((fact) => fact.value)).size > 1);
+  if (!clashing) return null;
+  return {
+    status: "conflicting",
+    evidence: `Reviewed answers disagree: ${clashing.map((fact) => fact.value).join(" vs ")}`,
+    sourceRefs: clashing.map((fact) => fact.sourceRef),
+  };
 }
 
 function availableRow(answer: Answers["saleStatus"]): Omit<FitRow, "requirement"> {
@@ -115,23 +140,22 @@ function heightRow(need: Need, answer: Answers["heightIn"]): Omit<FitRow, "requi
 
 // Price alone never establishes all-in cost: every cost component must be answered.
 function costRow(need: Need, answers: Answers): Omit<FitRow, "requirement"> {
-  const known = costFields.flatMap((field) => answers[field] ?? []);
+  const fields = need.budgetBasis === "total" ? costFields : (["priceCents"] as const);
+  const known = fields.flatMap((field) => answers[field] ?? []);
   const sourceRefs = known.map((fact) => fact.sourceRef);
   if (!known.length)
     return { status: "unknown", evidence: "Price, transport and fees missing", sourceRefs };
   const total = known.reduce((sum, fact) => sum + fact.value, 0);
-  if (known.length < costFields.length) {
-    const missing = costFields
-      .filter((field) => !answers[field])
-      .map((f) => f.replace("Cents", ""));
+  if (known.length < fields.length) {
+    const missing = fields.filter((field) => !answers[field]).map((f) => f.replace("Cents", ""));
     // A partial sum already over the limit is a definite failure.
-    return total > need.maxAllInCents
+    return total > need.maxBudgetCents
       ? { status: "not_met", evidence: `${money(total)} before ${missing.join(", ")}`, sourceRefs }
       : { status: "incomplete", evidence: `${missing.join(", ")} missing`, sourceRefs };
   }
   return {
-    status: total <= need.maxAllInCents ? "met" : "not_met",
-    evidence: `${money(total)} all-in`,
+    status: total <= need.maxBudgetCents ? "met" : "not_met",
+    evidence: `${money(total)}${need.budgetBasis === "total" ? " all-in" : ""}`,
     sourceRefs,
   };
 }
@@ -140,23 +164,40 @@ function costRow(need: Need, answers: Answers): Omit<FitRow, "requirement"> {
 export function evaluateFit(need: Need, facts: Fact[]): FitRow[] {
   const answers = currentAnswers(facts);
   const authority = answers.authority;
-  return [
-    { requirement: "available", ...availableRow(answers.saleStatus) },
-    { requirement: "height", ...heightRow(need, answers.heightIn) },
-    { requirement: "allInCost", ...costRow(need, answers) },
-    {
-      requirement: "authority",
-      ...(authority
-        ? { status: "met", evidence: authority.value, sourceRefs: [authority.sourceRef] }
-        : { status: "unknown", evidence: "Not established", sourceRefs: [] }),
-    },
-  ];
+  const rows: Record<Requirement, Omit<FitRow, "requirement">> = {
+    available: availableRow(answers.saleStatus),
+    height: heightRow(need, answers.heightIn),
+    budget: costRow(need, answers),
+    authority: authority
+      ? { status: "met", evidence: authority.value, sourceRefs: [authority.sourceRef] }
+      : { status: "unknown", evidence: "Not established", sourceRefs: [] },
+  };
+  return (Object.keys(rows) as Requirement[]).map((requirement) => ({
+    requirement,
+    ...(conflictRow(requirementFields[requirement], facts) ?? rows[requirement]),
+  }));
+}
+
+/** Freezes the need revision and accepted evidence a decision is made against. */
+export const decisionBasis = (need: Need, facts: Fact[]): DecisionBasis => ({
+  needRevision: need.revision,
+  factIds: accepted(facts)
+    .map((fact) => fact.id)
+    .sort(),
+});
+
+/** True when the need was revised or accepted evidence changed since the decision. */
+export function isStale(basis: DecisionBasis, need: Need, facts: Fact[]) {
+  const current = decisionBasis(need, facts);
+  return (
+    basis.needRevision !== current.needRevision || basis.factIds.join() !== current.factIds.join()
+  );
 }
 
 /** Questions for every requirement that accepted facts have not resolved. */
 export const openQuestions = (rows: FitRow[]) =>
   rows
-    .filter((row) => row.status === "unknown" || row.status === "incomplete")
+    .filter((row) => row.status !== "met" && row.status !== "not_met")
     .map((row) => questions[row.requirement]);
 
 /**
@@ -224,5 +265,5 @@ export type SourcingAccount = {
   };
   replies: { id: string; channel: "email" | "form"; receivedAt: Date; text: string }[];
   facts: Fact[];
-  decision: (Decision & { decidedAt: Date }) | null;
+  decision: (Decision & { decidedAt: Date; basis: DecisionBasis }) | null;
 };

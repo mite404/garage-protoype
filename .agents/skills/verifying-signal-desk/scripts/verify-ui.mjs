@@ -171,6 +171,10 @@ const stories = {
     selector: 'nav[aria-label="Sales workspace"]',
     text: ["Does not meet", "Recorded Oct 19, 2026"],
   },
+  "sourcing-account-workspace--conflict-and-stale": {
+    selector: 'nav[aria-label="Sales workspace"]',
+    text: ["Conflicting", "Stale: the need or reviewed evidence changed, decide again"],
+  },
   "sourcing-account-workspace--dark": {
     selector: '[data-theme="dark"] nav[aria-label="Sales workspace"]',
     text: ["Does not meet"],

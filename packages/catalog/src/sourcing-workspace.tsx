@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 import {
+  decisionBasis,
   evaluateFit,
+  isStale,
+  requirementLabel,
   type Decision,
+  type DecisionBasis,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
 import {
@@ -18,11 +22,6 @@ const date = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   timeZone: "UTC",
 });
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
 const outreachStates: Record<SourcingAccount["outreach"]["state"], string> = {
   none: "No outreach",
   draft: "Reviewed draft, not sent",
@@ -31,6 +30,61 @@ const outreachStates: Record<SourcingAccount["outreach"]["state"], string> = {
   uncertain: "Delivery uncertain, follow-up paused",
   stopped: "Stopped",
 };
+
+function WhyHere({ data }: { data: SourcingAccount }) {
+  const { need, inventorySearch } = data;
+  return (
+    <section aria-labelledby="why-heading" className="municipal-section">
+      <h2 id="why-heading">Why this account is here</h2>
+      <div className="sourcing-why">
+        <div className="municipal-list">
+          <div className="municipal-list-row">
+            <div>
+              <h3>
+                Confirmed buyer need: <a href={need.buyerHref}>{need.buyer}</a>
+              </h3>
+              <p className="municipal-secondary">
+                {need.vehicleClass} · {requirementLabel(need, "budget")} · Height ≤
+                {need.maxHeightIn} in · Revision {need.revision}
+              </p>
+            </div>
+          </div>
+          <div className="municipal-list-row">
+            <div>
+              <h3>Existing inventory checked</h3>
+              <p className="municipal-secondary">
+                {inventorySearch.reviewedMatches
+                  ? `${inventorySearch.reviewedMatches} reviewed matches`
+                  : "No suitable reviewed match"}{" "}
+                · {date.format(inventorySearch.searchedAt)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <SourceChangeCard trigger={data.trigger} />
+      </div>
+    </section>
+  );
+}
+
+function Topbar({ data }: { data: SourcingAccount }) {
+  return (
+    <header className="municipal-topbar">
+      <nav aria-label="Sales workspace">
+        <a className="municipal-brand" href="/">
+          Signal Desk
+        </a>
+        <a className="municipal-section-link" href="/desk/prospects">
+          Accounts
+        </a>
+      </nav>
+      <div className="municipal-topbar-context">
+        {data.account.synthetic && <span className="state">Synthetic demonstration</span>}
+        {!data.outreach.deliveryEnabled && <span>Message sending disabled</span>}
+      </div>
+    </header>
+  );
+}
 
 /**
  * Account-first seller research page: the reason for investigation, fit, outreach, replies and
@@ -47,7 +101,7 @@ export default function SourcingWorkspace({
   chat?: ReactNode;
   onSaveDraft?: (draft: { subject: string; body: string }) => void;
   onAccept?: (factIds: string[]) => void;
-  onDecide?: (decision: Decision) => void;
+  onDecide?: (decision: Decision, basis: DecisionBasis) => void;
 }) {
   const { account, need, outreach } = data;
   const rows = evaluateFit(need, data.facts); // → FitRow[] from accepted facts only
@@ -56,20 +110,7 @@ export default function SourcingWorkspace({
       <a className="dispatch-skip" href="#main-content">
         Skip to content
       </a>
-      <header className="municipal-topbar">
-        <nav aria-label="Sales workspace">
-          <a className="municipal-brand" href="/">
-            Signal Desk
-          </a>
-          <a className="municipal-section-link" href="/desk/prospects">
-            Accounts
-          </a>
-        </nav>
-        <div className="municipal-topbar-context">
-          {account.synthetic && <span className="state">Synthetic demonstration</span>}
-          <span>Message sending disabled</span>
-        </div>
-      </header>
+      <Topbar data={data} />
       <main id="main-content" className="municipal-main" tabIndex={-1}>
         <header className="municipal-identity sourcing-identity">
           <div>
@@ -91,36 +132,7 @@ export default function SourcingWorkspace({
           <p>{data.nextAction}</p>
         </div>
 
-        <section aria-labelledby="why-heading" className="municipal-section">
-          <h2 id="why-heading">Why this account is here</h2>
-          <div className="sourcing-why">
-            <div className="municipal-list">
-              <div className="municipal-list-row">
-                <div>
-                  <h3>
-                    Confirmed buyer need: <a href={need.buyerHref}>{need.buyer}</a>
-                  </h3>
-                  <p className="municipal-secondary">
-                    {need.vehicleClass} · Up to {usd.format(need.maxAllInCents / 100)} all-in ·
-                    Height ≤{need.maxHeightIn} in
-                  </p>
-                </div>
-              </div>
-              <div className="municipal-list-row">
-                <div>
-                  <h3>Existing inventory checked</h3>
-                  <p className="municipal-secondary">
-                    {data.inventorySearch.reviewedMatches
-                      ? `${data.inventorySearch.reviewedMatches} reviewed matches`
-                      : "No suitable reviewed match"}{" "}
-                    · {date.format(data.inventorySearch.searchedAt)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <SourceChangeCard trigger={data.trigger} />
-          </div>
-        </section>
+        <WhyHere data={data} />
 
         <section aria-labelledby="fit-heading" className="municipal-section">
           <h2 id="fit-heading">Can this candidate meet the need?</h2>
@@ -152,7 +164,13 @@ export default function SourcingWorkspace({
 
         <section aria-labelledby="decision-heading" className="municipal-section">
           <h2 id="decision-heading">Decision for this pairing</h2>
-          <DecisionPacket need={need} rows={rows} decision={data.decision} onDecide={onDecide} />
+          <DecisionPacket
+            need={need}
+            rows={rows}
+            decision={data.decision}
+            stale={!!data.decision && isStale(data.decision.basis, need, data.facts)}
+            onDecide={(decision) => onDecide?.(decision, decisionBasis(need, data.facts))}
+          />
         </section>
         <footer className="municipal-note">
           Independent prototype. Not affiliated with Garage. No messages, payments or commercial

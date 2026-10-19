@@ -32,6 +32,7 @@ const fitStates: Record<FitStatus, [label: string, tone: string]> = {
   not_met: ["Does not meet", "state-conflict"],
   unknown: ["Unknown", "state-needs_review"],
   incomplete: ["Incomplete", "state-needs_review"],
+  conflicting: ["Conflicting", "state-conflict"],
 };
 const fieldLabels: Record<Fact["field"], string> = {
   saleStatus: "Sale status",
@@ -329,14 +330,27 @@ export function ReplyReview({
 function Recorded({
   decision,
   suggested,
+  stale,
 }: {
   decision: SourcingAccount["decision"];
   suggested: Decision["decision"];
+  stale: boolean;
 }) {
   if (!decision) return <p className="card-caveat">{suggestions[suggested]}</p>;
   return (
     <div className="card-next-action">
-      <p className="reading-label">Recorded {date.format(decision.decidedAt)}</p>
+      <p className="reading-label">
+        Recorded {date.format(decision.decidedAt)} against need revision{" "}
+        {decision.basis.needRevision}
+        {stale && (
+          <>
+            {" "}
+            <span className="state state-conflict">
+              Stale: the need or reviewed evidence changed, decide again
+            </span>
+          </>
+        )}
+      </p>
       <p>
         <strong>{capitalize(decision.decision)}</strong>: {decision.reason}
       </p>
@@ -349,11 +363,13 @@ export function DecisionPacket({
   need,
   rows,
   decision,
+  stale = false,
   onDecide,
 }: {
   need: Need;
   rows: FitRow[];
   decision: SourcingAccount["decision"];
+  stale?: boolean;
   onDecide?: (decision: Decision) => void;
 }) {
   const suggested = suggestDecision(rows);
@@ -365,7 +381,7 @@ export function DecisionPacket({
   return (
     <Card className="assistance-card sourcing-card" data-card="decision">
       <h3>Pairing decision</h3>
-      <Recorded decision={decision} suggested={suggested} />
+      <Recorded decision={decision} suggested={suggested} stale={stale} />
       {failed.length > 0 && (
         <ul className="card-list">
           {failed.map((row) => (

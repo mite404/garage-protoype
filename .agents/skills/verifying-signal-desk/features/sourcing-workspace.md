@@ -16,8 +16,9 @@ wiring waits for the growth owner's frozen snapshot and an approved pairing migr
 
 Run the skill's helper. Research saves a draft only after the body keeps its STOP line.
 Reply rejects pairing accepts only the 121 in height, checks the fit row fails while sale timing
-stays proposed, then records a rejection. The pairing rules live in
-`packages/contracts/src/sourcing-schema.test.ts`.
+stays proposed, then records a rejection. Conflict and stale shows two accepted heights that
+disagree as unresolved and a decision made against an older need revision as stale. The pairing
+rules live in `packages/contracts/src/sourcing-schema.test.ts`.
 
 ## Gotchas
 
