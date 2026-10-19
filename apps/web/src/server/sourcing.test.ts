@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { once } from "node:events";
 import { setTimeout } from "node:timers/promises";
 import { test } from "node:test";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { resolveActor } from "./access";
 import { prepareTestDatabase } from "./test-database";
 import {
@@ -27,6 +27,33 @@ const owners: StreamingTestRuntime =
   process.env.STREAMING_RUNTIME === "cloudflare"
     ? (await import("../../cloudflare/test/runtime")).cloudflareRuntime
     : nodeRuntime;
+
+async function removeFixtures(db: PoolClient, users: string[]) {
+  // CI reruns this file against the same database under the Cloudflare owner.
+  const cases = "select id from signal_desk.sourcing_cases where owner_id = any($1)";
+  const accounts = "select id from signal_desk.growth_accounts where owner_id = any($1)";
+  for (const statement of [
+    "delete from signal_desk.inference_attempts where operation_id in (select id from signal_desk.inference_operations where user_id = any($1))",
+    "delete from signal_desk.inference_operations where user_id = any($1)",
+    "delete from signal_desk.inference_budgets where scope = 'installation' or scope = any($1::text[])",
+    "delete from signal_desk.chat_turns where actor_id = any($1)",
+    `delete from signal_desk.pairing_events where case_id in (${cases})`,
+    `delete from signal_desk.pairing_facts where case_id in (${cases})`,
+    `delete from signal_desk.source_changes where case_id in (${cases})`,
+    "delete from signal_desk.sourcing_cases where owner_id = any($1)",
+    "delete from signal_desk.buyer_needs where owner_id = any($1)",
+    `delete from signal_desk.growth_receipts where message_id in (select id from signal_desk.growth_messages where account_id in (${accounts}))`,
+    `delete from signal_desk.growth_messages where account_id in (${accounts})`,
+    `delete from signal_desk.growth_events where account_id in (${accounts})`,
+    `delete from signal_desk.growth_insights where account_id in (${accounts})`,
+    `delete from signal_desk.growth_invitations where account_id in (${accounts})`,
+    `delete from signal_desk.growth_observations where account_id in (${accounts})`,
+    "delete from signal_desk.growth_accounts where owner_id = any($1)",
+    "delete from auth.sessions where user_id = any($1)",
+    "delete from signal_desk.identities where user_id = any($1)",
+  ])
+    await db.query(statement, [users]);
+}
 
 test(
   "a rejected pairing keeps the buyer need and the assistant only proposes cited answers",
@@ -403,31 +430,7 @@ test(
       await app?.stop();
       provider.closeAllConnections();
       await new Promise<void>((resolve) => provider.close(() => resolve()));
-      // CI reruns this file against the same database under the Cloudflare owner.
-      const users = [user, foreignUser];
-      const cases = "select id from signal_desk.sourcing_cases where owner_id = any($1)";
-      const accounts = "select id from signal_desk.growth_accounts where owner_id = any($1)";
-      for (const statement of [
-        "delete from signal_desk.inference_attempts where operation_id in (select id from signal_desk.inference_operations where user_id = any($1))",
-        "delete from signal_desk.inference_operations where user_id = any($1)",
-        "delete from signal_desk.inference_budgets where scope = 'installation' or scope = any($1::text[])",
-        "delete from signal_desk.chat_turns where actor_id = any($1)",
-        `delete from signal_desk.pairing_events where case_id in (${cases})`,
-        `delete from signal_desk.pairing_facts where case_id in (${cases})`,
-        `delete from signal_desk.source_changes where case_id in (${cases})`,
-        "delete from signal_desk.sourcing_cases where owner_id = any($1)",
-        "delete from signal_desk.buyer_needs where owner_id = any($1)",
-        `delete from signal_desk.growth_receipts where message_id in (select id from signal_desk.growth_messages where account_id in (${accounts}))`,
-        `delete from signal_desk.growth_messages where account_id in (${accounts})`,
-        `delete from signal_desk.growth_events where account_id in (${accounts})`,
-        `delete from signal_desk.growth_insights where account_id in (${accounts})`,
-        `delete from signal_desk.growth_invitations where account_id in (${accounts})`,
-        `delete from signal_desk.growth_observations where account_id in (${accounts})`,
-        "delete from signal_desk.growth_accounts where owner_id = any($1)",
-        "delete from auth.sessions where user_id = any($1)",
-        "delete from signal_desk.identities where user_id = any($1)",
-      ])
-        await db.query(statement, [users]);
+      await removeFixtures(db, [user, foreignUser]);
       db.release();
       await pool.end();
     }

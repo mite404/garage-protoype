@@ -118,6 +118,8 @@ export const sourcingView = sourcingCardRef.shape.view;
 type SourcingView = z.infer<typeof sourcingView>;
 
 const pairingKey = (caseId: string, at: number) => `pairing:${caseId}:${at}`;
+const byRevision = (a: string, b: string) =>
+  Number(a.split(":").at(-1)) - Number(b.split(":").at(-1));
 const factId = (caseId: string, sourceRef: string, field: string, value: unknown) =>
   `fact:${createHash("sha256")
     .update(JSON.stringify([caseId, sourceRef, field, value]))
@@ -126,7 +128,7 @@ const factId = (caseId: string, sourceRef: string, field: string, value: unknown
 
 // Explicit numeric heights with a unit are deterministic; everything else needs a reviewer.
 function heightProposals(text: string) {
-  if (!/\b(tall|height|high)\b/i.test(text)) return [];
+  if (!/\b(tall|heights?|high)\b(?!-)/i.test(text)) return [];
   const inches = [...text.matchAll(/\b(\d{2,3}(?:\.\d)?)\s*(?:in\b|inch(?:es)?\b|")/gi)].map(
     (match) => Number(match[1]),
   );
@@ -333,9 +335,14 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     await caseRevision(undefined, caseId),
   ];
   const trigger = changes.find((change) => change.disposition !== "dismissed") ?? null;
-  const latest = messages.toSorted(
-    (a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state),
-  )[0];
+  // Only the newest enrollment describes current outreach; earlier sequences are history.
+  const newest = messages
+    .map((message) => message.enrollmentKey ?? "")
+    .sort(byRevision)
+    .at(-1);
+  const latest = messages
+    .filter((message) => message.enrollmentKey === newest)
+    .toSorted((a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state))[0];
   const contact = seller.review?.contact;
   const account: SourcingAccount = {
     account: {
@@ -414,6 +421,32 @@ async function proposeFact(
   return idValue;
 }
 
+async function recordEnrollment(
+  client: PoolClient,
+  row: Awaited<ReturnType<typeof requireSourcingCase>>,
+  actor: Actor,
+  key: string,
+) {
+  const [prior] = await orm(client)
+    .select({ id: pairingEvents.id })
+    .from(pairingEvents)
+    .where(
+      and(
+        eq(pairingEvents.caseId, row.pairing.id),
+        eq(pairingEvents.kind, "draft_enrolled"),
+        eq(pairingEvents.detail, key),
+      ),
+    );
+  if (prior) return;
+  await recordEvent(client, row.pairing, actor.userId, "draft_enrolled", key);
+  await orm(client)
+    .update(sourcingCases)
+    .set({ stage: "awaiting_seller" })
+    .where(
+      and(eq(sourcingCases.id, row.pairing.id), inArray(sourcingCases.stage, [...openStages])),
+    );
+}
+
 async function decide(
   client: PoolClient,
   row: Awaited<ReturnType<typeof requireSourcingCase>>,
@@ -485,20 +518,18 @@ export async function runSourcingCommand(actor: Actor, caseId: string, raw: unkn
       );
     if (!openStages.has(pairing.stage))
       throw new AppError(409, "PAIRING_CLOSED", "Reopen this pairing before asking the seller.");
+    const key = pairingKey(caseId, input.revision + 1);
     await enrollSequence(actor, seller.id, {
       purpose: "sourcing",
-      key: pairingKey(caseId, input.revision + 1),
+      key,
       subject: input.subject,
       body: input.body,
     });
-    // The enrollment exists now, so it is recorded even if the case changed meanwhile.
-    return changeCase(actor, caseId, null, async (client, row) => {
-      await recordEvent(client, row.pairing, actor.userId, "draft_enrolled", input.subject);
-      await orm(client)
-        .update(sourcingCases)
-        .set({ stage: "awaiting_seller" })
-        .where(eq(sourcingCases.id, caseId));
-    });
+    // The enrollment exists now, so it is recorded once even if the case changed meanwhile; a
+    // decision made in between keeps its stage.
+    return changeCase(actor, caseId, null, (client, row) =>
+      recordEnrollment(client, row, actor, key),
+    );
   }
   return changeCase(actor, caseId, input.revision, async (client, row) => {
     if (input.kind === "accept") return review(client, row, actor.userId, input.factIds);
@@ -516,7 +547,7 @@ export async function runSourcingCommand(actor: Actor, caseId: string, raw: unkn
         )
         .returning({ id: pairingFacts.id });
       if (!rejected.length)
-        throw new AppError(409, "STALE_REVIEW", "That answer is no longer current.");
+        throw new AppError(412, "STALE_REVIEW", "That answer is no longer current.");
       return recordEvent(client, row.pairing, actor.userId, "fact_rejected", input.factId);
     }
     if (input.kind === "source_disposition") {
