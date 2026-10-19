@@ -33,6 +33,8 @@
     "db:migrate": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/migrate.ts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
+    "db:test:status": "node scripts/test-database.mjs status",
+    "db:test:reset": "node scripts/test-database.mjs reset",
     "db:seed:municipality": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/seed-municipality.ts",
     "identity:provision": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/provision.ts",
     "streaming": "npm run streaming -w @signal-desk/web",

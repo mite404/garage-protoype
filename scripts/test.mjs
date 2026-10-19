@@ -2,8 +2,23 @@ import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { normalizeSourceMaps } from "./coverage.mjs";
+import { describe, inspect, isClean } from "./test-database.mjs";
 
 const coverage = fileURLToPath(new URL("../coverage/", import.meta.url));
+const database = process.env.TEST_DATABASE_URL;
+const resetHint = "Stop the workflow that owns it, then run `npm run db:test:reset`.";
+
+// Fixtures use fixed IDs and installation-wide rows, so a database another workflow left
+// populated fails later tests with misleading constraint and count errors.
+if (database) {
+  const report = await inspect(database);
+  if (!isClean(report)) {
+    console.error(
+      `The test database is in use or holds fixtures.\n${describe(report)}\n${resetHint}`,
+    );
+    process.exit(1);
+  }
+}
 rmSync(coverage, { recursive: true, force: true });
 const result = spawnSync(
   process.execPath,
@@ -34,4 +49,15 @@ for (const name of readdirSync(coverage)) {
   normalizeSourceMaps(dump);
   writeFileSync(path, JSON.stringify(dump));
 }
-process.exit(result.status ?? 1);
+let status = result.status ?? 1;
+if (database) {
+  const report = await inspect(database);
+  if (!isClean(report)) {
+    const verdict = status
+      ? "Failed tests left fixtures behind."
+      : "Passing tests leaked fixtures.";
+    console.error(`${verdict}\n${describe(report)}\n${resetHint}`);
+    if (!status) status = 1;
+  }
+}
+process.exit(status);
