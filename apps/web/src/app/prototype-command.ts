@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 /** Posts an idempotent, unsent workflow command and reports the server's sanitized rejection.
+ * @returns The accepted command's `data`, unvalidated; callers narrow what they read.
  * @throws {Error} For network failures or a rejected command.
  */
 export async function postPrototypeCommand(url: string, body: string, key: string) {
@@ -15,4 +16,5 @@ export async function postPrototypeCommand(url: string, body: string, key: strin
       .parse(await response.json());
     throw new Error(problem.error.message);
   }
+  return ((await response.json()) as { data?: unknown }).data;
 }

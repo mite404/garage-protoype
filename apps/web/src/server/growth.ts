@@ -1,15 +1,9 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import {
-  refreshActor,
-  requireSession,
-  requireWrite,
-  requireOpportunity,
-  type Actor,
-} from "./access";
+import { refreshActor, requireSession, requireWrite, type Actor } from "./access";
 import { beginLocked, database, orm } from "./db";
 import {
   growthAccounts,
@@ -17,12 +11,6 @@ import {
   growthObservations,
   growthTerritories,
   identities,
-  organizations,
-  opportunities,
-  opportunityMembers,
-  sources,
-  evidenceBlockers,
-  vehicles,
 } from "./db-schema";
 import { AppError } from "./errors";
 import { parseInput } from "./validation";
@@ -80,6 +68,7 @@ function projection(row: typeof growthAccounts.$inferSelect) {
     ownerId: row.ownerId,
     organizationId: row.organizationId,
     opportunityId: row.opportunityId,
+    listingVehicleId: row.listingVehicleId,
     name: review?.name ?? directory.name,
     directory,
     review,
@@ -90,7 +79,8 @@ function projection(row: typeof growthAccounts.$inferSelect) {
     contactable: Boolean(
       review?.contact && review.contact.permission !== "unknown" && review.identity === "confirmed",
     ),
-    qualified: row.opportunityId !== null,
+    // A seller's draft listing qualifies it; earlier qualifications created a buyer opportunity.
+    qualified: row.listingVehicleId !== null || row.opportunityId !== null,
   };
 }
 
@@ -315,155 +305,5 @@ export async function routeProspect(actor: Actor, id: string) {
       .where(eq(growthAccounts.id, id));
     await recordGrowthEvent(client, id, `route:${match.route.id}`, "assigned", routing);
     return { ownerId: match.route.specialistId, routing };
-  });
-}
-
-async function requireBuyerMatch(
-  actor: Actor,
-  client: PoolClient,
-  organizationId: string,
-  opportunityId: string,
-  vehicleId: string,
-) {
-  const existing = await requireOpportunity(actor, opportunityId, "specialist", client);
-  const [organization] = await orm(client)
-    .select()
-    .from(organizations)
-    .where(eq(organizations.id, organizationId));
-  if (
-    !organization ||
-    existing.vehicle_id !== vehicleId ||
-    !(
-      existing.organization_id === organizationId ||
-      (organization.buyerId && existing.buyer_id === organization.buyerId)
-    )
-  )
-    throw new AppError(
-      409,
-      "MATCH_REQUIRED",
-      "The selected deal does not identify this account as its buyer. Seller relationships are not relabeled.",
-    );
-}
-
-/** Creates one human-qualified deal and evidence-review task without creating a login for a contact.
- * @throws {AppError} For unreviewed qualification, invalid vehicle, changed input or revoked access.
- */
-export async function qualifyProspect(actor: Actor, id: string, raw: unknown) {
-  requireSession(actor);
-  const input = parseInput(
-    z
-      .object({
-        vehicleId: text.max(200),
-        existingOpportunityId: z.string().trim().max(200).optional(),
-        reply: text,
-        provenance: text,
-        permission: z.enum(["synthetic", "permissioned"]),
-      })
-      .strict(),
-    raw,
-  );
-  return changeProspect(actor, id, async (client, account) => {
-    if (account.review?.identity !== "confirmed" || account.fit !== "fit" || !account.buyingSignal)
-      throw new AppError(
-        409,
-        "REVIEW_REQUIRED",
-        "Review identity, fit and cited buying need before qualification.",
-      );
-    if (account.opportunityId && account.organizationId) {
-      const existing = await requireOpportunity(actor, account.opportunityId, "specialist", client);
-      if (existing.vehicle_id !== input.vehicleId)
-        throw new AppError(
-          409,
-          "IDEMPOTENCY_CONFLICT",
-          "Account already has a different qualified deal.",
-        );
-      return { opportunityId: account.opportunityId, organizationId: account.organizationId };
-    }
-    const [vehicle] = await orm(client)
-      .select({ id: vehicles.id })
-      .from(vehicles)
-      .where(and(eq(vehicles.id, input.vehicleId), isNotNull(vehicles.published_at)));
-    if (!vehicle) throw new AppError(404, "NOT_FOUND", "Vehicle not found.");
-    const organizationId = account.organizationId ?? `growth-${id}`;
-    const opportunityId = input.existingOpportunityId || `growth-${id}`;
-    const nextAction =
-      "Review the prospect's original need and reply before preparing a supported follow-up.";
-    if (account.organizationId) {
-      if (!input.existingOpportunityId)
-        throw new AppError(
-          409,
-          "MATCH_REQUIRED",
-          "Choose the existing assigned buyer opportunity for a matched account.",
-        );
-      await requireBuyerMatch(actor, client, organizationId, opportunityId, input.vehicleId);
-    } else {
-      if (input.existingOpportunityId)
-        throw new AppError(409, "MATCH_REQUIRED", "Confirm the existing account match first.");
-      await orm(client).insert(organizations).values({
-        id: organizationId,
-        name: account.name,
-        city: account.directory.city,
-        region: "NY",
-        unit: "",
-        synthetic: account.directory.synthetic,
-      });
-      await orm(client).insert(opportunities).values({
-        id: opportunityId,
-        organization_id: organizationId,
-        vehicle_id: input.vehicleId,
-        buyer_id: null,
-        assignee_id: actor.userId,
-        next_action: nextAction,
-      });
-      await orm(client)
-        .insert(opportunityMembers)
-        .values({ opportunity_id: opportunityId, user_id: actor.userId });
-      await recordGrowthEvent(
-        client,
-        id,
-        "opportunity_created",
-        "opportunity_created",
-        "Created a new reviewed buyer opportunity",
-      );
-    }
-    const original = `${account.buyingSignal.text}\n\nOriginal reply: ${input.reply}`;
-    await orm(client)
-      .insert(sources)
-      .values({
-        id: `growth-source-${id}`,
-        opportunity_id: opportunityId,
-        owner_id: actor.userId,
-        name: "Reviewed prospect handoff",
-        media_type: "text/plain",
-        content: Buffer.from(original),
-        pages: [original],
-        kind: "inquiry",
-        audience: "sales",
-        permission: input.permission,
-        provenance: input.provenance,
-        shareable: false,
-      });
-    await orm(client)
-      .insert(evidenceBlockers)
-      .values({
-        id: `growth-blocker-${id}`,
-        opportunity_id: opportunityId,
-        blocker_key: `growth:${id}`,
-        question: input.reply,
-        assignee_id: actor.userId,
-        next_action: nextAction,
-      });
-    await orm(client)
-      .update(growthAccounts)
-      .set({ organizationId, opportunityId })
-      .where(eq(growthAccounts.id, id));
-    await recordGrowthEvent(
-      client,
-      id,
-      "qualified",
-      "qualified",
-      "Human-reviewed reply linked to a vehicle; original source requires evidence review",
-    );
-    return { opportunityId, organizationId };
   });
 }

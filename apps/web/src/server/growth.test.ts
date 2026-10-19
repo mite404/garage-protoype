@@ -12,7 +12,6 @@ import {
   getProspect,
   reviewProspect,
   routeProspect,
-  qualifyProspect,
 } from "./growth";
 import {
   enrollSequence,
@@ -23,6 +22,7 @@ import {
 } from "./outreach";
 import { getMunicipalityWorkspace } from "./municipalities";
 import { getWorkbench } from "./evidence";
+import { qualifySeller } from "./sourcing";
 import { inviteFeedback, submitFeedback, readFeedback } from "./feedback";
 import { analyzeGrowth, readGrowthInsights } from "../agents/growth";
 import { configureGrowthSchedule, sweepGrowth } from "./growth-scheduler";
@@ -249,42 +249,65 @@ test(
         enrollSequence(other, id, { key: "another", subject: "No", body: "STOP" }),
         { code: "SUPPRESSED" },
       );
-      await db.query(
-        "insert into signal_desk.vehicles(id,title) values ('growth-truck','Synthetic pumper')",
-      );
-      await assert.rejects(
-        qualifyProspect(other, id, {
-          vehicleId: "growth-truck",
-          reply: "Yes",
-          provenance: "Synthetic reply",
-          permission: "synthetic",
-        }),
-        { code: "NOT_FOUND" },
-      );
-      await db.query("update signal_desk.vehicles set published_at=now() where id='growth-truck'");
-      const handoff = await qualifyProspect(other, id, {
-        vehicleId: "growth-truck",
-        reply: "Yes, please send the pumper specifications.",
+      // Qualification makes the prospect a seller: a draft listing, never a buyer opportunity.
+      const sellerReply = {
+        vehicleTitle: "2005 synthetic engine",
+        reply: "Yes, the 2005 engine is for sale.",
         provenance: "Synthetic positive reply",
         permission: "synthetic",
-      });
+      };
+      await assert.rejects(qualifySeller(actor, id, sellerReply), { code: "NOT_FOUND" });
+      const listing = await qualifySeller(other, id, sellerReply);
+      assert.deepEqual(await qualifySeller(other, id, sellerReply), listing);
+      const qualifiedSeller = await getProspect(other, id);
+      assert.equal(qualifiedSeller.qualified, true);
+      assert.equal(qualifiedSeller.listingVehicleId, listing.vehicleId);
+      assert.equal(qualifiedSeller.opportunityId, null);
+      assert.deepEqual(
+        (
+          await db.query(
+            "select title, owner_organization_id, published_at from signal_desk.vehicles where id=$1",
+            [listing.vehicleId],
+          )
+        ).rows,
+        [
+          {
+            title: "2005 synthetic engine",
+            owner_organization_id: listing.organizationId,
+            published_at: null,
+          },
+        ],
+      );
       assert.equal(
         (
-          await qualifyProspect(other, id, {
-            vehicleId: "growth-truck",
-            reply: "Yes, please send the pumper specifications.",
-            provenance: "Synthetic positive reply",
-            permission: "synthetic",
-          })
-        ).opportunityId,
-        handoff.opportunityId,
+          await db.query(
+            "select count(*)::int as count from signal_desk.opportunities where organization_id=$1",
+            [listing.organizationId],
+          )
+        ).rows[0].count,
+        0,
       );
-      assert.equal((await getProspect(other, id)).qualified, true);
+      // The same department also buys through an assigned deal; buyer-side workflows follow it.
+      await db.query(
+        "insert into signal_desk.vehicles(id,title,published_at) values ('growth-truck','Synthetic pumper',now())",
+      );
+      const handoff = { organizationId: listing.organizationId, opportunityId: `growth-${id}` };
+      await db.query(
+        "insert into signal_desk.opportunities(id,organization_id,vehicle_id,assignee_id) values ($1,$2,'growth-truck',$3)",
+        [handoff.opportunityId, handoff.organizationId, specialist],
+      );
+      await db.query("insert into signal_desk.opportunity_members values ($1,$2)", [
+        handoff.opportunityId,
+        specialist,
+      ]);
+      await db.query("update signal_desk.growth_accounts set opportunity_id=$1 where id=$2", [
+        handoff.opportunityId,
+        id,
+      ]);
       const workspace = await getMunicipalityWorkspace(other, handoff.organizationId);
       assert.equal(workspace.organization.name, "Reviewed department");
       assert.equal(workspace.acquisitions.length, 1);
-      const workbench = await getWorkbench(other, handoff.opportunityId);
-      assert.ok(workbench.sources.some((source) => source.name === "Reviewed prospect handoff"));
+      await getWorkbench(other, handoff.opportunityId);
       await assert.rejects(getWorkbench(actor, handoff.opportunityId), { code: "NOT_FOUND" });
       const invitation = await inviteFeedback(other, id, {
         callKey: "synthetic-call-1",
@@ -524,17 +547,16 @@ test(
         ...reviewed,
         contact: { ...reviewed.contact!, email: "bounce@example.test" },
       });
-      await assert.rejects(
-        qualifyProspect(other, sellerProspect.id, {
-          vehicleId: "growth-truck",
-          existingOpportunityId: handoff.opportunityId,
-          reply: "Synthetic seller reply",
-          provenance: "Controlled source",
-          permission: "synthetic",
-        }),
-        { code: "MATCH_REQUIRED" },
+      // A matched seller's listing belongs to its existing department, not a new organization.
+      const matchedListing = await qualifySeller(other, sellerProspect.id, {
+        ...sellerReply,
+        vehicleTitle: "Matched seller's synthetic tanker",
+      });
+      assert.equal(matchedListing.organizationId, "growth-seller");
+      assert.equal(
+        (await getAccountProfile(other, "growth-seller")).growth!.account.qualified,
+        true,
       );
-      assert.equal((await getProspect(other, sellerProspect.id)).qualified, false);
       const bounceEnrollment = await enrollSequence(other, sellerProspect.id, {
         key: "bounce-stop",
         subject: "Controlled bounce",
@@ -693,6 +715,7 @@ test(
       await db.query(
         "update signal_desk.vehicles set owner_organization_id=null where id='growth-truck'",
       );
+      await db.query("delete from signal_desk.vehicles where id like 'listing-%'");
       await db.query("delete from signal_desk.organizations where id like 'growth-%'");
       await db.query("delete from signal_desk.vehicles where id='growth-truck'");
       await db.query("delete from signal_desk.growth_territories where id='test-ny'");

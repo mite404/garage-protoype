@@ -270,4 +270,11 @@ export type SourcingAccount = {
   replies: { id: string; channel: "email" | "note"; receivedAt: Date; text: string }[];
   facts: Fact[];
   decision: (Decision & { decidedAt: Date; basis: DecisionBasis }) | null;
+  // The connection's stage and, once the seller is qualified, its listed or draft vehicle.
+  connection: {
+    stage: string;
+    vehicle: { id: string; title: string; listed: boolean } | null;
+    // Specialist-recorded introduction and sale notes, verbatim and newest last.
+    milestones: { kind: "introduced" | "sale_closed"; at: Date; note: string }[];
+  };
 };

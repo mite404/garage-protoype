@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import {
@@ -9,24 +9,28 @@ import {
   decisionBasis,
   evaluateFit,
   factSchema,
+  isStale,
   needSchema,
   type Fact,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
 import { sourcingCardRef } from "@signal-desk/contracts/assistance-schema";
-import type { Actor } from "./access";
+import { requireSession, type Actor } from "./access";
 import { lockedTransaction, orm } from "./db";
 import {
   buyerNeeds,
   cardCalls,
+  growthAccounts,
+  organizations,
   pairingEvents,
   pairingFacts,
   sourceChanges,
   sourcingCases,
   streamTurns,
+  vehicles,
 } from "./db-schema";
 import { AppError } from "./errors";
-import { requireGrowthActor, requireProspect } from "./growth";
+import { changeProspect, recordGrowthEvent, requireGrowthActor, requireProspect } from "./growth";
 import { readReceivedReplies } from "./growth-integrations";
 import { enrollSequence, readOutreach } from "./outreach";
 import { parseInput } from "./validation";
@@ -36,6 +40,7 @@ type Need = typeof buyerNeeds.$inferSelect;
 
 const id = z.string().trim().min(1).max(160);
 const revision = z.number().int().nonnegative();
+const note = z.string().trim().min(1).max(2000);
 const constraintsSchema = needSchema.pick({
   vehicleClass: true,
   budgetBasis: true,
@@ -86,6 +91,8 @@ const command = z.discriminatedUnion("kind", [
       disposition: z.enum(["kept", "dismissed"]),
     })
     .strict(),
+  z.object({ kind: z.literal("introduce"), revision, note }).strict(),
+  z.object({ kind: z.literal("close_sale"), revision, note }).strict(),
 ]);
 // A specialist command against one sourcing case, checked against its current revision.
 type SourcingCommand = z.infer<typeof command>;
@@ -98,9 +105,26 @@ const decisionStages = {
 };
 // Next actions a decision implies; investigating keeps the specialist's current next action.
 const decisionActions: Record<string, string | undefined> = {
-  proceed: "Share the reviewed pairing with the buyer for review.",
+  proceed: "Share the reviewed evidence with the buyer, then record the introduction.",
   reject: "Find another candidate for this buyer need.",
 };
+// Stages a connection can no longer leave: one closed sale ends every competing connection.
+const closedStages = ["sale_closed", "closed_elsewhere"];
+// Milestones a specialist records after a proceed decision; nothing is sent or committed.
+const milestones = {
+  introduce: {
+    from: "ready_for_buyer_review",
+    to: "introduced",
+    nextAction: "Follow up with the buyer and seller, then record the sale outcome.",
+    refusal: "Record a current proceed decision before introducing the buyer.",
+  },
+  close_sale: {
+    from: "introduced",
+    to: "sale_closed",
+    nextAction: "Sale recorded. Hand off payment and delivery to the people who own them.",
+    refusal: "Introduce the buyer and seller before recording a sale.",
+  },
+} as const;
 // A sequence reports its most significant step: uncertain, then stopped, then sent.
 const statePriority = ["queued", "dispatched", "sent", "stopped", "uncertain"];
 // Stages where asking the seller is still meaningful; a decided pairing must be reopened first.
@@ -210,21 +234,29 @@ export async function requireSourcingCase(actor: Actor, caseId: string, client?:
   return { ...row, seller };
 }
 
-/** Lists the specialist's own sourcing cases as a work queue, newest first.
+/** Lists the specialist's own connections, newest first, with each one's vehicle and the count
+ * of proposed answers still waiting on review.
  * @throws {AppError} For revoked specialist access.
  */
 export async function listSourcingCases(actor: Actor) {
   const current = await requireGrowthActor(actor);
   const rows = await orm()
-    .select({ pairing: sourcingCases, need: buyerNeeds })
+    .select({
+      pairing: sourcingCases,
+      need: buyerNeeds,
+      vehicle: { id: vehicles.id, title: vehicles.title },
+      proposals: sql<number>`(select count(*)::int from ${pairingFacts}
+        where ${pairingFacts.caseId} = ${sourcingCases.id} and ${pairingFacts.status} = 'proposed')`,
+    })
     .from(sourcingCases)
     .innerJoin(buyerNeeds, eq(buyerNeeds.id, sourcingCases.needId))
+    .leftJoin(vehicles, eq(vehicles.id, sourcingCases.vehicleId))
     .where(and(eq(sourcingCases.ownerId, current.userId), eq(buyerNeeds.ownerId, current.userId)))
     .orderBy(desc(sourcingCases.createdAt))
     .limit(100);
   const cases = [];
   // Each seller is rechecked by its owner; an inaccessible seller drops its row.
-  for (const { pairing, need } of rows) {
+  for (const { pairing, need, vehicle, proposals } of rows) {
     const seller = await requireProspect(actor, pairing.sellerProspectId).catch(() => null);
     if (seller)
       cases.push({
@@ -234,6 +266,8 @@ export async function listSourcingCases(actor: Actor) {
         constraints: constraintsSchema.parse(need.constraints),
         buyer: need.buyerLabel,
         seller: seller.name,
+        vehicle,
+        proposals,
         stage: pairing.stage,
         nextAction: pairing.nextAction,
         needState: need.state,
@@ -241,6 +275,51 @@ export async function listSourcingCases(actor: Actor) {
   }
   await requireGrowthActor(actor);
   return cases;
+}
+
+/** Lists the specialist's own buyer needs, newest first, including needs with no connection yet.
+ * @throws {AppError} For revoked specialist access.
+ */
+export async function listBuyerNeeds(actor: Actor) {
+  const current = await requireGrowthActor(actor);
+  const rows = await orm()
+    .select()
+    .from(buyerNeeds)
+    .where(eq(buyerNeeds.ownerId, current.userId))
+    .orderBy(desc(buyerNeeds.createdAt))
+    .limit(100);
+  await requireGrowthActor(actor);
+  return rows.map((need) => ({
+    id: need.id,
+    buyer: need.buyerLabel,
+    statement: need.statement,
+    provenance: need.provenance,
+    state: need.state,
+    synthetic: need.synthetic,
+    constraints: constraintsSchema.parse(need.constraints),
+  }));
+}
+
+/** Lists vehicles owned by the departments of the specialist's own seller accounts, so a
+ * connection can start from a listing. Drafts are included; nothing here publishes a listing.
+ * @throws {AppError} For revoked specialist access.
+ */
+export async function listSellerListings(actor: Actor) {
+  const current = await requireGrowthActor(actor);
+  const rows = await orm()
+    .select({
+      id: vehicles.id,
+      title: vehicles.title,
+      publishedAt: vehicles.published_at,
+      sellerId: growthAccounts.id,
+    })
+    .from(vehicles)
+    .innerJoin(growthAccounts, eq(growthAccounts.organizationId, vehicles.ownerOrganizationId))
+    .where(eq(growthAccounts.ownerId, current.userId))
+    .orderBy(asc(vehicles.title))
+    .limit(100);
+  await requireGrowthActor(actor);
+  return rows.map(({ publishedAt, ...row }) => ({ ...row, listed: publishedAt !== null }));
 }
 
 // Runs one serialized write with current write scope checked at both transaction boundaries.
@@ -352,7 +431,7 @@ function outreachSummary(messages: OutreachMessage[]) {
  */
 export async function getSourcingAccount(actor: Actor, caseId: string) {
   const { pairing, need, seller } = await requireSourcingCase(actor, caseId);
-  const [facts, changes, replies, messages, current] = [
+  const [facts, changes, replies, messages, current, vehicle, progress] = [
     await orm()
       .select()
       .from(pairingFacts)
@@ -368,6 +447,24 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
       message.enrollmentKey?.startsWith(`pairing:${caseId}:`),
     ),
     await caseRevision(undefined, caseId),
+    pairing.vehicleId
+      ? (
+          await orm()
+            .select({ id: vehicles.id, title: vehicles.title, publishedAt: vehicles.published_at })
+            .from(vehicles)
+            .where(eq(vehicles.id, pairing.vehicleId))
+        )[0]
+      : undefined,
+    await orm()
+      .select()
+      .from(pairingEvents)
+      .where(
+        and(
+          eq(pairingEvents.caseId, caseId),
+          inArray(pairingEvents.kind, ["introduced", "sale_closed"]),
+        ),
+      )
+      .orderBy(asc(pairingEvents.createdAt)),
   ];
   const trigger = changes.find((change) => change.disposition !== "dismissed") ?? null;
   const contact = seller.review?.contact;
@@ -401,6 +498,17 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     replies,
     facts: facts.map(factRow),
     decision: pairing.decision ? decisionRecord.parse(pairing.decision) : null,
+    connection: {
+      stage: pairing.stage,
+      vehicle: vehicle
+        ? { id: vehicle.id, title: vehicle.title, listed: vehicle.publishedAt !== null }
+        : null,
+      milestones: progress.map((event) => ({
+        kind: event.kind as "introduced" | "sale_closed",
+        at: event.createdAt,
+        note: event.detail,
+      })),
+    },
   };
   await requireSourcingCase(actor, caseId);
   return {
@@ -479,6 +587,19 @@ async function decide(
   actorId: string,
   input: Extract<SourcingCommand, { kind: "decide" }>,
 ) {
+  if (closedStages.includes(row.pairing.stage))
+    throw new AppError(
+      409,
+      "CONNECTION_CLOSED",
+      "This connection is closed. Its decision is final.",
+    );
+  // After an introduction only a rejection still applies; the next step is the sale outcome.
+  if (row.pairing.stage === "introduced" && input.decision !== "reject")
+    throw new AppError(
+      409,
+      "CONNECTION_ADVANCED",
+      "The buyer was introduced. Record the sale outcome or reject this connection.",
+    );
   const facts = (
     await orm(client).select().from(pairingFacts).where(eq(pairingFacts.caseId, row.pairing.id))
   ).map(factRow);
@@ -499,7 +620,10 @@ async function decide(
       stage: decisionStages[decision.decision],
       nextAction: decisionActions[decision.decision] ?? row.pairing.nextAction,
     })
-    .where(eq(sourcingCases.id, row.pairing.id));
+    // A sale closed elsewhere meanwhile keeps this connection closed.
+    .where(
+      and(eq(sourcingCases.id, row.pairing.id), notInArray(sourcingCases.stage, closedStages)),
+    );
   await recordEvent(client, row.pairing, actorId, `decided_${decision.decision}`, decision.reason);
 }
 
@@ -525,6 +649,91 @@ async function review(
     .where(and(eq(pairingFacts.caseId, row.pairing.id), inArray(pairingFacts.id, factIds)));
   await recordEvent(client, row.pairing, actorId, "accepted", factIds.join(","));
   return accepted;
+}
+
+// Shares writeTransaction's namespace, so opening and selling on one need or vehicle serialize.
+const lockKey = (key: string) => sql`select pg_advisory_xact_lock(hashtextextended(${key},76101))`;
+
+// A closed sale ends every other open connection for the same vehicle or the same buyer need, so
+// one vehicle never counts as two sales and one need is never fulfilled twice.
+async function closeCompeting(client: PoolClient, sold: Case, actorId: string) {
+  const competing = await orm(client)
+    .select()
+    .from(sourcingCases)
+    .where(
+      and(
+        ne(sourcingCases.id, sold.id),
+        notInArray(sourcingCases.stage, [...closedStages, "rejected", "unavailable"]),
+        sold.vehicleId
+          ? sql`(${sourcingCases.needId} = ${sold.needId} or ${sourcingCases.vehicleId} = ${sold.vehicleId})`
+          : eq(sourcingCases.needId, sold.needId),
+      ),
+    );
+  for (const other of competing) {
+    const reason =
+      other.needId === sold.needId
+        ? "The buyer need was fulfilled through another connection."
+        : "The vehicle was sold through another connection.";
+    await orm(client)
+      .update(sourcingCases)
+      .set({ stage: "closed_elsewhere", nextAction: reason })
+      .where(eq(sourcingCases.id, other.id));
+    // Its own ID namespace, since this transaction does not hold the other connection's lock.
+    await orm(client)
+      .insert(pairingEvents)
+      .values({
+        id: `${other.id}:closed:${sold.id}`,
+        caseId: other.id,
+        actorId,
+        kind: "closed_elsewhere",
+        detail: reason,
+      });
+  }
+  await orm(client)
+    .update(buyerNeeds)
+    .set({ state: "fulfilled" })
+    .where(eq(buyerNeeds.id, sold.needId));
+}
+
+async function advance(
+  client: PoolClient,
+  row: Awaited<ReturnType<typeof requireSourcingCase>>,
+  actorId: string,
+  input: Extract<SourcingCommand, { kind: "introduce" | "close_sale" }>,
+) {
+  const step = milestones[input.kind];
+  // Sales for one need or one vehicle serialize, then the stage is read again under those locks.
+  await orm(client).execute(lockKey(`need:${row.pairing.needId}`));
+  if (row.pairing.vehicleId) await orm(client).execute(lockKey(`vehicle:${row.pairing.vehicleId}`));
+  const [pairing] = await orm(client)
+    .select()
+    .from(sourcingCases)
+    .where(eq(sourcingCases.id, row.pairing.id));
+  const [need] = await orm(client).select().from(buyerNeeds).where(eq(buyerNeeds.id, row.need.id));
+  if (!pairing || !need || pairing.stage !== step.from)
+    throw new AppError(409, "STAGE_REQUIRED", step.refusal);
+  if (!pairing.vehicleId)
+    throw new AppError(
+      409,
+      "LISTING_REQUIRED",
+      "Qualify the seller to draft its listing before introducing the buyer.",
+    );
+  if (need.state !== "active")
+    throw new AppError(409, "NEED_INACTIVE", "This buyer need is no longer active.");
+  if (input.kind === "introduce") {
+    const facts = (
+      await orm(client).select().from(pairingFacts).where(eq(pairingFacts.caseId, pairing.id))
+    ).map(factRow);
+    const decision = pairing.decision ? decisionRecord.parse(pairing.decision) : null;
+    if (decision?.decision !== "proceed" || isStale(decision.basis, needProjection(need), facts))
+      throw new AppError(409, "DECISION_REQUIRED", step.refusal);
+  }
+  await orm(client)
+    .update(sourcingCases)
+    .set({ stage: step.to, nextAction: step.nextAction })
+    .where(eq(sourcingCases.id, pairing.id));
+  await recordEvent(client, pairing, actorId, step.to, input.note);
+  if (input.kind === "close_sale") await closeCompeting(client, pairing, actorId);
 }
 
 /** Applies one reviewed specialist command. External delivery stays with the growth owner.
@@ -560,6 +769,8 @@ export async function runSourcingCommand(actor: Actor, caseId: string, raw: unkn
   return changeCase(actor, caseId, input.revision, async (client, row) => {
     if (input.kind === "accept") return review(client, row, actor.userId, input.factIds);
     if (input.kind === "decide") return decide(client, row, actor.userId, input);
+    if (input.kind === "introduce" || input.kind === "close_sale")
+      return advance(client, row, actor.userId, input);
     if (input.kind === "reject_fact") {
       const rejected = await orm(client)
         .update(pairingFacts)
@@ -696,7 +907,9 @@ const needInput = z
 const caseInput = z
   .object({
     needId: id,
-    sellerProspectId: id,
+    // A connection starts from a buyer need toward a seller, or from a seller's listed vehicle.
+    sellerProspectId: id.optional(),
+    vehicleId: id.optional(),
     nextAction: z.string().trim().min(1).max(300),
     sourceChange: z
       .object({
@@ -707,9 +920,11 @@ const caseInput = z
         observedAt: z.coerce.date(),
         synthetic: z.boolean(),
       })
-      .strict(),
+      .strict()
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => input.sellerProspectId || input.vehicleId, "Choose a seller or a vehicle.");
 
 /** Records a confirmed buyer need owned by the current specialist. Creates no vehicle, deal or
  * buyer identity.
@@ -725,56 +940,232 @@ export async function createBuyerNeed(actor: Actor, raw: unknown) {
   return needId;
 }
 
-/** Pairs an owned need with an owned seller prospect after a cited source change. The change is
- * a research trigger only. Repeating the same change returns the existing case.
- * @throws {AppError} For another owner's need or seller, invalid input or missing write access.
+// Adds a seller's vehicle to a connection that had none. The event uses its own ID namespace, since
+// callers do not hold the connection's lock; the added event still advances its revision.
+async function attachVehicle(client: PoolClient, row: Case, actorId: string, vehicleId: string) {
+  const attached = await orm(client)
+    .update(sourcingCases)
+    .set({ vehicleId })
+    .where(and(eq(sourcingCases.id, row.id), sql`${sourcingCases.vehicleId} is null`))
+    .returning({ id: sourcingCases.id });
+  if (attached.length)
+    await orm(client)
+      .insert(pairingEvents)
+      .values({
+        id: `${row.id}:vehicle:${vehicleId}`,
+        caseId: row.id,
+        actorId,
+        kind: "vehicle_attached",
+        detail: vehicleId,
+      })
+      .onConflictDoNothing();
+}
+
+// The seller account that owns a vehicle, among the current specialist's own accounts.
+async function requireListingSeller(client: PoolClient, ownerId: string, vehicleId: string) {
+  const [listing] = await orm(client)
+    .select({ sellerId: growthAccounts.id })
+    .from(vehicles)
+    .innerJoin(growthAccounts, eq(growthAccounts.organizationId, vehicles.ownerOrganizationId))
+    .where(
+      and(
+        eq(vehicles.id, vehicleId),
+        eq(growthAccounts.ownerId, ownerId),
+        isNotNull(vehicles.ownerOrganizationId),
+      ),
+    )
+    .orderBy(asc(growthAccounts.id))
+    .limit(1);
+  if (!listing) throw new AppError(404, "NOT_FOUND", "Listing not found.");
+  return listing.sellerId;
+}
+
+type ConnectionInput = z.infer<typeof caseInput>;
+
+async function requireActiveNeed(client: PoolClient, ownerId: string, needId: string) {
+  const [need] = await orm(client)
+    .select({ state: buyerNeeds.state })
+    .from(buyerNeeds)
+    .where(and(eq(buyerNeeds.id, needId), eq(buyerNeeds.ownerId, ownerId)));
+  if (!need) throw new AppError(404, "NOT_FOUND", "Buyer need not found.");
+  if (need.state !== "active")
+    throw new AppError(409, "NEED_INACTIVE", "Only an active buyer need can be connected.");
+}
+
+// The seller on either side: named directly, or the owner of the chosen vehicle.
+async function connectionSeller(client: PoolClient, ownerId: string, input: ConnectionInput) {
+  if (!input.vehicleId) return input.sellerProspectId!;
+  const sellerId = await requireListingSeller(client, ownerId, input.vehicleId);
+  if (input.sellerProspectId && input.sellerProspectId !== sellerId)
+    throw new AppError(409, "MATCH_REQUIRED", "That vehicle belongs to a different seller.");
+  // Serializes with a sale of this vehicle, so a sold vehicle never gains a new connection.
+  await orm(client).execute(lockKey(`vehicle:${input.vehicleId}`));
+  const [sold] = await orm(client)
+    .select({ id: sourcingCases.id })
+    .from(sourcingCases)
+    .where(
+      and(eq(sourcingCases.vehicleId, input.vehicleId), eq(sourcingCases.stage, "sale_closed")),
+    );
+  if (sold) throw new AppError(409, "VEHICLE_SOLD", "This vehicle was already sold.");
+  return sellerId;
+}
+
+// Repeating a connection returns it, adding the vehicle once it is known.
+async function reuseConnection(
+  client: PoolClient,
+  existing: Case,
+  actorId: string,
+  vehicleId: string | undefined,
+) {
+  if (!vehicleId || existing.vehicleId === vehicleId) return existing.id;
+  if (existing.vehicleId)
+    throw new AppError(
+      409,
+      "CONNECTION_EXISTS",
+      "This buyer need is already connected to another vehicle from this seller.",
+    );
+  await attachVehicle(client, existing, actorId, vehicleId);
+  return existing.id;
+}
+
+async function insertConnection(
+  client: PoolClient,
+  ownerId: string,
+  sellerId: string,
+  input: ConnectionInput,
+) {
+  // Any listing the seller already has joins the connection, so either side reaches the vehicle.
+  const [seller] = await orm(client)
+    .select({ listing: growthAccounts.listingVehicleId })
+    .from(growthAccounts)
+    .where(eq(growthAccounts.id, sellerId));
+  const caseId = crypto.randomUUID();
+  await orm(client)
+    .insert(sourcingCases)
+    .values({
+      id: caseId,
+      needId: input.needId,
+      sellerProspectId: sellerId,
+      vehicleId: input.vehicleId ?? seller?.listing ?? null,
+      ownerId,
+      nextAction: input.nextAction,
+    });
+  if (input.sourceChange)
+    await orm(client)
+      .insert(sourceChanges)
+      .values({ id: crypto.randomUUID(), caseId, ...input.sourceChange })
+      .onConflictDoNothing();
+  const origin = input.vehicleId ? "From a listed vehicle" : "From a buyer need";
+  await orm(client)
+    .insert(pairingEvents)
+    .values({
+      id: `${caseId}:1`,
+      caseId,
+      actorId: ownerId,
+      kind: "opened",
+      detail: input.sourceChange?.sourceLabel ?? origin,
+    });
+  return caseId;
+}
+
+/** Opens a connection between an owned, active buyer need and an owned seller, from either side:
+ * toward a seller prospect, or from a vehicle that seller's department owns. A cited source change
+ * is a research trigger only. Repeating the request returns the existing connection, adding the
+ * vehicle when it was not yet known.
+ * @throws {AppError} For another owner's need, seller or vehicle, an inactive need, a sold vehicle,
+ *   a different vehicle already on the connection, invalid input or missing write access.
  */
-export async function openSourcingCase(actor: Actor, raw: unknown) {
+export async function openConnection(actor: Actor, raw: unknown) {
   const input = parseInput(caseInput, raw);
-  return writeTransaction(
-    actor,
-    `pairing:${input.needId}:${input.sellerProspectId}`,
-    async (client) => {
-      const current = await requireGrowthActor(actor, client);
-      const [need] = await orm(client)
-        .select({ id: buyerNeeds.id })
-        .from(buyerNeeds)
-        .where(and(eq(buyerNeeds.id, input.needId), eq(buyerNeeds.ownerId, current.userId)));
-      if (!need) throw new AppError(404, "NOT_FOUND", "Buyer need not found.");
-      await requireProspect(actor, input.sellerProspectId, client);
-      const [existing] = await orm(client)
-        .select({ id: sourcingCases.id })
-        .from(sourcingCases)
-        .where(
-          and(
-            eq(sourcingCases.needId, input.needId),
-            eq(sourcingCases.sellerProspectId, input.sellerProspectId),
-          ),
-        );
-      if (existing) return existing.id;
-      const caseId = crypto.randomUUID();
-      await orm(client).insert(sourcingCases).values({
-        id: caseId,
-        needId: input.needId,
-        sellerProspectId: input.sellerProspectId,
-        ownerId: current.userId,
-        nextAction: input.nextAction,
+  return writeTransaction(actor, `need:${input.needId}`, async (client) => {
+    const current = await requireGrowthActor(actor, client);
+    await requireActiveNeed(client, current.userId, input.needId);
+    const sellerId = await connectionSeller(client, current.userId, input);
+    await requireProspect(actor, sellerId, client);
+    const [existing] = await orm(client)
+      .select()
+      .from(sourcingCases)
+      .where(
+        and(eq(sourcingCases.needId, input.needId), eq(sourcingCases.sellerProspectId, sellerId)),
+      );
+    const caseId = existing
+      ? await reuseConnection(client, existing, current.userId, input.vehicleId)
+      : await insertConnection(client, current.userId, sellerId, input);
+    await requireProspect(actor, sellerId, client);
+    return caseId;
+  });
+}
+
+const qualifyInput = z
+  .object({
+    vehicleTitle: z.string().trim().min(1).max(200),
+    reply: z.string().trim().min(1).max(1000),
+    provenance: z.string().trim().min(1).max(1000),
+    permission: z.enum(["synthetic", "permissioned"]),
+  })
+  .strict();
+
+/** Qualifies a reviewed seller from its original reply: drafts one unpublished listing owned by the
+ * seller's department and adds it to the seller's open connections. Creates no buyer opportunity,
+ * no login for a contact and publishes nothing. Repeating returns the same listing.
+ * @throws {AppError} For unreviewed identity, fit or sale signal, invalid input or revoked access.
+ */
+export async function qualifySeller(actor: Actor, id: string, raw: unknown) {
+  requireSession(actor);
+  const input = parseInput(qualifyInput, raw);
+  return changeProspect(actor, id, async (client, account) => {
+    if (account.review?.identity !== "confirmed" || account.fit !== "fit" || !account.buyingSignal)
+      throw new AppError(
+        409,
+        "REVIEW_REQUIRED",
+        "Review identity, fit and the cited sale signal before qualifying this seller.",
+      );
+    if (account.listingVehicleId)
+      return { vehicleId: account.listingVehicleId, organizationId: account.organizationId! };
+    const organizationId = account.organizationId ?? `growth-${id}`;
+    const vehicleId = `listing-${id}`;
+    if (!account.organizationId)
+      await orm(client).insert(organizations).values({
+        id: organizationId,
+        name: account.name,
+        city: account.directory.city,
+        region: "NY",
+        unit: "",
+        synthetic: account.directory.synthetic,
       });
-      await orm(client)
-        .insert(sourceChanges)
-        .values({ id: crypto.randomUUID(), caseId, ...input.sourceChange })
-        .onConflictDoNothing();
-      await orm(client)
-        .insert(pairingEvents)
-        .values({
-          id: `${caseId}:1`,
-          caseId,
-          actorId: current.userId,
-          kind: "opened",
-          detail: input.sourceChange.sourceLabel,
-        });
-      await requireProspect(actor, input.sellerProspectId, client);
-      return caseId;
-    },
-  );
+    await orm(client)
+      .insert(vehicles)
+      .values({ id: vehicleId, title: input.vehicleTitle, ownerOrganizationId: organizationId });
+    await orm(client)
+      .update(growthAccounts)
+      .set({ organizationId, listingVehicleId: vehicleId })
+      .where(eq(growthAccounts.id, id));
+    // The original reply stays verbatim beside the qualification, as the listing's first evidence.
+    await recordGrowthEvent(
+      client,
+      id,
+      "seller_reply",
+      "seller_reply",
+      `${input.reply}\n\nProvenance: ${input.provenance} · ${input.permission}`,
+    );
+    await recordGrowthEvent(
+      client,
+      id,
+      "qualified",
+      "qualified",
+      "Human-reviewed seller reply; drafted an unpublished listing",
+    );
+    const open = await orm(client)
+      .select()
+      .from(sourcingCases)
+      .where(
+        and(
+          eq(sourcingCases.sellerProspectId, id),
+          sql`${sourcingCases.vehicleId} is null`,
+          notInArray(sourcingCases.stage, closedStages),
+        ),
+      );
+    for (const row of open) await attachVehicle(client, row, actor.userId, vehicleId);
+    return { vehicleId, organizationId };
+  });
 }

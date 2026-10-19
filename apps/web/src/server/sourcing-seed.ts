@@ -2,7 +2,7 @@ import "server-only";
 import type { Actor } from "./access";
 import { AppError } from "./errors";
 import { importDirectory, listProspects, reviewProspect } from "./growth";
-import { createBuyerNeed, listSourcingCases, openSourcingCase } from "./sourcing";
+import { createBuyerNeed, listSourcingCases, openConnection } from "./sourcing";
 
 const seller = {
   sourceId: "NY-SYN-CEDAR-VALLEY",
@@ -64,7 +64,7 @@ export async function seedSourcing(actor: Actor) {
     inventory: { searchedAt: new Date("2026-10-19T00:00:00Z"), reviewedMatches: 0 },
     synthetic: true,
   });
-  return openSourcingCase(actor, {
+  return openConnection(actor, {
     needId,
     sellerProspectId: prospect.id,
     nextAction: "Confirm availability and authority before buyer outreach.",
