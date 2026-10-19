@@ -84,7 +84,11 @@ function consequence(need: Need, facts: Fact[], proposal: Fact) {
 }
 
 /** A cited source change shown as a research trigger, never as proof of a sale. */
-export function SourceChangeCard({ trigger }: { trigger: SourcingAccount["trigger"] }) {
+export function SourceChangeCard({
+  trigger,
+}: {
+  trigger: NonNullable<SourcingAccount["trigger"]>;
+}) {
   return (
     <Card className="assistance-card sourcing-card" data-card="source-change">
       <Badge variant="outline" className="state state-needs_review border-transparent">
@@ -269,7 +273,7 @@ export function ReplyReview({
         replies.map((reply) => (
           <blockquote key={reply.id} className="card-citation">
             <p className="reading-label">
-              Original {reply.channel === "email" ? "email" : "form response"} ·{" "}
+              {reply.channel === "email" ? "Original email" : "Recorded note"} ·{" "}
               {date.format(reply.receivedAt)}
             </p>
             <LiteralProse text={reply.text} />
@@ -427,5 +431,34 @@ export function DecisionPacket({
         Record decision
       </Button>
     </Card>
+  );
+}
+
+/** Records a reply received outside email, such as a call, verbatim; parsing only proposes. */
+export function RecordNote({ onRecord }: { onRecord: (text: string) => void }) {
+  const [text, setText] = useState("");
+  return (
+    <form
+      className="sourcing-note"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onRecord(text.trim());
+        setText("");
+      }}
+    >
+      <label htmlFor="sourcing-note">Record a reply received by phone or in person</label>
+      <textarea
+        id="sourcing-note"
+        rows={3}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <p className="card-caveat">
+        Saved verbatim. Explicit measurements become proposals for your review, never facts.
+      </p>
+      <Button type="submit" variant="outline" disabled={!text.trim()}>
+        Record reply
+      </Button>
+    </form>
   );
 }

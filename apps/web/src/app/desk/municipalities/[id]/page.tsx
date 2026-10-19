@@ -6,7 +6,7 @@ import { readStreams } from "@/server/streaming";
 import { getOrganizationGrowth } from "@/server/growth-views";
 import { GrowthSummary } from "../../growth-profile";
 import { AppError } from "@/server/errors";
-import SaleChat from "./sale-chat";
+import ChatAdapter from "../../chat-adapter";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +41,8 @@ export default async function MunicipalityPage({ params }: { params: Promise<{ i
       workspace={workspace}
       enrichment={growth ? <GrowthSummary profile={growth} /> : undefined}
       chat={
-        <SaleChat
-          opportunityId={acquisitions[0].id}
+        <ChatAdapter
+          subjectId={acquisitions[0].id}
           context={`${organization.city} · ${organization.unit || organization.name}`}
           initialStreams={streams}
         />

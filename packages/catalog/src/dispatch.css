@@ -459,6 +459,9 @@
   display: grid;
   gap: 10px;
   font-size: 14px;
+  /* Chat messages wrap anywhere; requirements, amounts and statuses stay whole. */
+  overflow-wrap: normal;
+  container-type: inline-size;
 }
 .sourcing-fit table {
   width: 100%;
@@ -486,6 +489,7 @@
 }
 .sourcing-fit .state {
   font-size: 12px;
+  white-space: nowrap;
 }
 .sourcing-status {
   margin-bottom: 10px;
@@ -545,7 +549,25 @@
   color: var(--muted-foreground);
   font-size: 12px;
 }
-@media (max-width: 600px) {
+.sourcing-problem {
+  margin: -16px 0 28px;
+  padding: 10px 14px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--destructive) 10%, var(--card));
+  color: var(--destructive);
+}
+.sourcing-note {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.sourcing-note label {
+  margin: 0;
+}
+.sourcing-note button {
+  justify-self: start;
+}
+@container (max-width: 520px) {
   .sourcing-fit :is(th, td) {
     padding: 8px 10px;
   }

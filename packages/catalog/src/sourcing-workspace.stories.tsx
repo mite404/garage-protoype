@@ -3,6 +3,7 @@ import { expect, userEvent, within } from "storybook/test";
 import { useState } from "react";
 import {
   acceptSelected,
+  decisionBasis,
   evaluateFit,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
@@ -21,6 +22,7 @@ const cedarValley: SourcingAccount = {
   owner: "Maya Chen",
   nextAction: "Review the reply. Height and sale timing are proposed, not yet reviewed.",
   trigger: {
+    id: "synthetic-source-change",
     excerpt: "New pumper scheduled to enter service in November.",
     sourceLabel: "Replacement notice · Synthetic source",
     url: "https://example.org/synthetic/cedar-valley-notice",
@@ -87,8 +89,11 @@ function Interactive({ data }: { data: SourcingAccount }) {
       onAccept={(ids) =>
         setState((s) => ({ ...s, facts: acceptSelected(s.facts, ids, reviewedAt) }))
       }
-      onDecide={(decision, basis) =>
-        setState((s) => ({ ...s, decision: { ...decision, basis, decidedAt: reviewedAt } }))
+      onDecide={(decision) =>
+        setState((s) => ({
+          ...s,
+          decision: { ...decision, basis: decisionBasis(s.need, s.facts), decidedAt: reviewedAt },
+        }))
       }
     />
   );
@@ -162,7 +167,7 @@ export const ChatCards: Story = {
     const rows = evaluateFit(data.need, data.facts);
     return (
       <div className="grid w-[min(90vw,420px)] gap-4 p-4">
-        <SourceChangeCard trigger={data.trigger} />
+        <SourceChangeCard trigger={data.trigger!} />
         <FitTable need={data.need} rows={rows} />
         <ReplyReview need={data.need} replies={data.replies} facts={data.facts} />
         <DecisionPacket need={data.need} rows={rows} decision={null} />
