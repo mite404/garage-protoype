@@ -236,7 +236,7 @@ function ChatComposer({
         <p className="desk-chat-guardrail">Suggestions do not change reviewed facts.</p>
       )}
       <label className="sr-only" htmlFor="sale-message">
-        Message sale assistant
+        Message {copy.title.toLowerCase()}
       </label>
       <div className="chat-composer">
         <textarea

@@ -35,7 +35,8 @@ const fitStates: Record<FitStatus, [label: string, tone: string]> = {
   incomplete: ["Incomplete", "state-needs_review"],
   conflicting: ["Conflicting", "state-conflict"],
 };
-const fieldLabels: Record<Fact["field"], string> = {
+/** Reviewer-facing names for pairing fact fields. */
+export const fieldLabels: Record<Fact["field"], string> = {
   saleStatus: "Sale status",
   authority: "Seller authority",
   heightIn: "Height",

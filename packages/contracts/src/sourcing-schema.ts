@@ -263,6 +263,8 @@ export type SourcingAccount = {
     deliveryEnabled: boolean;
     state: "none" | "draft" | "queued" | "sent" | "uncertain" | "stopped";
     stopReason: string | null;
+    // The reviewed first message of the latest enrollment, verbatim; null before review.
+    request: { subject: string; body: string } | null;
   };
   // Verified email replies and specialist-recorded notes, verbatim.
   replies: { id: string; channel: "email" | "note"; receivedAt: Date; text: string }[];

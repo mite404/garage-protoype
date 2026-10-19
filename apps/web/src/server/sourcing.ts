@@ -326,11 +326,24 @@ function latestOutreach<T extends { enrollmentKey: string | null; state: string 
     .toSorted((a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state))[0];
 }
 
-function outreachSummary(latest: { state: string } | undefined) {
-  if (!latest) return { state: "none" as const, stopReason: null };
+type OutreachMessage = {
+  enrollmentKey: string | null;
+  state: string;
+  step: number;
+  subject: string;
+  body: string;
+};
+
+function outreachSummary(messages: OutreachMessage[]) {
+  const latest = latestOutreach(messages);
+  if (!latest) return { state: "none" as const, stopReason: null, request: null };
+  const first = messages.find(
+    (message) => message.enrollmentKey === latest.enrollmentKey && message.step === 0,
+  );
   return {
     state: outreachStates[latest.state as keyof typeof outreachStates],
     stopReason: latest.state === "stopped" ? "Follow-up stopped" : null,
+    request: first ? { subject: first.subject, body: first.body } : null,
   };
 }
 
@@ -357,7 +370,6 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     await caseRevision(undefined, caseId),
   ];
   const trigger = changes.find((change) => change.disposition !== "dismissed") ?? null;
-  const latest = latestOutreach(messages);
   const contact = seller.review?.contact;
   const account: SourcingAccount = {
     account: {
@@ -384,7 +396,7 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     },
     outreach: {
       deliveryEnabled: process.env.GROWTH_DELIVERY_MODE === "allowlisted-test",
-      ...outreachSummary(latest),
+      ...outreachSummary(messages),
     },
     replies,
     facts: facts.map(factRow),

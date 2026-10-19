@@ -10,6 +10,7 @@ import {
 } from "@signal-desk/contracts/sourcing-schema";
 import {
   DecisionPacket,
+  fieldLabels,
   FitTable,
   InformationRequest,
   RecordNote,
@@ -126,7 +127,9 @@ function PairingActivity({ data }: { data: SourcingAccount }) {
       text: reply.channel === "note" ? "Recorded note received" : "Email reply received",
     })),
     ...data.facts.flatMap((fact) =>
-      fact.reviewedAt ? [{ at: fact.reviewedAt, text: `${fact.field} ${fact.status}` }] : [],
+      fact.reviewedAt
+        ? [{ at: fact.reviewedAt, text: `${fieldLabels[fact.field]} ${fact.status}` }]
+        : [],
     ),
     ...(data.decision
       ? [{ at: data.decision.decidedAt, text: `Decision recorded: ${data.decision.decision}` }]
@@ -237,7 +240,13 @@ function PairingOverview({ data, sellerHref, review }: PanelProps) {
   );
 }
 
-function FrozenRequest({ rejected }: { rejected: boolean }) {
+function FrozenRequest({
+  rejected,
+  request,
+}: {
+  rejected: boolean;
+  request: SourcingAccount["outreach"]["request"];
+}) {
   return (
     <section className="desk-card">
       <h2>Availability request</h2>
@@ -246,6 +255,12 @@ function FrozenRequest({ rejected }: { rejected: boolean }) {
           ? "This pairing was rejected, so no further requests are offered."
           : "The reviewed request is enrolled. A reply, opt-out or uncertain delivery stops follow-up."}
       </p>
+      {request && (
+        <div className="desk-message">
+          <h3>{request.subject}</h3>
+          <p className="desk-frozen-body">{request.body}</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -253,7 +268,7 @@ function FrozenRequest({ rejected }: { rejected: boolean }) {
 function PairingDraft({ data, onSaveDraft }: PanelProps) {
   const rejected = data.decision?.decision === "reject";
   if (rejected || !["none", "draft"].includes(data.outreach.state))
-    return <FrozenRequest rejected={rejected} />;
+    return <FrozenRequest rejected={rejected} request={data.outreach.request} />;
   return (
     <InformationRequest
       need={data.need}

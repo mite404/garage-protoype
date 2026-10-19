@@ -41,7 +41,15 @@ const cedarValley: SourcingAccount = {
   },
   inventorySearch: { searchedAt: new Date("2026-10-19T00:00:00Z"), reviewedMatches: 0 },
   contact: { identity: "reviewed", permission: "established" },
-  outreach: { deliveryEnabled: false, state: "stopped", stopReason: "Reply received (simulated)" },
+  outreach: {
+    deliveryEnabled: false,
+    state: "stopped",
+    stopReason: "Reply received (simulated)",
+    request: {
+      subject: "Is your pumper for sale?",
+      body: "Could you confirm sale status? Reply STOP to opt out.",
+    },
+  },
   replies: [
     {
       id: "synthetic-reply-1",
@@ -76,7 +84,7 @@ const research: SourcingAccount = {
   ...cedarValley,
   nextAction: "Confirm availability and authority before buyer outreach.",
   contact: { identity: "pending_review", permission: "not_established" },
-  outreach: { deliveryEnabled: false, state: "none", stopReason: null },
+  outreach: { deliveryEnabled: false, state: "none", stopReason: null, request: null },
   replies: [],
   facts: [],
 };

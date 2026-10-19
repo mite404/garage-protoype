@@ -85,6 +85,8 @@ export default function SourcingDesk({
         JSON.stringify({ ...body, revision: view.revision }),
         crypto.randomUUID(),
       );
+      // A saved change moves the stepper to the step the record has now reached.
+      setStep(undefined);
     } catch (failure) {
       setProblem(failure instanceof Error ? failure.message : "The command was not saved.");
     }
