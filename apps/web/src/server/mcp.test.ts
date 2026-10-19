@@ -54,7 +54,7 @@ test(
         headers: { Cookie: running.cookie },
       });
       assert.equal(desk.status, 200);
-      assert.match(await desk.text(), /Manage local MCP tokens/);
+      assert.match(await desk.text(), /href="\/desk\/tokens"[^>]*>MCP tokens/);
       async function issue(scopes: string[] = ["read"]) {
         const response = await fetch(`${running.origin}/api/v1/desk/tokens`, {
           method: "POST",

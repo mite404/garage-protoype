@@ -19,7 +19,7 @@ const destinations = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   if (["/sign-in", "/sign-up", "/account"].includes(pathname)) return children;
-  if (/^\/desk\/(municipalities|sourcing)\/[^/]+\/?$/.test(pathname)) return children;
+  if (pathname === "/desk" || pathname.startsWith("/desk/")) return children;
   const active = destinations.findLast(
     ({ href }) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)),
   );
