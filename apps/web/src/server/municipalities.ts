@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import {
   organizationSchema,
   workspaceSchema,
@@ -48,7 +48,13 @@ export async function listMunicipalities(actor: Actor) {
   const rows = await orm()
     .select({ organization: organizations, opportunityId: opportunities.id })
     .from(organizations)
-    .innerJoin(opportunities, eq(opportunities.buyer_id, organizations.buyerId))
+    .innerJoin(
+      opportunities,
+      or(
+        eq(opportunities.buyer_id, organizations.buyerId),
+        eq(opportunities.organization_id, organizations.id),
+      ),
+    )
     .innerJoin(
       opportunityMembers,
       and(
@@ -78,7 +84,13 @@ export async function getMunicipalityWorkspace(
   const [anchor] = await orm()
     .select({ opportunityId: opportunities.id })
     .from(organizations)
-    .innerJoin(opportunities, eq(opportunities.buyer_id, organizations.buyerId))
+    .innerJoin(
+      opportunities,
+      or(
+        eq(opportunities.buyer_id, organizations.buyerId),
+        eq(opportunities.organization_id, organizations.id),
+      ),
+    )
     .innerJoin(
       opportunityMembers,
       and(
@@ -95,7 +107,7 @@ export async function getMunicipalityWorkspace(
     async (client) => {
       const db = orm(client);
       const [organization] = await db.select().from(organizations).where(eq(organizations.id, id));
-      if (!organization?.buyerId) throw new AppError(404, "NOT_FOUND", "Department not found.");
+      if (!organization) throw new AppError(404, "NOT_FOUND", "Department not found.");
       const acquisitions = await db
         .select({
           id: opportunities.id,
@@ -120,7 +132,12 @@ export async function getMunicipalityWorkspace(
         .innerJoin(vehicles, eq(vehicles.id, opportunities.vehicle_id))
         .leftJoin(organizations, eq(organizations.id, vehicles.ownerOrganizationId))
         .leftJoin(opportunityDealTerms, eq(opportunityDealTerms.opportunityId, opportunities.id))
-        .where(eq(opportunities.buyer_id, organization.buyerId))
+        .where(
+          or(
+            eq(opportunities.organization_id, id),
+            organization.buyerId ? eq(opportunities.buyer_id, organization.buyerId) : undefined,
+          ),
+        )
         .orderBy(asc(opportunities.id));
       const activity = await db
         .select({

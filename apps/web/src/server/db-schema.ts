@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgSchema,
+  uniqueIndex,
   text,
   timestamp,
   uuid,
@@ -55,7 +56,8 @@ export const inferenceOperations = privateSchema.table("inference_operations", {
   id: uuid("id").primaryKey(),
   user_id: uuid("user_id").notNull(),
   request_key: text("request_key").notNull(),
-  opportunity_id: text("opportunity_id").notNull(),
+  opportunity_id: text("opportunity_id"),
+  prospect_id: text("prospect_id").references(() => growthAccounts.id),
   fingerprint: text("fingerprint").notNull(),
   model_id: text("model_id").notNull(),
   max_attempts: integer("max_attempts").notNull(),
@@ -266,7 +268,8 @@ export const municipalityInterests = privateSchema.table("municipality_interests
 export const opportunities = privateSchema.table("opportunities", {
   id: text("id").primaryKey(),
   vehicle_id: text("vehicle_id").notNull(),
-  buyer_id: uuid("buyer_id").notNull(),
+  buyer_id: uuid("buyer_id"),
+  organization_id: text("organization_id").references(() => organizations.id),
   assignee_id: uuid("assignee_id"),
   internal_notes: text("internal_notes").notNull().default(""),
   next_action: text("next_action").notNull().default(""),
@@ -419,4 +422,178 @@ export const streamTurns = privateSchema.table("stream_turns", {
   errorCode: text("error_code"),
   activity: text("activity").$type<StreamActivity>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+});
+
+/** Directory identity and human decisions are stored separately. Contacts are not identities. */
+export const growthAccounts = privateSchema.table("growth_accounts", {
+  id: text("id").primaryKey(),
+  sourceKey: text("source_key").notNull().unique(),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => identities.userId),
+  organizationId: text("organization_id").references(() => organizations.id),
+  opportunityId: text("opportunity_id").references(() => opportunities.id),
+  directory: jsonb("directory").$type<unknown>().notNull(),
+  review: jsonb("review").$type<unknown>(),
+  routing: text("routing").notNull().default("Unassigned; review territory"),
+  identityState: text("identity_state").notNull().default("needs_review"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Immutable source snapshots retain changed assertions without overwriting human review. */
+export const growthObservations = privateSchema.table(
+  "growth_observations",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => growthAccounts.id),
+    snapshot: text("snapshot").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    original: jsonb("original").$type<unknown>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("growth_observation_identity").on(
+      table.accountId,
+      table.snapshot,
+      table.fingerprint,
+    ),
+  ],
+);
+
+/** Operator-provisioned NY postal-prefix routes never grant global prospect access. */
+export const growthTerritories = privateSchema.table("growth_territories", {
+  id: text("id").primaryKey(),
+  postalPrefix: text("postal_prefix").notNull().unique(),
+  specialistId: uuid("specialist_id")
+    .notNull()
+    .references(() => identities.userId),
+});
+
+/** Append-only workflow events support auditable counts rather than inferred uplift. */
+export const growthEvents = privateSchema.table("growth_events", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => growthAccounts.id),
+  kind: text("kind").notNull(),
+  detail: text("detail").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Frozen reviewed message steps. A dispatch without a receipt is never automatically retried. */
+export const growthMessages = privateSchema.table(
+  "growth_messages",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => growthAccounts.id),
+    enrollmentKey: text("enrollment_key").notNull(),
+    step: integer("step").notNull(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => identities.userId),
+    credential: jsonb("credential").$type<z.infer<typeof credentialSchema>>().notNull(),
+    recipient: text("recipient").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    state: text("state", { enum: ["queued", "dispatched", "uncertain", "sent", "stopped"] })
+      .notNull()
+      .default("queued"),
+    providerId: text("provider_id").unique(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("growth_message_step").on(table.accountId, table.enrollmentKey, table.step),
+  ],
+);
+
+/** Global address suppression survives new enrollments and account reassignment. */
+export const growthSuppressions = privateSchema.table("growth_suppressions", {
+  email: text("email").primaryKey(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Verified provider events are immutable and duplicate deliveries share one event ID. */
+export const growthReceipts = privateSchema.table("growth_receipts", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id").references(() => growthMessages.id),
+  kind: text("kind").notNull(),
+  original: jsonb("original").$type<unknown>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Opaque invitation references correlate submissions but never authorize a profile read. */
+export const growthInvitations = privateSchema.table(
+  "growth_invitations",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => growthAccounts.id),
+    callKey: text("call_key").notNull(),
+    recipient: text("recipient").notNull(),
+    version: text("version").notNull(),
+    stage: text("stage", { enum: ["post_call", "onboarding"] }).notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("growth_invitation_call").on(table.accountId, table.callKey, table.version),
+  ],
+);
+
+/** Original channel submissions are append-only; explicit and inferred answers never mix. */
+export const growthFeedback = privateSchema.table(
+  "growth_feedback",
+  {
+    id: text("id").primaryKey(),
+    invitationId: text("invitation_id").references(() => growthInvitations.id),
+    reference: text("reference").notNull(),
+    channel: text("channel", { enum: ["email", "forms"] }).notNull(),
+    externalId: text("external_id").notNull(),
+    original: jsonb("original").$type<unknown>().notNull(),
+    answer: jsonb("answer").$type<unknown>(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("growth_feedback_source").on(table.channel, table.externalId)],
+);
+
+/** Bounded background-agent output is advisory and retains its exact input fingerprint. */
+export const growthInsights = privateSchema.table(
+  "growth_insights",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => growthAccounts.id),
+    inputHash: text("input_hash").notNull(),
+    result: jsonb("result").$type<unknown>().notNull(),
+    model: text("model").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("growth_insight_input").on(table.accountId, table.inputHash)],
+);
+
+/** Durable proactive work retains the initiating credential and a fencing lease. */
+export const growthSchedules = privateSchema.table("growth_schedules", {
+  id: text("id").primaryKey(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => identities.userId),
+  credential: jsonb("credential").$type<z.infer<typeof credentialSchema>>().notNull(),
+  configuration: jsonb("configuration").$type<unknown>().notNull(),
+  nextAt: timestamp("next_at", { withTimezone: true }).notNull().defaultNow(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  fence: integer("fence").notNull().default(0),
+  lastCode: text("last_code"),
+  durationMs: integer("duration_ms"),
+  watermark: timestamp("watermark", { withTimezone: true }).notNull().defaultNow(),
 });

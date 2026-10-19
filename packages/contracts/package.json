@@ -8,6 +8,7 @@
     "./evidence-schema": "./src/evidence-schema.ts",
     "./photo-schema": "./src/photo-schema.ts",
     "./municipality-schema": "./src/municipality-schema.ts",
+    "./feedback-schema": "./src/feedback-schema.ts",
     "./token-schema": "./src/token-schema.ts"
   },
   "scripts": {

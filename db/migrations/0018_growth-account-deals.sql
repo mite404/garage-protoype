@@ -1,0 +1,3 @@
+ALTER TABLE "signal_desk"."opportunities" ALTER COLUMN "buyer_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "signal_desk"."opportunities" ADD COLUMN "organization_id" text;--> statement-breakpoint
+ALTER TABLE "signal_desk"."opportunities" ADD CONSTRAINT "opportunities_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "signal_desk"."organizations"("id") ON DELETE no action ON UPDATE no action;

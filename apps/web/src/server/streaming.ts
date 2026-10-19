@@ -51,7 +51,13 @@ async function permittedDeal(actor: Actor, opportunityId: string) {
   const [organization] = await orm()
     .select({ id: organizations.id })
     .from(organizations)
-    .where(eq(organizations.buyerId, opportunity.buyer_id));
+    .where(
+      opportunity.organization_id
+        ? eq(organizations.id, opportunity.organization_id)
+        : opportunity.buyer_id
+          ? eq(organizations.buyerId, opportunity.buyer_id)
+          : sql`false`,
+    );
   const workspace = organization ? await getMunicipalityWorkspace(actor, organization.id) : null;
   return workspace
     ? {

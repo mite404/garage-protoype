@@ -11,7 +11,8 @@ const roleSchema = z.enum(["buyer", "specialist"]);
 const opportunitySchema = z.object({
   id: z.string(),
   vehicle_id: z.string(),
-  buyer_id: z.uuid(),
+  buyer_id: z.uuid().nullable(),
+  organization_id: z.string().nullable().optional(),
   internal_notes: z.string(),
   next_action: z.string(),
 });
@@ -64,7 +65,8 @@ function accessSql(grant: Grant, opportunityId: string | null) {
     select c.active, c.token_id, c.scopes,
       i.user_id, i.role, i.can_spend, i.revoked_at is not null as revoked,
       case when o.id is null then null else json_build_object('id',o.id,'vehicle_id',o.vehicle_id,
-        'buyer_id',o.buyer_id,'internal_notes',o.internal_notes,'next_action',o.next_action) end
+        'buyer_id',o.buyer_id,'organization_id',o.organization_id,
+        'internal_notes',o.internal_notes,'next_action',o.next_action) end
         as opportunity
     from credential c
     left join signal_desk.identities i on i.user_id=c.user_id
