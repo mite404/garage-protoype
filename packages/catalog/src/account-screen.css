@@ -1,0 +1,295 @@
+/* Garage's sign-up layout: photo half, white form half, blaze-orange rule and action. */
+.sign-in-screen {
+  --sign-in-blaze: #ff5e01;
+  --sign-in-ink: #0a0a0a;
+  --sign-in-quiet: #525252;
+  --sign-in-line: #e4e1e0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 100dvh;
+  background: #ffffff;
+  color: var(--sign-in-ink);
+  font: 14px/1.5 var(--font-sans);
+}
+
+.sign-in-photo {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #10161c;
+  color: #ffffff;
+}
+.sign-in-photo img {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sign-in-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(rgb(0 0 0 / 0.2), rgb(0 0 0 / 0) 30%, rgb(0 0 0 / 0.45));
+}
+.sign-in-brand {
+  position: absolute;
+  inset: 48px 48px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sign-in-wordmark {
+  flex: none;
+  margin: 0;
+}
+.sign-in-wordmark svg {
+  display: block;
+  width: auto;
+  height: 24px;
+}
+.sign-in-independent {
+  margin: 0;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgb(0 0 0 / 0.35);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.sign-in-testimonial {
+  position: absolute;
+  bottom: 48px;
+  left: 48px;
+  max-width: 400px;
+  margin: 0;
+}
+.sign-in-testimonial blockquote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+.sign-in-quote-mark {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0 0 4px -3px;
+  transform: rotate(180deg);
+}
+.sign-in-testimonial figcaption {
+  margin-top: 6px;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 12px;
+  line-height: 16px;
+}
+.sign-in-dots {
+  position: absolute;
+  right: 48px;
+  bottom: 50px;
+  display: flex;
+  gap: 8px;
+}
+.sign-in-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.45);
+}
+.sign-in-dots [data-active] {
+  background: #ffffff;
+}
+
+.sign-in-column {
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+}
+.sign-in-block {
+  width: min(100%, 512px);
+}
+.sign-in-heading {
+  margin-bottom: 40px;
+  border-left: 2px solid var(--sign-in-blaze);
+  padding: 10px 0 10px 16px;
+}
+.sign-in-heading h1 {
+  margin: 0;
+  font: 500 16px/20px var(--font-sans);
+  letter-spacing: 0;
+}
+.sign-in-heading p {
+  margin: 4px 0 0;
+  color: var(--sign-in-quiet);
+  font-size: 12px;
+  line-height: 16px;
+}
+.sign-in-notice {
+  display: block;
+  margin: -16px 0 24px;
+  border: 1px solid var(--sign-in-line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: #f7f6f5;
+  font-size: 13px;
+  line-height: 18px;
+}
+.sign-in-error {
+  border-color: #f2c7bf;
+  background: #fff4f1;
+  color: #a32118;
+}
+.sign-in-notice + .sign-in-notice {
+  margin-top: 0;
+}
+.sign-in-form {
+  display: grid;
+  gap: 16px;
+}
+.sign-in-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: #404040;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 17px;
+}
+.sign-in-control {
+  position: relative;
+}
+.sign-in-field-icon {
+  position: absolute;
+  top: 16px;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  color: var(--sign-in-quiet);
+  pointer-events: none;
+}
+.sign-in-input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--sign-in-line);
+  border-radius: 6px;
+  padding: 0 14px 0 42px;
+  background: #ffffff;
+  color: var(--sign-in-ink);
+  font-size: 16px;
+}
+.sign-in-input::placeholder {
+  color: #8a8a8a;
+}
+.sign-in-input:focus-visible {
+  border-color: var(--sign-in-blaze);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(255 94 1 / 0.2);
+}
+.sign-in-input:disabled {
+  background: #f7f6f5;
+  cursor: not-allowed;
+}
+.sign-in-submit {
+  min-height: 48px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sign-in-blaze);
+  color: var(--sign-in-ink);
+  font: 600 16px/1 var(--font-sans);
+  cursor: pointer;
+}
+.sign-in-submit:hover {
+  background: #eb5600;
+}
+.sign-in-submit:active {
+  transform: scale(0.98);
+}
+.sign-in-submit:focus-visible {
+  outline: 2px solid var(--sign-in-blaze);
+  outline-offset: 3px;
+}
+.sign-in-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.sign-in-help {
+  margin: 20px 0 0;
+  color: var(--sign-in-quiet);
+  font-size: 12px;
+  line-height: 18px;
+}
+.sign-in-help a,
+.account-sign-out button {
+  color: var(--sign-in-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sign-in-action {
+  display: grid;
+  place-items: center;
+  padding: 12px 16px;
+  text-decoration: none;
+}
+.account-details {
+  margin: 0;
+}
+.account-details > div {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--sign-in-line);
+}
+.account-details dt {
+  color: var(--sign-in-quiet);
+  font-size: 12px;
+}
+.account-details dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.account-sign-out {
+  margin-top: 20px;
+  text-align: center;
+}
+.account-sign-out button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.sign-in-help a:focus-visible,
+.account-sign-out button:focus-visible {
+  outline: 2px solid var(--sign-in-ink);
+  outline-offset: 3px;
+}
+
+@media (max-width: 860px) {
+  .sign-in-screen {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .sign-in-photo {
+    min-height: 200px;
+  }
+  .sign-in-photo img {
+    transform: translateY(22%) scale(1.7);
+    transform-origin: 56% 43%;
+  }
+  .sign-in-brand {
+    inset: 24px 20px auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .sign-in-testimonial,
+  .sign-in-dots {
+    display: none;
+  }
+  .sign-in-column {
+    place-items: start center;
+    padding: 40px 20px 48px;
+  }
+}

@@ -4,14 +4,30 @@ import { test } from "node:test";
 const origin = process.env.TEST_APP_URL;
 if (process.env.CI && !origin) throw new Error("CI requires TEST_APP_URL.");
 
-test("invited sign-in renders a submit button", { skip: !origin }, async () => {
-  const response = await fetch(new URL("/sign-in", origin));
-  assert.equal(response.status, 200);
-  assert.match(
-    await response.text(),
-    /<form[^>]*action="\/auth\/sign-in"[\s\S]*?<button(?=[^>]*type="submit")[^>]*>[\s\S]*?Sign in/,
-  );
-});
+test(
+  "identity pages retain invited access and share the apparatus photo",
+  { skip: !origin },
+  async () => {
+    const response = await fetch(new URL("/sign-in", origin));
+    assert.equal(response.status, 200);
+    const signIn = await response.text();
+    assert.match(
+      signIn,
+      /<form[^>]*action="\/auth\/sign-in"[\s\S]*?<button(?=[^>]*type="submit")[^>]*>[\s\S]*?Sign in/,
+    );
+    const registration = await fetch(new URL("/sign-up", origin));
+    assert.equal(registration.status, 200);
+    const signUp = await registration.text();
+    assert.match(signUp, /Join Signal Desk/);
+    assert.match(signUp, /invitation/i);
+    const photo = signIn.match(/<img[^>]+src="([^"]+apparatus-cab[^"]+)"/);
+    assert.ok(photo, "The sign-in page displays the shared apparatus photo");
+    assert.ok(signUp.includes(`src="${photo[1]}"`));
+    const account = await fetch(new URL("/account", origin), { redirect: "manual" });
+    assert.equal(account.status, 307);
+    assert.equal(account.headers.get("Location"), "/sign-in");
+  },
+);
 
 test(
   "anonymous HTTP callers cannot read private records or initiate processing",
