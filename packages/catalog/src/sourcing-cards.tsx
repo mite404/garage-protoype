@@ -15,6 +15,7 @@ import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse } from "./prose";
+import { DeskIcon } from "./desk-shell";
 
 const date = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -34,7 +35,8 @@ const fitStates: Record<FitStatus, [label: string, tone: string]> = {
   incomplete: ["Incomplete", "state-needs_review"],
   conflicting: ["Conflicting", "state-conflict"],
 };
-const fieldLabels: Record<Fact["field"], string> = {
+/** Reviewer-facing names for pairing fact fields. */
+export const fieldLabels: Record<Fact["field"], string> = {
   saleStatus: "Sale status",
   authority: "Seller authority",
   heightIn: "Height",
@@ -130,7 +132,12 @@ export function FitTable({ need, rows }: { need: Need; rows: FitRow[] }) {
             const [label, tone] = fitStates[row.status];
             return (
               <tr key={row.requirement}>
-                <th scope="row">{requirementLabel(need, row.requirement)}</th>
+                <th scope="row">
+                  <span className="desk-requirement">
+                    <DeskIcon name={row.requirement} />
+                    {requirementLabel(need, row.requirement)}
+                  </span>
+                </th>
                 <td>{row.evidence}</td>
                 <td>
                   <span className={`state ${tone}`}>{label}</span>
@@ -156,95 +163,203 @@ function requestBody(need: Need, questions: string[]) {
 }
 
 const readiness = {
-  reviewed: "Reviewed",
-  pending_review: "Pending review",
-  established: "Established",
-  not_established: "Not established",
+  reviewed: "reviewed",
+  pending_review: "pending review",
+  established: "established",
+  not_established: "not established",
 };
 
-function Readiness({
-  contact,
-  deliveryEnabled,
-}: {
-  contact: SourcingAccount["contact"];
-  deliveryEnabled: boolean;
-}) {
-  const ready = contact.identity === "reviewed" && contact.permission === "established";
+function ReadinessCheck({ label, value }: { label: string; value: keyof typeof readiness }) {
+  const ready = value === "reviewed" || value === "established";
   return (
-    <dl className="card-meta sourcing-readiness">
-      <div>
-        <dt>Contact identity</dt>
-        <dd>{readiness[contact.identity]}</dd>
-      </div>
-      <div>
-        <dt>Outreach permission</dt>
-        <dd>{readiness[contact.permission]}</dd>
-      </div>
-      <div>
-        <dt>Delivery</dt>
-        <dd>
-          {deliveryEnabled && ready ? "Available after review" : "Disabled in this workspace"}
-        </dd>
-      </div>
-    </dl>
+    <li data-ready={ready}>
+      <DeskIcon name={ready ? "check" : "pending"} />
+      {label}: {readiness[value]}
+    </li>
   );
 }
 
-/** Editable information request for unresolved requirements; saving never sends it. */
-export function InformationRequest({
-  need,
-  rows,
-  contact,
-  deliveryEnabled,
-  onSave,
-}: {
+function DeliveryState({ enabled }: { enabled: boolean }) {
+  if (enabled)
+    return (
+      <p className="desk-delivery">Delivery is available only after contact and draft review.</p>
+    );
+  return (
+    <div className="desk-lock" role="note">
+      <DeskIcon name="lock" />
+      <div>
+        <strong>External delivery disabled</strong>
+        <p>Outreach is not available in this workspace.</p>
+      </div>
+    </div>
+  );
+}
+
+type RequestProps = {
   need: Need;
   rows: FitRow[];
   contact: SourcingAccount["contact"];
   deliveryEnabled: boolean;
   onSave?: (draft: { subject: string; body: string }) => void;
-}) {
+};
+
+// Mirrors growth's frozen two-step sequence; the steps are queued, never sent from here.
+const sequence = ["Availability request", "Reminder after 3 days without a reply"];
+
+function RequestForm({ need, rows, contact, deliveryEnabled, onSave }: RequestProps) {
   const questions = openQuestions(rows);
   const [subject, setSubject] = useState(`Is your ${need.vehicleClass.toLowerCase()} for sale?`);
   const [body, setBody] = useState(() => requestBody(need, questions));
   const [saved, setSaved] = useState(false);
-  if (!questions.length)
-    return <p className="card-caveat">Every requirement is resolved. No request is needed.</p>;
   return (
-    <Card className="assistance-card sourcing-card" data-card="information-request">
-      <Badge variant="outline" className="state state-needs_review border-transparent">
-        {saved ? "Reviewed draft · Not sent" : "Unsent draft"}
-      </Badge>
-      <h3>Information request</h3>
-      <Readiness contact={contact} deliveryEnabled={deliveryEnabled} />
-      <div>
+    <>
+      <section className="desk-card desk-request" data-card="information-request">
+        <header className="desk-card-header">
+          <DeskIcon name="source" />
+          <h2>Availability request</h2>
+          <span className="state state-needs_review">
+            {saved ? "Reviewed draft · Not sent" : "Unsent draft"}
+          </span>
+        </header>
+        <div className="desk-request-status">
+          <ul className="desk-checks">
+            <ReadinessCheck label="Contact identity" value={contact.identity} />
+            <ReadinessCheck label="Outreach permission" value={contact.permission} />
+          </ul>
+          <DeliveryState enabled={deliveryEnabled} />
+        </div>
+      </section>
+      <section className="desk-card desk-message">
+        <h2>Message</h2>
         <label htmlFor="request-subject">Subject</label>
         <input
           id="request-subject"
           value={subject}
           onChange={(event) => (setSubject(event.target.value), setSaved(false))}
         />
-      </div>
-      <div>
-        <label htmlFor="request-body">Message</label>
+        <label htmlFor="request-body">Body</label>
         <textarea
           id="request-body"
-          rows={9}
+          rows={11}
           value={body}
           onChange={(event) => (setBody(event.target.value), setSaved(false))}
         />
-      </div>
-      <p className="card-caveat">
-        A reply, opt-out or uncertain delivery stops follow-up. Researching a candidate does not
-        promise the buyer a vehicle.
-      </p>
-      <Button
-        disabled={!subject.trim() || !body.includes("STOP")}
-        onClick={() => (onSave?.({ subject: subject.trim(), body }), setSaved(true))}
-      >
-        Save reviewed draft
-      </Button>
-    </Card>
+        <fieldset className="desk-additional" disabled>
+          <legend>Additional options</legend>
+          <label>
+            <input type="checkbox" /> Include Google Form
+          </label>
+          <span>
+            <DeskIcon name="info" />
+            Connect a form first
+          </span>
+        </fieldset>
+      </section>
+      <section className="desk-card desk-sequence">
+        <h2>Follow-up sequence (internal)</h2>
+        <ol>
+          {sequence.map((step, index) => (
+            <li key={step}>
+              <span>{index + 1}</span>
+              Step {index + 1}: {step.toLowerCase()}
+            </li>
+          ))}
+        </ol>
+        <p className="desk-hint">
+          <DeskIcon name="info" />A reply, opt-out, or uncertain delivery pauses follow-up.
+        </p>
+      </section>
+      <footer className="desk-submit">
+        <p className="desk-hint">
+          <DeskIcon name="info" />
+          Researching a candidate does not mean promising a buyer a truck.
+        </p>
+        <Button
+          disabled={!subject.trim() || !body.includes("STOP")}
+          onClick={() => (onSave?.({ subject: subject.trim(), body }), setSaved(true))}
+        >
+          Save reviewed draft
+        </Button>
+      </footer>
+    </>
+  );
+}
+
+/** Editable information request for unresolved requirements; saving never sends it. */
+export function InformationRequest(props: RequestProps) {
+  if (!openQuestions(props.rows).length)
+    return (
+      <section className="desk-card">
+        <p>Every requirement is resolved. No request is needed.</p>
+      </section>
+    );
+  return <RequestForm {...props} />;
+}
+
+const channels = {
+  email: ["mail", "Email"],
+  note: ["note", "Recorded note"],
+} as const;
+
+function OriginalResponses({ replies }: { replies: SourcingAccount["replies"] }) {
+  return (
+    <section className="desk-card desk-originals">
+      <h2>Original response</h2>
+      {replies.length ? (
+        replies.map((reply) => {
+          const [icon, label] = channels[reply.channel];
+          return (
+            <article key={reply.id} id={`reply-${reply.id}`}>
+              <header>
+                <DeskIcon name={icon} />
+                <span>{label}</span>
+                <time dateTime={reply.receivedAt.toISOString()}>
+                  {date.format(reply.receivedAt)}
+                </time>
+              </header>
+              <blockquote>
+                <LiteralProse text={reply.text} />
+              </blockquote>
+            </article>
+          );
+        })
+      ) : (
+        <p className="desk-hint">No replies recorded.</p>
+      )}
+      <p className="desk-hint">Original responses are retained exactly as received.</p>
+    </section>
+  );
+}
+
+function ProposalRow({
+  fact,
+  cited,
+  checked,
+  onToggle,
+}: {
+  fact: Fact;
+  cited: boolean;
+  checked: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  return (
+    <tr className="sourcing-proposal">
+      <td>
+        <input
+          type="checkbox"
+          aria-label={`${fieldLabels[fact.field]}: ${factValue(fact)}`}
+          checked={checked}
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+      </td>
+      <th scope="row">{fieldLabels[fact.field]}</th>
+      <td>{factValue(fact)}</td>
+      <td>
+        {bases[fact.basis]}
+        {fact.basis === "ai_interpretation" && " · Review"}
+      </td>
+      <td>{cited ? <a href={`#reply-${fact.sourceRef}`}>Original</a> : "Saved source"}</td>
+    </tr>
   );
 }
 
@@ -262,72 +377,93 @@ export function ReplyReview({
 }) {
   const proposals = facts.filter((fact) => fact.status === "proposed");
   const [selected, setSelected] = useState<string[]>([]);
+  const [notice, setNotice] = useState("");
   const effects = proposals.flatMap((proposal) => {
     const failed = consequence(need, facts, proposal);
     return failed ? [{ proposal, failed }] : [];
   });
+  const toggle = (id: string, checked: boolean) =>
+    setSelected((ids) => (checked ? [...ids, id] : ids.filter((other) => other !== id)));
   return (
-    <Card className="assistance-card sourcing-card" data-card="reply-review">
-      <h3>Replies and proposed updates</h3>
-      {replies.length ? (
-        replies.map((reply) => (
-          <blockquote key={reply.id} className="card-citation">
-            <p className="reading-label">
-              {reply.channel === "email" ? "Original email" : "Recorded note"} ·{" "}
-              {date.format(reply.receivedAt)}
-            </p>
-            <LiteralProse text={reply.text} />
-          </blockquote>
-        ))
-      ) : (
-        <p className="card-caveat">No replies recorded.</p>
-      )}
-      {proposals.length ? (
-        <fieldset className="sourcing-proposals">
-          <legend className="reading-label">Proposed updates · Not yet approved</legend>
-          {proposals.map((fact) => (
-            <label key={fact.id} className="sourcing-proposal">
-              <input
-                type="checkbox"
-                checked={selected.includes(fact.id)}
-                onChange={(event) =>
-                  setSelected((ids) =>
-                    event.target.checked ? [...ids, fact.id] : ids.filter((id) => id !== fact.id),
-                  )
-                }
-              />
-              <span>
-                {fieldLabels[fact.field]}: <strong>{factValue(fact)}</strong>
-              </span>
-              <span className="sourcing-basis">{bases[fact.basis]}</span>
-            </label>
-          ))}
-        </fieldset>
-      ) : (
-        <p className="card-caveat">No proposed updates awaiting review.</p>
-      )}
-      {effects.map(({ proposal, failed }) => (
-        <div key={proposal.id} className="card-next-action" role="note">
-          <p className="reading-label">Effect on {need.buyer}&apos;s need</p>
-          <p>
-            Accepting {fieldLabels[proposal.field].toLowerCase()} {factValue(proposal)} fails the
-            requirement “{failed}”. That rejects this pairing, not the seller account, and the buyer
-            need stays open.
-          </p>
-        </div>
-      ))}
-      {proposals.length > 0 && (
-        <>
-          <p className="card-caveat">Unselected proposals stay unresolved.</p>
-          <Button
-            disabled={!selected.length}
-            onClick={() => (onAccept?.(selected), setSelected([]))}
-          >
-            Save selected reviewed answers
-          </Button>
-        </>
-      )}
-    </Card>
+    <div className="desk-reply" data-card="reply-review">
+      <OriginalResponses replies={replies} />
+      <section className="desk-card desk-proposals">
+        <h2>Proposed updates · Not yet approved</h2>
+        {proposals.length ? (
+          <div className="desk-table-scroll">
+            <table className="desk-table">
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all proposed answers"
+                      checked={proposals.every((fact) => selected.includes(fact.id))}
+                      onChange={(event) =>
+                        setSelected(event.target.checked ? proposals.map((fact) => fact.id) : [])
+                      }
+                    />
+                  </th>
+                  <th scope="col">Field</th>
+                  <th scope="col">Proposed answer</th>
+                  <th scope="col">Basis</th>
+                  <th scope="col">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposals.map((fact) => (
+                  <ProposalRow
+                    key={fact.id}
+                    fact={fact}
+                    cited={replies.some((reply) => reply.id === fact.sourceRef)}
+                    checked={selected.includes(fact.id)}
+                    onToggle={(checked) => toggle(fact.id, checked)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="desk-hint">No proposed updates awaiting review.</p>
+        )}
+        {effects.map(({ proposal, failed }) => (
+          <div key={proposal.id} className="desk-effect" role="note">
+            <DeskIcon name="alert" />
+            <div>
+              <strong>Effect on {need.buyer}&apos;s need</strong>
+              <p>
+                Accepting {fieldLabels[proposal.field].toLowerCase()} {factValue(proposal)} fails “
+                {failed}”. Reject this pairing, not the seller account. Keep the buyer need open.
+              </p>
+            </div>
+          </div>
+        ))}
+        {proposals.length > 0 && (
+          <>
+            <div className="desk-split-actions">
+              <Button
+                disabled={!selected.length}
+                onClick={() => (onAccept?.(selected), setSelected([]), setNotice(""))}
+              >
+                Save selected reviewed answers
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelected([]);
+                  setNotice("Kept unresolved. No reviewed facts changed.");
+                }}
+              >
+                Keep unresolved
+              </Button>
+            </div>
+            <output aria-live="polite" className="desk-hint">
+              {notice || "Unselected proposals stay unresolved."}
+            </output>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 

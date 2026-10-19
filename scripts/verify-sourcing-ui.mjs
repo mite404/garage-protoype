@@ -34,6 +34,7 @@ try {
 
   // The rejected pairing keeps its recorded basis; the seller is not marked rejected.
   browser("open", `${origin}/desk/sourcing/${rejected}`);
+  browser("find", "role", "button", "click", "--name", "Vehicles & fit");
   browser("wait", "--text", "Decision for this pairing");
   check(`${text("Reviewed height 121 in exceeds 120 in.")} && ${text("Potential seller")}`);
   scrollTo("Can this candidate meet the need?");
@@ -41,17 +42,19 @@ try {
   capture("rejected-pairing");
 
   browser("open", `${origin}/desk/sourcing/${open}`);
-  browser("wait", "--text", "Why this department is here");
+  browser("wait", "--text", "Why this account is here");
   check(`${text("Research trigger only")} && ${text("Message sending disabled")}`);
   capture("research-default");
-  scrollTo("Replies and reviewed facts");
+  browser("find", "role", "button", "click", "--name", "Outreach", "--exact");
   browser("record", "start", join(output, "reply-review.mp4"), "--fps", "5", "--cursor");
   browser("fill", "#sourcing-note", "Available now. Our pumper is 118 inches tall.");
   browser("find", "role", "button", "click", "--name", "Record reply");
-  browser("wait", "--text", "Height: 118 in");
+  browser("wait", "--text", "118 in");
   browser("find", "role", "checkbox", "click", "--name", "Height: 118 in");
   browser("find", "role", "button", "click", "--name", "Save selected reviewed answers");
   browser("wait", "--fn", "!document.querySelector('.sourcing-proposal input:checked')");
+  browser("find", "role", "button", "click", "--name", "Vehicles & fit");
+  browser("wait", "--text", "Decision for this pairing");
   scrollTo("Can this candidate meet the need?");
   browser("wait", "1000");
   browser("record", "stop");
@@ -59,13 +62,16 @@ try {
   capture("height-accepted");
 
   // The assistant opens the same fit card from saved records and only proposes.
-  browser("find", "role", "button", "click", "--name", "Sourcing assistant");
+  browser(
+    "eval",
+    "document.querySelector('#sale-chat').open || [...document.querySelectorAll('button')].find(b => b.textContent.includes('Account assistant'))?.click()",
+  );
   browser("fill", "#sale-message", "What does the seller's note say about height?");
-  browser("find", "role", "button", "click", "--name", "Send to sourcing assistant");
+  browser("find", "role", "button", "click", "--name", "Send to account assistant");
   browser("wait", "--text", "review the proposal before deciding");
   check("document.querySelector('#sale-chat').innerText.includes('Height ≤125 in')");
   capture("assistant-fit-card");
-  browser("find", "role", "button", "click", "--name", "Minimize sourcing assistant");
+  browser("find", "role", "button", "click", "--name", "Minimize account assistant");
   scrollTo("Decision for this pairing");
   check(`${text("No recommendation until")} || ${text("Investigate")}`);
   capture("decision-open");

@@ -280,6 +280,22 @@ names without the `_test` suffix, and never read `DATABASE_URL`. Reset also refu
 hosts, any `host` query parameter, and any other connected session, so stop the owning workflow
 first.
 
+## Browser end-to-end funnel
+
+`npm run test:e2e` drives the specialist funnel in Chromium with Playwright, outside
+`npm run check`. Run `npm run build` first and, once per machine,
+`npx playwright install chromium`. Set `E2E_DATABASE_URL` to its own loopback database ending in
+`_test`, such as `signal_desk_e2e_test`; it refuses the `TEST_DATABASE_URL` that `npm test` owns.
+Each run resets it with `db:test:reset`'s guard, so stop any other session on it first. It never
+reads `DATABASE_URL` or the OpenRouter key, keeps external delivery disabled, and answers chat with
+a labelled local model.
+
+`apps/web/e2e/harness.ts` seeds the synthetic NY walkthrough, signs in one controlled specialist and
+serves `next start` on port 3919 (`E2E_PORT`). The single spec records one video of the whole run
+under `apps/web/test-results/`. Set `E2E_SLOWMO` in milliseconds to pace a recording for review, and
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse a local Chrome. CI runs it after the gate and keeps the
+recording and trace as the `playwright-funnel` artifact.
+
 ## Formatting and analysis
 
 Run `npm run format` to format code and configuration. Markdown is excluded from Oxfmt to preserve

@@ -229,6 +229,9 @@ export async function listSourcingCases(actor: Actor) {
     if (seller)
       cases.push({
         id: pairing.id,
+        needId: need.id,
+        sellerId: seller.id,
+        constraints: constraintsSchema.parse(need.constraints),
         buyer: need.buyerLabel,
         seller: seller.name,
         stage: pairing.stage,
@@ -312,6 +315,38 @@ async function readOriginals(
   ];
 }
 
+// Only the newest enrollment describes current outreach; earlier sequences are history.
+function latestOutreach<T extends { enrollmentKey: string | null; state: string }>(messages: T[]) {
+  const newest = messages
+    .map((message) => message.enrollmentKey ?? "")
+    .sort(byRevision)
+    .at(-1);
+  return messages
+    .filter((message) => message.enrollmentKey === newest)
+    .toSorted((a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state))[0];
+}
+
+type OutreachMessage = {
+  enrollmentKey: string | null;
+  state: string;
+  step: number;
+  subject: string;
+  body: string;
+};
+
+function outreachSummary(messages: OutreachMessage[]) {
+  const latest = latestOutreach(messages);
+  if (!latest) return { state: "none" as const, stopReason: null, request: null };
+  const first = messages.find(
+    (message) => message.enrollmentKey === latest.enrollmentKey && message.step === 0,
+  );
+  return {
+    state: outreachStates[latest.state as keyof typeof outreachStates],
+    stopReason: latest.state === "stopped" ? "Follow-up stopped" : null,
+    request: first ? { subject: first.subject, body: first.body } : null,
+  };
+}
+
 /** Builds the department page for one case from saved, authorized records only.
  * @throws {AppError} For revoked access or another owner's case.
  */
@@ -335,14 +370,6 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     await caseRevision(undefined, caseId),
   ];
   const trigger = changes.find((change) => change.disposition !== "dismissed") ?? null;
-  // Only the newest enrollment describes current outreach; earlier sequences are history.
-  const newest = messages
-    .map((message) => message.enrollmentKey ?? "")
-    .sort(byRevision)
-    .at(-1);
-  const latest = messages
-    .filter((message) => message.enrollmentKey === newest)
-    .toSorted((a, b) => statePriority.indexOf(b.state) - statePriority.indexOf(a.state))[0];
   const contact = seller.review?.contact;
   const account: SourcingAccount = {
     account: {
@@ -361,7 +388,7 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
       url: trigger.url,
       observedAt: trigger.observedAt,
     },
-    need: { ...needProjection(need), buyerHref: "#buyer-need" },
+    need: { ...needProjection(need), buyerHref: `/desk/sourcing#need-${need.id}` },
     inventorySearch: need.inventory ? inventorySchema.parse(need.inventory) : null,
     contact: {
       identity: seller.identityState === "confirmed" ? "reviewed" : "pending_review",
@@ -369,8 +396,7 @@ export async function getSourcingAccount(actor: Actor, caseId: string) {
     },
     outreach: {
       deliveryEnabled: process.env.GROWTH_DELIVERY_MODE === "allowlisted-test",
-      state: latest ? outreachStates[latest.state as keyof typeof outreachStates] : "none",
-      stopReason: latest?.state === "stopped" ? "Follow-up stopped" : null,
+      ...outreachSummary(messages),
     },
     replies,
     facts: facts.map(factRow),

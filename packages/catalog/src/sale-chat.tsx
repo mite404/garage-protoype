@@ -3,11 +3,14 @@ import {
   createContext,
   useContext,
   useEffect,
+  useImperativeHandle,
+  useSyncExternalStore,
   useRef,
   useState,
   type FormEvent,
   type ReactNode,
   type RefObject,
+  type Ref,
 } from "react";
 import type {
   SourcingCardRef,
@@ -35,6 +38,14 @@ const saleCopy: Copy = {
   placeholder: "Ask about this sale…",
 };
 const ChatCopy = createContext(saleCopy);
+const desktopQuery = "(min-width: 1180px)";
+function subscribeDesktop(notify: () => void) {
+  const query = window.matchMedia(desktopQuery);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+}
+/** Prefills a draft without submitting or starting a model request. */
+export type ChatComposerHandle = { prefill: (text: string) => void };
 // Renders sourcing references from the page's current records; deal cards render themselves.
 const SourcingCard = createContext<(card: SourcingCardRef) => ReactNode>(() => null);
 
@@ -206,6 +217,7 @@ function ChatComposer({
   onChange,
   onSubmit,
   status,
+  guardrail,
 }: {
   input: string;
   pending: boolean;
@@ -214,12 +226,17 @@ function ChatComposer({
   onChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   status: string;
+  /** Docked assistants restate that suggestions never change reviewed facts. */
+  guardrail?: boolean;
 }) {
   const copy = useContext(ChatCopy);
   return (
     <form onSubmit={onSubmit} className="chat-compose-area">
+      {guardrail && (
+        <p className="desk-chat-guardrail">Suggestions do not change reviewed facts.</p>
+      )}
       <label className="sr-only" htmlFor="sale-message">
-        Message sale assistant
+        Message {copy.title.toLowerCase()}
       </label>
       <div className="chat-composer">
         <textarea
@@ -314,6 +331,35 @@ function useComposer(
   return { input, setInput, sending, active, submit };
 }
 
+function useChatWindow(
+  variant: "popup" | "dock",
+  streams: Turn[],
+  sending: unknown,
+  follow: RefObject<boolean>,
+) {
+  const [expanded, setOpen] = useState<boolean>();
+  const desktop = useSyncExternalStore(
+    subscribeDesktop,
+    () => window.matchMedia(desktopQuery).matches,
+    () => false,
+  );
+  const open = expanded ?? (variant === "dock" && desktop);
+  const launcher = useRef<HTMLButtonElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const history = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const button = launcher.current;
+    composer.current?.focus();
+    return () => button?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (open && follow.current && history.current)
+      history.current.scrollTop = history.current.scrollHeight;
+  }, [streams, sending, open, follow]);
+  return { open, setOpen, launcher, composer, history };
+}
+
 function ChatWindow({
   context,
   streams,
@@ -324,11 +370,9 @@ function ChatWindow({
   onStop,
   onAcceptSuggestion,
   copy,
+  variant = "popup",
+  composerRef,
 }: Omit<ChatProps, "copy" | "renderSourcingCard"> & { copy: Copy }) {
-  const [open, setOpen] = useState(false);
-  const launcher = useRef<HTMLButtonElement>(null);
-  const composer = useRef<HTMLTextAreaElement>(null);
-  const history = useRef<HTMLElement>(null);
   const follow = useRef(true);
   const { input, setInput, sending, active, submit } = useComposer(
     streams,
@@ -338,16 +382,19 @@ function ChatWindow({
     },
     onSubmit,
   );
-  useEffect(() => {
-    if (!open) return;
-    const button = launcher.current;
-    composer.current?.focus();
-    return () => button?.focus();
-  }, [open]);
-  useEffect(() => {
-    if (open && follow.current && history.current)
-      history.current.scrollTop = history.current.scrollHeight;
-  }, [streams, sending, open]);
+  const { open, setOpen, launcher, composer, history } = useChatWindow(
+    variant,
+    streams,
+    sending,
+    follow,
+  );
+  useImperativeHandle(composerRef, () => ({
+    prefill(text) {
+      setInput(text);
+      setOpen(true);
+      composer.current?.focus();
+    },
+  }));
   function minimize() {
     setOpen(false);
   }
@@ -373,7 +420,7 @@ function ChatWindow({
         onKeyDown={(event) => {
           if (event.key === "Escape") minimize();
         }}
-        className="chat-window sale-chat"
+        className={`chat-window sale-chat${variant === "dock" ? " desk-chat" : ""}`}
       >
         <ChatWindowHeader title={copy.title} subtitle={context} icon="chat" onMinimize={minimize} />
         <ChatPanel
@@ -395,6 +442,7 @@ function ChatWindow({
             onChange: setInput,
             onSubmit: submit,
             status: connection,
+            guardrail: variant === "dock",
           }}
         />
       </dialog>
@@ -403,6 +451,10 @@ function ChatWindow({
 }
 
 type ChatProps = {
+  /** Desktop dock or floating popup; narrow screens always use the popup. */
+  variant?: "popup" | "dock";
+  /** Caller-owned composer access; prefilling sends nothing. */
+  composerRef?: Ref<ChatComposerHandle>;
   context: string;
   streams: Turn[];
   pending: boolean;

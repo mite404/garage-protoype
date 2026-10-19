@@ -1,6 +1,7 @@
 @import "./reading.css";
 @import "./chat-workspace.css";
 @import "./account-screen.css";
+@import "./desk.css";
 
 .dispatch-shell {
   min-height: 100vh;

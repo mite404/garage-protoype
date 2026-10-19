@@ -55,6 +55,22 @@ jobs:
           npm run check
       - name: Check streaming and import guarantees on the Cloudflare Worker
         run: npm run test:cloudflare
+      - name: Install the Playwright browser
+        run: npx playwright install --with-deps chromium
+      # Its own database: npm test owns signal_desk_test, and fixtures cannot share one.
+      - name: Drive the specialist funnel in a browser
+        env:
+          E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_e2e_test
+        run: npm run test:e2e
+      - name: Keep the funnel recording and trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-funnel
+          path: |
+            apps/web/test-results/
+            apps/web/playwright-report/
+          if-no-files-found: ignore
       # Last: OpenNext reruns `next build`, which would replace the build the checks started.
       - name: Build the website Worker
         run: npm run website:build
