@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // One specialist session through the NY growth funnel, recorded as a single video:
-// prospect review → reviewed sequence → qualification, then a buyer-need pairing from draft
-// to reviewed reply and decision. Everything runs against synthetic records; nothing is sent.
+// prospect review → reviewed sequence → seller qualification and its draft listing, then
+// buyer-seller connections from draft to reviewed reply, decision, introduction and closed sale.
+// Everything runs against synthetic records; nothing is sent and no sale is committed.
 const deskPages = [
   "/desk",
   "/desk/sourcing",
@@ -18,6 +19,12 @@ async function sameOriginLinks(page: Page) {
   return page.$$eval("a[href^='/']", (anchors) =>
     anchors.map((anchor) => anchor.getAttribute("href")!.split("#")[0]!),
   );
+}
+
+function section(page: Page, heading: string) {
+  return page.locator("section.desk-card", {
+    has: page.getByRole("heading", { name: heading, level: 2 }),
+  });
 }
 
 async function reviewProspect(page: Page, quote: string) {
@@ -53,19 +60,24 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(page.getByText("Elba-Salem Fire Protection District, Illinois")).toBeVisible();
   });
 
-  await test.step("work queue lists pairings, prospects and active deals", async () => {
+  await test.step("work queue leads with the connection closest to a sale", async () => {
     await page.goto("/desk");
     await expect(page.getByRole("heading", { name: "Work queue", level: 1 })).toBeVisible();
-    for (const account of [
-      "Cedar Valley Fire District",
-      "Maple Grove Fire Department",
-      "Northfield Fire District",
-    ])
-      await expect(page.getByRole("link", { name: account })).toBeVisible();
-    const deals = page.locator("section", {
-      has: page.getByRole("heading", { name: "Active deals" }),
-    });
-    await expect(deals.getByRole("link", { name: "Austin Fire Department" })).toBeVisible();
+    const deals = section(page, "Active deals");
+    await expect(deals.getByRole("row").nth(1)).toContainText(
+      /Harbor Point FD ← Oak Hollow Fire Company.*2012 Oak Hollow pumper.*Ready for buyer review.*You/,
+    );
+    for (const seller of ["Cedar Valley Fire District", "Maple Grove Fire Department"])
+      await expect(deals.getByRole("link", { name: `Pine Brook FD ← ${seller}` })).toBeVisible();
+    await expect(deals.getByRole("row", { name: /Maple Grove.*Awaiting seller/ })).toContainText(
+      "You",
+    );
+    await expect(
+      section(page, "Sourcing").getByRole("link", { name: "Northfield Fire District" }),
+    ).toBeVisible();
+    await expect(
+      section(page, "Buyer accounts").getByRole("link", { name: "Austin Fire Department" }),
+    ).toBeVisible();
     await expect(page.getByText("closedLost")).toHaveCount(0);
   });
 
@@ -102,30 +114,46 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(delivery).not.toContainText(isoTimestamp);
   });
 
-  await test.step("stepper opens the reply step and qualification opens the account", async () => {
+  await test.step("qualifying the reply makes Northfield a seller with a draft listing", async () => {
     await page
       .getByRole("navigation", { name: "Outreach progress" })
       .getByRole("link", { name: /Reply/ })
       .click();
     const reply = page.locator("#outreach-3");
     await expect(reply).toHaveAttribute("open", "");
-    await reply.getByLabel("Published vehicle ID").fill("demo-pumper");
+    await reply.getByLabel("Vehicle offered for sale").fill("2005 Northfield engine");
     await reply
-      .getByLabel("Original qualified reply")
+      .getByLabel("Original qualifying reply")
       .fill("Yes, the 2005 engine is for sale once the board approves. I can authorize it.");
     await reply.getByLabel("Reply provenance").fill("Synthetic fixture reply");
-    await reply.getByRole("button", { name: "Create reviewed opportunity" }).click();
-    await expect(page.locator(".desk-role")).toHaveText("Qualified buyer");
-    await reply.getByRole("link", { name: /Open account workspace/ }).click();
-    await expect(
-      page.getByRole("heading", { name: "Northfield Fire District", level: 1 }),
-    ).toBeVisible();
-    await expect(page).toHaveURL(/\/desk\/municipalities\/growth-/);
+    await reply.getByRole("button", { name: "Qualify seller and draft listing" }).click();
+    await expect(page.locator(".desk-role")).toHaveText("Qualified seller");
+    await reply.getByRole("link", { name: /Connect a buyer/ }).click();
+    const listing = page.locator("#listing");
+    await expect(listing.getByRole("heading", { name: "2005 Northfield engine" })).toBeVisible();
+    await expect(listing).toContainText("Draft listing · unpublished");
+  });
+
+  await test.step("the listing opens a connection toward a buyer need", async () => {
+    const listing = page.locator("#listing");
+    await listing.getByLabel("Buyer need").selectOption({ label: "Pine Brook FD · Pumper" });
+    await listing.getByRole("button", { name: "Connect buyer need" }).click();
+    await expect(page).toHaveURL(/\/desk\/sourcing\/[0-9a-f-]{36}/);
+    await expect(page.getByRole("heading", { name: "Northfield Fire District" })).toBeVisible();
+    await expect(page.locator("#connection-progress")).toContainText(
+      "Pine Brook FD ← Northfield Fire District · 2005 Northfield engine · Draft listing",
+    );
+    const rail = page.getByRole("list", { name: "Connection progress" });
+    await expect(rail.getByRole("listitem").filter({ hasText: "Investigating" })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
   });
 
   await test.step("pairing draft is saved and stays readable", async () => {
     await page.goto("/desk/sourcing");
     await page.getByRole("link", { name: "Cedar Valley Fire District for Pine Brook FD" }).click();
+    await expect(page.locator("#connection-progress")).toContainText("No listing yet.");
     await expect(page.getByRole("cell", { name: /Unknown/ })).toHaveCount(4);
     await page.getByRole("navigation", { name: "Account sections" }).getByText("Outreach").click();
     await page.getByRole("button", { name: "Save reviewed draft" }).click();
@@ -184,15 +212,76 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(page).toHaveURL(/\/desk\/sourcing#need-/);
   });
 
+  await test.step("a buyer need recorded on the desk connects to a seller", async () => {
+    await page.goto("/desk/sourcing");
+    const form = section(page, "Record a buyer need");
+    await form.getByLabel("Buyer", { exact: true }).fill("Willow Creek FD");
+    await form
+      .getByLabel("Confirmed need, as the buyer stated it")
+      .fill("Willow Creek FD needs a pumper under $160,000 all-in that clears a 118 in door.");
+    await form.getByLabel("Need provenance").fill("Synthetic permissioned call note");
+    await form.getByLabel("Maximum budget (USD)").fill("160000");
+    await form.getByLabel("Maximum height (inches)").fill("118");
+    await form.getByRole("button", { name: "Record buyer need" }).click();
+    const need = section(page, "Willow Creek FD");
+    await expect(need).toContainText("Pumper · Up to $160,000 all-in · Height ≤118 in");
+    await expect(need).toContainText("No seller connected yet.");
+    await need.getByText("Connect a seller").click();
+    await need
+      .getByLabel("Seller or listed vehicle")
+      .selectOption({ label: "Maple Grove Fire Department · Seller account" });
+    await need.getByRole("button", { name: "Open connection" }).click();
+    await expect(page).toHaveURL(/\/desk\/sourcing\/[0-9a-f-]{36}/);
+    await expect(page.getByText("Buyer need: Willow Creek FD", { exact: true })).toBeVisible();
+    await expect(page.locator("#connection-progress")).toContainText("No listing yet.");
+  });
+
+  await test.step("the connection closest to a sale is introduced, then closed", async () => {
+    await page.goto("/desk");
+    await page.getByRole("link", { name: "Harbor Point FD ← Oak Hollow Fire Company" }).click();
+    const progress = page.locator("#connection-progress");
+    await page.getByRole("link", { name: "Record introduction" }).click();
+    await progress
+      .getByLabel("Introduction note")
+      .fill("Introduced Harbor Point's chief to Chief Park by phone.");
+    await progress.getByRole("button", { name: "Record introduction" }).click();
+    const rail = page.getByRole("list", { name: "Connection progress" });
+    await expect(rail.getByRole("listitem").filter({ hasText: "Introduced" })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    await progress.getByLabel("Sale note").fill("Harbor Point signed the purchase agreement.");
+    await progress.getByRole("button", { name: "Record closed sale" }).click();
+    await expect(progress).toContainText(
+      "Sale closed: Harbor Point signed the purchase agreement.",
+    );
+    await expect(rail.getByRole("listitem").filter({ hasText: "Sale closed" })).toHaveAttribute(
+      "aria-current",
+      "step",
+    );
+    await page.goto("/desk");
+    await expect(
+      section(page, "Active deals").getByRole("link", { name: /Harbor Point FD/ }),
+    ).toHaveCount(0);
+    await page.goto("/desk/sourcing");
+    const harbor = section(page, "Harbor Point FD");
+    await expect(harbor).toContainText("Need fulfilled");
+    await expect(
+      harbor.getByRole("row", { name: /Maple Grove Fire Department for Harbor Point FD/ }),
+    ).toContainText("Closed by another sale");
+  });
+
   await test.step("outcomes use readable labels and dates", async () => {
     await page.getByRole("navigation", { name: "Workspace" }).getByText("Outcomes").click();
     await expect(page.getByText("closed lost").first()).toBeVisible();
     await expect(page.getByText(/earliest due [A-Z][a-z]{2} \d{1,2}, \d{4}/).first()).toBeVisible();
   });
 
-  await test.step("active deals open their evidence review", async () => {
+  await test.step("buyer accounts open their evidence review", async () => {
     await page.goto("/desk");
-    await page.getByRole("link", { name: "Austin Fire Department" }).click();
+    await section(page, "Buyer accounts")
+      .getByRole("link", { name: "Austin Fire Department" })
+      .click();
     await expect(page.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
     await page.getByRole("link", { name: /Review evidence/ }).click();
     await expect(page.getByRole("heading", { name: "2004 synthetic pumper" })).toBeVisible();
