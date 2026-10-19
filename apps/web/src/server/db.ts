@@ -84,3 +84,21 @@ export async function beginLocked(client: PoolClient, lock: SQL) {
   await orm(client).execute(sql`set local lock_timeout='5s'`);
   await orm(client).execute(lock);
 }
+
+/** Runs `action` in a transaction serialized by `lock`, committing only if it resolves.
+ * @throws Whatever `action` throws, after rolling back.
+ */
+export async function lockedTransaction<T>(lock: SQL, action: (client: PoolClient) => Promise<T>) {
+  const client = await database().connect();
+  try {
+    await beginLocked(client, lock);
+    const result = await action(client);
+    await orm(client).execute(sql`commit`);
+    return result;
+  } catch (error) {
+    await orm(client).execute(sql`rollback`);
+    throw error;
+  } finally {
+    client.release();
+  }
+}

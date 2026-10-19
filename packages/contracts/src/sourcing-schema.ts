@@ -247,13 +247,14 @@ export type SourcingAccount = {
   owner: string;
   nextAction: string;
   trigger: {
+    id: string;
     excerpt: string;
     sourceLabel: string;
     url: string;
     observedAt: Date;
-  };
+  } | null;
   need: Need & { buyerHref: string };
-  inventorySearch: { searchedAt: Date; reviewedMatches: number };
+  inventorySearch: { searchedAt: Date; reviewedMatches: number } | null;
   contact: {
     identity: "pending_review" | "reviewed";
     permission: "not_established" | "established";
@@ -263,7 +264,8 @@ export type SourcingAccount = {
     state: "none" | "draft" | "queued" | "sent" | "uncertain" | "stopped";
     stopReason: string | null;
   };
-  replies: { id: string; channel: "email" | "form"; receivedAt: Date; text: string }[];
+  // Verified email replies and specialist-recorded notes, verbatim.
+  replies: { id: string; channel: "email" | "note"; receivedAt: Date; text: string }[];
   facts: Fact[];
   decision: (Decision & { decidedAt: Date; basis: DecisionBasis }) | null;
 };
