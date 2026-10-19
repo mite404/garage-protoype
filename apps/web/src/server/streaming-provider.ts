@@ -104,6 +104,13 @@ const messageSchema = z.object({
   responseId: z.string().optional(),
   responseModel: z.string().optional(),
 });
+// Tools each subject can actually run; the model is offered nothing else.
+const subjectTools = {
+  deal: new Set<string>(["show_card", "prepare_draft"]),
+  sourcing: new Set<string>(["show_card", "propose_fact"]),
+};
+const permitted = (tools: Set<string>, name: string) =>
+  approvedSalesTool.safeParse(name).success && tools.has(name);
 const kimi = {
   id: "moonshotai/kimi-k3",
   name: "Kimi K3",
@@ -157,15 +164,14 @@ export function admittedProvider(
           throw new AppError(503, "NOT_CONFIGURED", "OpenRouter is not configured.");
         const { actor, row } = await streamContext(execution.id);
         await requireModelCheckpoint(row.id, store, execution.requestId);
+        const tools = subjectTools[row.sourcingCaseId ? "sourcing" : "deal"];
         const permittedContext = {
           ...context,
           messages: context.messages.map((message) =>
             message.role === "system"
               ? {
                   ...message,
-                  toolsAdded: message.toolsAdded?.filter(
-                    (tool) => approvedSalesTool.safeParse(tool.name).success,
-                  ),
+                  toolsAdded: message.toolsAdded?.filter((tool) => permitted(tools, tool.name)),
                 }
               : message,
           ),
@@ -175,7 +181,9 @@ export function admittedProvider(
           actor,
           {
             key: `flue:${row.id}:${execution.requestId}`,
-            opportunityId: row.opportunityId,
+            ...(row.sourcingCaseId
+              ? { sourcingCaseId: row.sourcingCaseId }
+              : { opportunityId: row.opportunityId }),
             model: kimi.id,
             input: JSON.stringify(permittedContext),
             photos: [],
@@ -222,11 +230,7 @@ export function admittedProvider(
           },
         );
         const final = messageSchema.parse(JSON.parse(report.output));
-        if (
-          final.content.some(
-            (item) => item.type === "toolCall" && !approvedSalesTool.safeParse(item.name).success,
-          )
-        )
+        if (final.content.some((item) => item.type === "toolCall" && !permitted(tools, item.name)))
           throw new AppError(403, "TOOL_NOT_ALLOWED", "This sales capability is not available.");
         if (!forwarded) output.push({ type: "start", partial: final });
         if (final.stopReason === "error" || final.stopReason === "aborted")

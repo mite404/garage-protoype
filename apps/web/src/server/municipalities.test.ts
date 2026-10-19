@@ -186,6 +186,7 @@ test(
         JSON.stringify(prompt),
         /OTHER ACTOR|OTHER DEAL|PRIVATE|Earlier condition 0/,
       );
+      assert.ok(prompt.kind === "deal");
       assert.equal(prompt.inquiry?.input.text, "What would clear that condition?");
       assert.equal(prompt.deal?.acquisition?.terms?.amountCents, 8400000);
       await db.query(
