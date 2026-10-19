@@ -72,6 +72,9 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-035: Use source-backed changes as triggers to reassess demand and possible seller availability
   within that workflow because timely evidence can justify a next action without treating a signal
   as verified intent, consent, or authority to send outreach.
+- ADR-036: Use [optional PostHog measurement](posthog.md) for pseudonymous committed outcomes and
+  one account-stable reviewed-outreach trial because assignment, actual delivery, and qualified
+  replies must remain distinct while PostgreSQL retains business state and permissions.
 
 ## Proposed
 

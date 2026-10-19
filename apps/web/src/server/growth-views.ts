@@ -29,6 +29,7 @@ import {
 } from "./growth";
 import { readOutreach } from "./outreach";
 import { parseInput } from "./validation";
+import { readOutreachExperiment } from "./outreach-experiment";
 
 /** Reads durable enrichment, source provenance, answers and inferences for one owned account.
  * @throws {AppError} For revoked credentials or inaccessible accounts.
@@ -39,6 +40,7 @@ export async function getGrowthProfile(actor: Actor, id: string) {
   const replies = await readReceivedReplies(actor, id);
   const insights = await readGrowthInsights(actor, id);
   const outreach = await readOutreach(actor, id);
+  const experiment = await readOutreachExperiment(actor, id);
   const events = await orm()
     .select()
     .from(growthEvents)
@@ -46,7 +48,7 @@ export async function getGrowthProfile(actor: Actor, id: string) {
     .orderBy(asc(growthEvents.createdAt))
     .limit(100);
   await getProspect(actor, id);
-  return { account, feedback, replies, insights, outreach, events };
+  return { account, feedback, replies, insights, outreach, events, experiment };
 }
 
 /** Finds an owned discovery record without exposing another specialist's enrichment.

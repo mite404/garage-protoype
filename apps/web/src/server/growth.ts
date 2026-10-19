@@ -26,6 +26,7 @@ import {
 } from "./db-schema";
 import { AppError } from "./errors";
 import { parseInput } from "./validation";
+import { recordGrowthMeasurement } from "./growth-measurement";
 
 const text = z.string().trim().min(1).max(1000);
 const directoryRow = z.object({
@@ -148,10 +149,12 @@ export async function recordGrowthEvent(
   kind: string,
   detail: string,
 ) {
-  await orm(client)
+  const inserted = await orm(client)
     .insert(growthEvents)
     .values({ id: `${accountId}:${key}`, accountId, kind, detail })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: growthEvents.id });
+  if (inserted.length) await recordGrowthMeasurement(client, accountId, key, kind);
 }
 
 /** Imports an approved USFA snapshot, retaining NY source assertions only.
@@ -409,6 +412,13 @@ export async function qualifyProspect(actor: Actor, id: string, raw: unknown) {
       await orm(client)
         .insert(opportunityMembers)
         .values({ opportunity_id: opportunityId, user_id: actor.userId });
+      await recordGrowthEvent(
+        client,
+        id,
+        "opportunity_created",
+        "opportunity_created",
+        "Created a new reviewed buyer opportunity",
+      );
     }
     const original = `${account.buyingSignal.text}\n\nOriginal reply: ${input.reply}`;
     await orm(client)

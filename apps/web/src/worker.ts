@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { sessionDatabaseUrl } from "./server/db";
 import { processImport, runNextImport } from "./server/imports";
 import { sweepGrowth } from "./server/growth-scheduler";
+import { drainGrowthTelemetry } from "./server/growth-measurement";
 
 /** Runs one durable import worker. No live provider is installed by default.
  * @throws For a transaction-pooler URL, database configuration or connectivity failures; jobs survive process restart.
@@ -16,6 +17,7 @@ export async function runWorker(
   while (!signal.aborted) {
     if (Date.now() >= nextGrowthSweep) {
       await sweepGrowth();
+      await drainGrowthTelemetry();
       nextGrowthSweep = Date.now() + 60000;
     }
     if (!(await runNextImport(undefined, provider))) {

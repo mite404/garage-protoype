@@ -211,7 +211,65 @@ function ExistingAccountMatch({ account }: { account: Profile["account"] }) {
   );
 }
 
-function OutreachReview({ account, outreach }: Pick<Profile, "account" | "outreach">) {
+function AssignedApproach({ experiment }: { experiment: NonNullable<Profile["experiment"]> }) {
+  return (
+    <p className="mt-2 text-sm">
+      <strong>
+        {{ control: "Request-first", evidence_first: "Evidence-first" }[experiment.variant]}
+      </strong>{" "}
+      · {experiment.exposedAt ? "Delivery confirmed" : "Not exposed"} ·{" "}
+      {experiment.synthetic ? "Synthetic demonstration, not uplift" : "Permissioned observation"}.
+      Review the frozen text below before queueing.
+    </p>
+  );
+}
+
+function ExperimentStatus({ account, experiment }: Pick<Profile, "account" | "experiment">) {
+  if (experiment) return <AssignedApproach experiment={experiment} />;
+  if (process.env.POSTHOG_ENABLED === "true")
+    return (
+      <GrowthCommand kind="experiment" accountId={account.id} label="Prepare assigned approach" />
+    );
+  return (
+    <p className="mt-2 text-sm">Trial disabled. Normal reviewed outreach remains available.</p>
+  );
+}
+
+function ReviewedSequenceForm({ account, experiment }: Pick<Profile, "account" | "experiment">) {
+  return (
+    <GrowthCommand kind="enroll" accountId={account.id} label="Approve and queue sequence">
+      {experiment && <input type="hidden" name="experiment" value="true" />}
+      <label>
+        Subject
+        <input
+          name="subject"
+          required
+          maxLength={200}
+          defaultValue={experiment?.subject}
+          readOnly={Boolean(experiment)}
+        />
+      </label>
+      <label>
+        Reviewed message
+        <textarea
+          name="body"
+          rows={8}
+          required
+          maxLength={5000}
+          placeholder="Include reply STOP to opt out."
+          defaultValue={experiment?.body}
+          readOnly={Boolean(experiment)}
+        />
+      </label>
+    </GrowthCommand>
+  );
+}
+
+function OutreachReview({
+  account,
+  outreach,
+  experiment,
+}: Pick<Profile, "account" | "outreach" | "experiment">) {
   return (
     <section className="growth-card">
       <h2>Reviewed outreach</h2>
@@ -219,21 +277,20 @@ function OutreachReview({ account, outreach }: Pick<Profile, "account" | "outrea
         Queues only. Two frozen steps, now and in three days. Replies, opt-outs and delivery
         failures stop due work.
       </p>
-      <GrowthCommand kind="enroll" accountId={account.id} label="Approve and queue sequence">
-        <label>
-          Subject
-          <input name="subject" required maxLength={200} />
-        </label>
-        <label>
-          Reviewed message
-          <textarea
-            name="body"
-            required
-            maxLength={5000}
-            placeholder="Include reply STOP to opt out."
-          />
-        </label>
-      </GrowthCommand>
+      <div className="growth-quote">
+        <h3>Reviewed outreach trial</h3>
+        <p className="text-sm">
+          Request-first versus evidence-first. One approach per department, not per contact. Only
+          provider-confirmed delivery starts the 14-day human-qualified reply window. Sourcing
+          requests and surveys are outside this trial.
+        </p>
+        <ExperimentStatus account={account} experiment={experiment} />
+      </div>
+      <ReviewedSequenceForm
+        key={experiment?.variant ?? "normal"}
+        account={account}
+        experiment={experiment}
+      />
       <GrowthCommand kind="stop" accountId={account.id} label="Stop queued outreach">
         <label>
           Reason
@@ -459,7 +516,11 @@ export function GrowthActions({ profile }: { profile: Profile }) {
     <div className="growth-grid mt-6">
       <AccountReview account={profile.account} />
       <div className="space-y-6">
-        <OutreachReview account={profile.account} outreach={profile.outreach} />
+        <OutreachReview
+          account={profile.account}
+          outreach={profile.outreach}
+          experiment={profile.experiment}
+        />
         <DealFeedback account={profile.account} feedback={profile.feedback} />
         <ProactiveWork account={profile.account} />
       </div>

@@ -3,6 +3,7 @@ import { requireActor } from "@/server/auth";
 import { getGrowthOperations } from "@/server/growth-views";
 import { GrowthCommand } from "../growth-command";
 import { GrowthUnavailable } from "../growth-profile";
+import { readExperimentReport } from "@/server/outreach-experiment";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +28,11 @@ export default async function GrowthPage({
   searchParams: Promise<{ cursor?: string }>;
 }) {
   let operations;
+  let experiment;
   try {
-    operations = await getGrowthOperations(await requireActor(), (await searchParams).cursor);
+    const actor = await requireActor();
+    operations = await getGrowthOperations(actor, (await searchParams).cursor);
+    experiment = await readExperimentReport(actor);
   } catch (error) {
     return <GrowthUnavailable error={error} title="Operations unavailable." />;
   }
@@ -42,6 +46,43 @@ export default async function GrowthPage({
           uplift or causal attribution is implied.
         </p>
       </header>
+      <section className="growth-card mt-6">
+        <h2>Reviewed outreach trial · 14-day qualified replies</h2>
+        <p className="text-sm text-muted-foreground">
+          All accounts allocated in your scope, not just this page. Assignment is not exposure.
+          Exposure starts at the first observed provider delivery confirmation. Qualification must
+          be human-confirmed within 14 days, inclusive. Only mature exposed accounts enter the
+          conversion denominator; pending windows are separate. No winner is established.
+        </p>
+        {experiment.eligibility.map((row) => (
+          <p className="mt-3 text-sm" key={String(row.synthetic)}>
+            {row.synthetic ? "Synthetic demonstration" : "Real permissioned cohort"}: {row.eligible}{" "}
+            eligible · {row.unassigned} awaiting allocation.
+          </p>
+        ))}
+        <div className="growth-grid mt-4">
+          {experiment.cohorts.map((row) => (
+            <article className="growth-quote" key={`${row.synthetic}:${row.variant}`}>
+              <h3>
+                {row.variant === "control" ? "Request-first" : "Evidence-first"} ·{" "}
+                {row.synthetic ? "Synthetic" : "Real"}
+              </h3>
+              <p>
+                {row.assigned} assigned · {row.exposed} delivered · {row.pending} pending ·{" "}
+                {row.mature} mature.
+              </p>
+              <p>
+                {row.qualified}/{row.mature} qualified · {row.interval}.
+              </p>
+            </article>
+          ))}
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Synthetic observations prove plumbing, never uplift. Sampling, human-review delays and
+          routing can bias this small trial; inspect allocation balance before interpreting results.
+          Email/Google Forms surveys are unchanged.
+        </p>
+      </section>
       <section className="growth-card mt-6">
         <h2>This account page, not the whole population</h2>
         <p className="text-sm text-muted-foreground">
