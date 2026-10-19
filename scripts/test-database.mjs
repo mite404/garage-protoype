@@ -22,20 +22,33 @@ const lockHolderQuery = `select pid from pg_locks where locktype = 'advisory' an
   and granted and database = (select oid from pg_database where datname = current_database())`;
 
 /**
- * Parses a connection string the lever may inspect or reset: a loopback server and a
- * database whose name ends in `_test`. Hosted and shared databases are never loopback.
- * @throws {Error} When the URL is missing, remote, or names a non-disposable database.
+ * Parses a connection string for a test database, which may live on any server the
+ * operator chose, as long as its name ends in `_test`. Inspection needs nothing more.
+ * @throws {Error} When the URL is missing or names a non-test database.
  */
-export function disposableTarget(connectionString) {
+export function testDatabase(connectionString) {
   if (!connectionString) throw new Error(`Set TEST_DATABASE_URL. ${usage}`);
   const url = new URL(connectionString); // → URL
   const name = decodeURIComponent(url.pathname.slice(1)); // → database name
+  if (!/^[a-z0-9_]+_test$/.test(name))
+    throw new Error(`Refusing database "${name}": disposable names match [a-z0-9_]+_test.`);
+  return { url, name };
+}
+
+/**
+ * Parses a connection string the lever may reset: a `_test` database on a loopback server.
+ * Hosted and shared databases are never loopback. pg lets a `host` query parameter replace
+ * the URL's host, so any such parameter is refused rather than trusted.
+ * @throws {Error} When the URL is missing, remote, or names a non-disposable database.
+ */
+export function disposableTarget(connectionString) {
+  const { url, name } = testDatabase(connectionString);
+  if (url.searchParams.has("host"))
+    throw new Error("Refusing a host query parameter: only loopback databases are disposable.");
   if (!loopbackHosts.has(url.hostname))
     throw new Error(
       `Refusing ${url.hostname || "a socket"}: only loopback databases are disposable.`,
     );
-  if (!/^[a-z0-9_]+_test$/.test(name))
-    throw new Error(`Refusing database "${name}": disposable names match [a-z0-9_]+_test.`);
   const admin = new URL(url);
   admin.pathname = "/postgres";
   return { url, admin, name };
@@ -74,23 +87,24 @@ async function withClient(url, work) {
 }
 
 /**
- * Reports who is attached to the disposable database and which fixture tables hold rows.
- * Counting waits for no one: if a test file holds the fixture lock, the report names it.
- * @throws {Error} When the target is not disposable or the server is unreachable.
+ * Reports who is attached to the test database and which fixture tables hold rows.
+ * Connects only to that database. Counting waits for no one: if a test file holds the
+ * fixture lock, the report names it.
+ * @throws {Error} When the name lacks `_test` or the server is unreachable.
  */
 export async function inspect(connectionString) {
-  const { url, admin, name } = disposableTarget(connectionString);
-  const exists = await withClient(admin, async (client) => {
-    const result = await client.query("select 1 from pg_database where datname = $1", [name]);
-    return result.rowCount > 0;
-  });
-  if (!exists) return { sessions: [], leftovers: [], lockHolder: null, exists };
-  return withClient(url, async (client) => {
+  const { url, name } = testDatabase(connectionString);
+  const report = withClient(url, async (client) => {
     const sessions = (await client.query(sessionsQuery, [name])).rows; // → Session[]
     const holder = (await client.query(lockHolderQuery, [fixtureLock])).rows[0]?.pid ?? null;
     const counted = (await client.query(leftoversQuery, [fixtureSchemas])).rows;
     const leftovers = counted.filter(({ rows }) => rows > 0); // → { table, rows }[]
-    return { sessions, leftovers, lockHolder: holder, exists };
+    return { sessions, leftovers, lockHolder: holder, exists: true };
+  });
+  return report.catch((error) => {
+    // invalid_catalog_name: the database has not been created yet, so nothing can collide.
+    if (error.code !== "3D000") throw error;
+    return { sessions: [], leftovers: [], lockHolder: null, exists: false };
   });
 }
 
@@ -125,7 +139,7 @@ async function main([command]) {
   }
   if (command !== "status") throw new Error(usage);
   const report = await inspect(connectionString);
-  const { name } = disposableTarget(connectionString);
+  const { name } = testDatabase(connectionString);
   if (!report.exists) console.log(`${name} does not exist yet; reset creates it.`);
   else console.log(describe(report) || `${name} holds no fixture rows and no test run owns it.`);
   return isClean(report) ? 0 : 1;
