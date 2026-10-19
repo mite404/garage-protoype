@@ -73,6 +73,16 @@ assert.
 Literal source excerpts, user messages and drafts retain their text; Markdown emphasis is reserved
 for authored response and next-action prose. Verify that unsafe links and HTML remain inert.
 
+For the connected app workflow, run the Playwright funnel after `npm run build`, with
+`E2E_DATABASE_URL` pointing at its own loopback `_test` database, never `TEST_DATABASE_URL`:
+
+```sh
+npm run test:e2e
+```
+
+It must pass with no skipped steps. Watch its `video.webm` under `apps/web/test-results/` before
+claiming a funnel change works; [development checks](../../../docs/development.md) list its options.
+
 ## Cleanup
 
 The helper closes only its named browser session, including on failure. Stop only the service

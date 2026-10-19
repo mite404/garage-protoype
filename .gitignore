@@ -12,3 +12,6 @@ coverage/
 .DS_Store
 .open-next/
 .wrangler/
+/apps/web/.e2e/
+/apps/web/test-results/
+/apps/web/playwright-report/
