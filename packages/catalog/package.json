@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./account-screen": "./src/account-screen.tsx",
+    "./assets/*": "./src/assets/*",
     "./assistance-card": "./src/assistance-cards.tsx",
     "./prose": "./src/prose.tsx",
     "./municipality-workspace": "./src/municipality-workspace.tsx",

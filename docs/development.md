@@ -14,7 +14,16 @@ are not agent-selectable. Stories do not load server operations or send messages
 The Dispatch shell, chat and draft editor share Roboto/Space Grotesk typography, neutral surfaces,
 outlined controls and orange light-theme or lime dark-theme actions. The app follows the system
 color scheme; explicit theme attributes isolate Storybook's light and dark chat specimens.
-It does not reuse Garage's logo, department badges, or artwork.
+At the user's request, `/sign-in`, `/sign-up`, and `/account` share a Garage-style photo layout,
+wordmark, and the recovered `apparatus-cab.webp` reference asset. They display an independent
+prototype disclosure. This visual reuse does not establish asset rights or affiliation; the
+[asset permission rules][asset-rules] still apply before public distribution. Other workspaces do
+not reuse Garage artwork.
+`/sign-up` explains invitation-only access, not public registration. `/account` shows the current
+authenticated user's read-only email, application role, and model-spending permission.
+
+[asset-rules]: viability-decisions.md#6-decide-which-parts-are-real-in-the-demo
+
 `packages/catalog/src/workspace-shell.tsx` is human-facing chrome, not part of the agent schema.
 Storybook separates Primitives, Agent catalog, and Workspace so a visual export is not mistaken for
 permission to invoke a component. The agent still requests only reference-based answer, review,

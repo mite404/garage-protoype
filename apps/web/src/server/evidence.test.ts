@@ -282,6 +282,54 @@ test(
         },
       );
       await t.test(
+        "account details follow current permissions and deny revoked access",
+        async () => {
+          const app = await startTestApp(specialist, session);
+          try {
+            const load = () =>
+              fetch(`${app.origin}/account`, {
+                headers: { Cookie: app.cookie },
+                redirect: "manual",
+              });
+            const account = await load();
+            assert.equal(account.status, 200);
+            const html = (await account.text()).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, "");
+            assert.match(html, /Your account/);
+            assert.match(html, /review@example.test/);
+            assert.match(html, /Sales specialist/);
+            assert.match(html, /Enabled, subject to budget limits/);
+            assert.match(html, /apparatus-cab/);
+            assert.match(html, /action="\/auth\/sign-out"/);
+            await db.query(
+              "update signal_desk.identities set role='buyer',can_spend=false where user_id=$1",
+              [specialist],
+            );
+            const buyerAccount = await load();
+            assert.equal(buyerAccount.status, 200);
+            const buyerHtml = (await buyerAccount.text()).replace(
+              /<script\b[^>]*>[\s\S]*?<\/script>/g,
+              "",
+            );
+            assert.match(buyerHtml, /<dd>Buyer<\/dd>/);
+            assert.match(buyerHtml, /Not enabled/);
+            assert.match(buyerHtml, /href="\/"[^>]*>Back to overview<\/a>/);
+            assert.doesNotMatch(buyerHtml, /Sales specialist|Enabled, subject to budget limits/);
+            await db.query("update signal_desk.identities set revoked_at=now() where user_id=$1", [
+              specialist,
+            ]);
+            const revoked = await load();
+            assert.equal(revoked.status, 307);
+            assert.equal(revoked.headers.get("Location"), "/sign-in?error=access");
+          } finally {
+            await db.query(
+              "update signal_desk.identities set role='specialist',can_spend=true,revoked_at=null where user_id=$1",
+              [specialist],
+            );
+            await app.stop();
+          }
+        },
+      );
+      await t.test(
         "a human correction survives deduplication and new conflicts revoke publication",
         async () => {
           let view = await getWorkbench(actor, "evidence-deal");
