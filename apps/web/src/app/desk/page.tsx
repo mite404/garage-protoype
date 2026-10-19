@@ -3,18 +3,138 @@ import { requireActor } from "@/server/auth";
 import { AppError } from "@/server/errors";
 import { listEvidenceOpportunities } from "@/server/evidence";
 import { listMunicipalities } from "@/server/municipalities";
+import { listSourcingCases } from "@/server/sourcing";
+import { getGrowthOperations } from "@/server/growth-views";
+import { pairingStages, stagePriority } from "@signal-desk/catalog/desk-state";
 
 export const dynamic = "force-dynamic";
+
+type WorkItem =
+  | { kind: "pairing"; data: Awaited<ReturnType<typeof listSourcingCases>>[number] }
+  | { kind: "prospect"; data: Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number] };
+
+function ReviewQueue({ items }: { items: WorkItem[] }) {
+  return (
+    <section className="desk-card mt-6">
+      <h2>Needs your review</h2>
+      <div className="desk-table-scroll">
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Why</th>
+              <th>Next action</th>
+              <th>Stage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) =>
+              item.kind === "pairing" ? (
+                <tr key={item.data.id}>
+                  <th>
+                    <Link href={`/desk/sourcing/${item.data.id}`}>{item.data.seller}</Link>
+                  </th>
+                  <td>Candidate for {item.data.buyer}</td>
+                  <td>{item.data.nextAction}</td>
+                  <td>{pairingStages[item.data.stage]}</td>
+                </tr>
+              ) : (
+                <tr key={item.data.id}>
+                  <th>
+                    <Link href={`/desk/prospects/${item.data.id}`}>{item.data.name}</Link>
+                  </th>
+                  <td>
+                    {item.data.identityState !== "confirmed"
+                      ? "Identity needs review"
+                      : "No reviewed contact"}
+                  </td>
+                  <td>
+                    {item.data.identityState !== "confirmed"
+                      ? "Confirm identity"
+                      : "Review contact"}
+                  </td>
+                  <td>Pre-opportunity</td>
+                </tr>
+              ),
+            )}
+          </tbody>
+        </table>
+      </div>
+      {!items.length && <p>No accounts need review.</p>}
+    </section>
+  );
+}
+
+function DealRooms({
+  municipalities,
+  opportunities,
+}: {
+  municipalities: Awaited<ReturnType<typeof listMunicipalities>>;
+  opportunities: Awaited<ReturnType<typeof listEvidenceOpportunities>>;
+}) {
+  const rooms = [
+    ...municipalities.map((organization) => ({
+      href: `/desk/municipalities/${encodeURIComponent(organization.id)}`,
+      name: organization.name,
+      detail: `${organization.city}, ${organization.region} · ${organization.unit}`,
+      kind: "Buyer deal room",
+    })),
+    ...opportunities.map((opportunity) => ({
+      href: `/desk/opportunities/${encodeURIComponent(opportunity.id)}`,
+      name: opportunity.title,
+      detail: opportunity.nextAction || "Open evidence review",
+      kind: "Evidence workbench",
+    })),
+  ];
+  return (
+    <section className="desk-card mt-6">
+      <h2>Deal rooms</h2>
+      <p className="desk-note">Qualified accounts continue here with their evidence packets.</p>
+      {rooms.length ? (
+        <div className="desk-table-scroll mt-4">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th scope="col">Deal</th>
+                <th scope="col">Next step</th>
+                <th scope="col">Room</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rooms.map((room) => (
+                <tr key={room.href}>
+                  <th scope="row">
+                    <Link href={room.href}>{room.name}</Link>
+                  </th>
+                  <td>{room.detail}</td>
+                  <td>{room.kind}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="mt-4">No deal rooms yet. Qualifying a reviewed reply opens one.</p>
+      )}
+    </section>
+  );
+}
 
 /** Checks access server-side before rendering any private workspace content. */
 export default async function Desk() {
   let actor;
   let opportunities;
   let municipalities;
+  let cases;
+  let operations;
   try {
     actor = await requireActor();
-    opportunities = await listEvidenceOpportunities(actor);
-    municipalities = await listMunicipalities(actor);
+    [opportunities, municipalities, cases, operations] = await Promise.all([
+      listEvidenceOpportunities(actor),
+      listMunicipalities(actor),
+      listSourcingCases(actor),
+      getGrowthOperations(actor),
+    ]);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return (
@@ -31,61 +151,46 @@ export default async function Desk() {
     );
   }
   return (
-    <section className="max-w-2xl">
-      <p className="eyebrow mb-4">{actor.role} workspace</p>
-      <h1>Municipal sales.</h1>
-      <p className="mt-6 text-muted-foreground">
-        Open a department to review its acquisition, purchase conditions and next sale blocker.
+    <section>
+      <h1>Work queue</h1>
+      <p className="mt-3 text-muted-foreground">
+        Review the evidence and move the next buyer-need pairing forward.
       </p>
-      {municipalities.map((organization) => (
-        <Link
-          className="panel mt-6 block"
-          key={organization.id}
-          href={`/desk/municipalities/${encodeURIComponent(organization.id)}`}
-        >
-          <h2>{organization.name}</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {organization.city}, {organization.region} · {organization.unit}
-          </p>
-          {organization.synthetic && (
-            <p className="mt-3 text-xs text-muted-foreground">Synthetic demonstration</p>
-          )}
-        </Link>
-      ))}
-      {!municipalities.length && (
-        <p className="mt-6 text-sm text-muted-foreground">
-          No municipality profiles are linked to your assigned opportunities.
-        </p>
-      )}
-      {opportunities.length === 0 && (
-        <p className="panel mt-8">No specialist opportunities are assigned to this account.</p>
-      )}
-      <details className="mt-8">
-        <summary className="cursor-pointer font-semibold">
-          Evidence workbench ({opportunities.length})
-        </summary>
-        {opportunities.map((opportunity) => (
-          <Link
-            className="panel mt-6 block"
-            key={opportunity.id}
-            href={`/desk/opportunities/${encodeURIComponent(opportunity.id)}`}
-          >
-            <h2>{opportunity.title}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {opportunity.nextAction || "Open evidence review"}
+      <section className="desk-card mt-6">
+        <h2>NY growth pipeline</h2>
+        <div className="desk-pipeline">
+          {Object.entries(operations.counts).map(([label, count]) => (
+            <p key={label}>
+              <strong>{count}</strong>
+              <span>{label.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
             </p>
-            <p className="mt-4 text-sm font-semibold text-primary">Review source packet →</p>
-          </Link>
-        ))}
-      </details>
-      {actor.role === "specialist" && (
-        <Link className="quiet-button mt-8" href="/desk/tokens">
-          Manage local MCP tokens
-        </Link>
-      )}
-      <form action="/auth/sign-out" method="post" className="mt-8">
-        <button className="button">Sign out</button>
-      </form>
+          ))}
+        </div>
+        <p className="desk-note">
+          Columns are distinct conditions, not a funnel. Counts describe this account page.
+        </p>
+      </section>
+      <ReviewQueue
+        items={[
+          ...cases
+            .toSorted((a, b) => (stagePriority[a.stage] ?? 7) - (stagePriority[b.stage] ?? 7))
+            .map((data) => ({ kind: "pairing" as const, data })),
+          ...operations.accounts
+            .filter((account) => account.identityState !== "confirmed" || !account.contactable)
+            .map((data) => ({ kind: "prospect" as const, data })),
+        ]}
+      />
+      <DealRooms municipalities={municipalities} opportunities={opportunities} />
+      <section className="desk-card mt-6">
+        <h2>Background work</h2>
+        <p className="desk-note">
+          {operations.schedules.length} approved schedules.{" "}
+          {operations.budget
+            ? `${operations.budget.active} active attempts, ${operations.budget.spentMicroUsd} micro-USD settled.`
+            : "No spending budget provisioned. Paid work cannot run."}{" "}
+          Analyst proposals wait on each account for review.
+        </p>
+      </section>
     </section>
   );
 }

@@ -5,18 +5,38 @@ import { GrowthCommand } from "../growth-command";
 import { GrowthUnavailable } from "../growth-profile";
 
 export const dynamic = "force-dynamic";
+const identityLabels: Record<string, string> = {
+  needs_review: "Needs review",
+  confirmed: "Confirmed",
+  rejected: "Rejected match",
+};
+const contactLabels = { true: "Reviewed contact", false: "No contact permission" };
+const signalLabels = { true: "Cited buying signal", false: "Not established" };
+const stageLabels = { true: "Deal linked", false: "Pre-opportunity" };
 
-function ProspectReadiness({
-  account,
-}: {
-  account: Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number];
-}) {
+type Account = Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number];
+
+function AccountIdentity({ account }: { account: Account }) {
   return (
-    <p className="text-sm text-muted-foreground mt-2">
-      {account.buyingSignal ? "Cited buying signal" : "No buying signal"} ·{" "}
-      {account.contactable ? "Reviewed contact" : "No contact permission"} ·{" "}
-      {account.qualified ? "Deal linked" : "Pre-opportunity"}
-    </p>
+    <td>
+      <Link href={`/desk/prospects/${account.id}`}>{account.name}</Link>
+      <small>
+        {account.directory.synthetic ? "Synthetic fixture" : "USFA directory"} ·{" "}
+        {account.directory.city}, NY
+      </small>
+    </td>
+  );
+}
+
+function AccountRow({ account }: { account: Account }) {
+  return (
+    <tr>
+      <AccountIdentity account={account} />
+      <td>{identityLabels[account.identityState] ?? account.identityState}</td>
+      <td>{contactLabels[`${account.contactable}`]}</td>
+      <td>{signalLabels[`${Boolean(account.buyingSignal)}`]}</td>
+      <td>{stageLabels[`${account.qualified}`]}</td>
+    </tr>
   );
 }
 
@@ -35,37 +55,29 @@ export default async function ProspectsPage({
   return (
     <section className="growth-page">
       <header>
-        <p className="eyebrow">New York · discovery</p>
-        <h1>Prospect inbox.</h1>
+        <h1>Accounts</h1>
         <p className="mt-4 text-muted-foreground">
-          Start with a source. Confirm identity, fit and permission before a first touch.
+          Start with a source. Confirm identity, fit and permission before a first touch.{" "}
+          {operations.delivery}. Directory records are not qualified opportunities.
         </p>
       </header>
-      <div className="growth-card mt-6">
-        <p>{operations.delivery}. Directory records are not qualified opportunities.</p>
-        <Link href="/desk/growth" className="quiet-button mt-3">
-          Growth operations →
-        </Link>
-      </div>
-      <div className="growth-grid mt-6">
-        {operations.accounts.map((account) => (
-          <Link
-            className="growth-card growth-account-link"
-            key={account.id}
-            href={`/desk/prospects/${account.id}`}
-          >
-            <p className="eyebrow">
-              {account.directory.synthetic ? "Synthetic fixture" : "USFA directory"} ·{" "}
-              {account.directory.city}, NY
-            </p>
-            <h2>{account.name}</h2>
-            <p className="mt-3">
-              {account.identityState.replaceAll("_", " ")} · {account.fit.replaceAll("_", " ")}
-            </p>
-            <ProspectReadiness account={account} />
-            <p className="mt-4 text-sm font-semibold">Review account →</p>
-          </Link>
-        ))}
+      <div className="desk-card desk-table-scroll mt-6">
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Identity</th>
+              <th>Contact</th>
+              <th>Signal</th>
+              <th>Stage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {operations.accounts.map((account) => (
+              <AccountRow key={account.id} account={account} />
+            ))}
+          </tbody>
+        </table>
       </div>
       {!operations.accounts.length && (
         <section className="growth-card mt-6">
