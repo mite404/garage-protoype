@@ -163,6 +163,22 @@ const stories = {
     selector: 'nav[aria-label="Municipal sales"]',
     text: ["No proposed amount or conditions recorded."],
   },
+  "sourcing-account-workspace--research": {
+    selector: 'nav[aria-label="Sales workspace"]',
+    text: ["Research trigger only", "Reviewed draft · Not sent"],
+  },
+  "sourcing-account-workspace--reply-rejects-pairing": {
+    selector: 'nav[aria-label="Sales workspace"]',
+    text: ["Does not meet", "Recorded Oct 19, 2026"],
+  },
+  "sourcing-account-workspace--dark": {
+    selector: '[data-theme="dark"] nav[aria-label="Sales workspace"]',
+    text: ["Does not meet"],
+  },
+  "sourcing-account-workspace--chat-cards": {
+    selector: '[data-card="reply-review"]',
+    text: ["Proposed updates · Not yet approved", "That rejects this pairing"],
+  },
 };
 
 // Stories whose layout must also hold at a 390px phone width.
@@ -170,6 +186,7 @@ const narrow = [
   "conversation-reading--connected-turn",
   "conversation-chat-workspace--light",
   "municipal-sales-workspace--default",
+  "sourcing-account-workspace--reply-rejects-pairing",
 ];
 
 function browser(...args) {
