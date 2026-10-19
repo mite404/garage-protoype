@@ -10,6 +10,9 @@ execution: code
 
 # Garage Signal Desk - Plan
 
+The October 19 [authorized NY growth-loop expansion](2026-10-19-ny-growth-loop.md) supersedes
+this plan's conversion-only exclusions for U1-U7. This document retains the historical slice.
+
 ## Goal Capsule
 
 - Objective: Help a Garage specialist move an interested buyer toward a human-reviewed offer by

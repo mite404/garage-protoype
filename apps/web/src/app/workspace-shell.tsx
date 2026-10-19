@@ -7,6 +7,8 @@ import { WorkspaceShell } from "@signal-desk/catalog/workspace-shell";
 const destinations = [
   { href: "/", label: "Overview" },
   { href: "/desk", label: "Workspace" },
+  { href: "/desk/prospects", label: "Prospect inbox" },
+  { href: "/desk/growth", label: "Growth operations" },
   { href: "/vehicles/demo-pumper", label: "Public record" },
   { href: "/desk/tokens", label: "MCP tokens" },
   { href: "/account", label: "Account" },
