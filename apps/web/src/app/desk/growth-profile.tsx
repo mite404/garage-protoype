@@ -3,6 +3,8 @@ import type { getGrowthProfile } from "@/server/growth-views";
 import { feedbackSurvey } from "@signal-desk/contracts/feedback-schema";
 import { AppError } from "@/server/errors";
 import { GrowthCommand } from "./growth-command";
+import type { AccountTab } from "@signal-desk/catalog/desk-shell";
+import { outreachSteps } from "@signal-desk/catalog/desk-state";
 
 type Profile = Awaited<ReturnType<typeof getGrowthProfile>>;
 
@@ -265,32 +267,11 @@ function ReviewedSequenceForm({ account, experiment }: Pick<Profile, "account" |
   );
 }
 
-function OutreachReview({
-  account,
-  outreach,
-  experiment,
-}: Pick<Profile, "account" | "outreach" | "experiment">) {
+function DeliveryReview({ account, outreach }: Pick<Profile, "account" | "outreach">) {
   return (
-    <section className="growth-card">
-      <h2>Reviewed outreach</h2>
-      <p className="text-sm text-muted-foreground">
-        Queues only. Two frozen steps, now and in three days. Replies, opt-outs and delivery
-        failures stop due work.
-      </p>
-      <div className="growth-quote">
-        <h3>Reviewed outreach trial</h3>
-        <p className="text-sm">
-          Request-first versus evidence-first. One approach per department, not per contact. Only
-          provider-confirmed delivery starts the 14-day human-qualified reply window. Sourcing
-          requests and surveys are outside this trial.
-        </p>
-        <ExperimentStatus account={account} experiment={experiment} />
-      </div>
-      <ReviewedSequenceForm
-        key={experiment?.variant ?? "normal"}
-        account={account}
-        experiment={experiment}
-      />
+    <section id="delivery">
+      <h3>Delivery</h3>
+      <p className="desk-lock">External delivery disabled</p>
       <GrowthCommand kind="stop" accountId={account.id} label="Stop queued outreach">
         <label>
           Reason
@@ -489,45 +470,128 @@ function OriginalAnswers({ feedback, replies }: Pick<Profile, "feedback" | "repl
   );
 }
 
-function OutcomeTrail({ account, events }: Pick<Profile, "account" | "events">) {
+function AccountSignals({ profile }: { profile: Profile }) {
   return (
-    <section className="growth-card">
-      <h2>Provenance and outcome trail</h2>
-      {account.observations.map((observation) => (
-        <details className="growth-quote" key={observation.id}>
-          <summary>{observation.snapshot}</summary>
-          <pre className="whitespace-pre-wrap text-sm mt-2">
-            {JSON.stringify(observation.original, null, 2)}
-          </pre>
-        </details>
-      ))}
-      {events.map((event) => (
-        <p className="growth-quote text-sm" key={event.id}>
-          <strong>{event.kind}</strong> · {event.detail}
-        </p>
-      ))}
+    <section className="desk-card">
+      <h2>Signals</h2>
+      {profile.account.buyingSignal ? (
+        <blockquote className="growth-quote">
+          <p>{profile.account.buyingSignal.quote}</p>
+          <cite>
+            {profile.account.buyingSignal.source} · {profile.account.buyingSignal.permission}
+          </cite>
+        </blockquote>
+      ) : (
+        <p>No cited buying signal established.</p>
+      )}
+      <ResearchSummary insights={profile.insights} />
     </section>
   );
 }
 
-/** Renders human-reviewed account operations; provider activation has no control on this page. */
-export function GrowthActions({ profile }: { profile: Profile }) {
+function AccountSources({ profile }: { profile: Profile }) {
   return (
-    <div className="growth-grid mt-6">
-      <AccountReview account={profile.account} />
-      <div className="space-y-6">
-        <OutreachReview
-          account={profile.account}
-          outreach={profile.outreach}
-          experiment={profile.experiment}
-        />
-        <DealFeedback account={profile.account} feedback={profile.feedback} />
-        <ProactiveWork account={profile.account} />
-      </div>
-      <OriginalAnswers feedback={profile.feedback} replies={profile.replies} />
-      <OutcomeTrail account={profile.account} events={profile.events} />
-    </div>
+    <section className="desk-card">
+      <h2>Directory observations</h2>
+      {profile.account.observations.map((observation) => (
+        <details className="growth-quote" key={observation.id}>
+          <summary>{observation.snapshot}</summary>
+          <pre className="whitespace-pre-wrap text-sm">
+            {JSON.stringify(observation.original, null, 2)}
+          </pre>
+        </details>
+      ))}
+      {profile.account.buyingSignal && (
+        <blockquote className="growth-quote">
+          {profile.account.buyingSignal.quote}
+          <cite>{profile.account.buyingSignal.source}</cite>
+        </blockquote>
+      )}
+    </section>
   );
+}
+
+function AccountActivity({ profile }: { profile: Profile }) {
+  return (
+    <>
+      <section className="desk-card">
+        <h2>Activity</h2>
+        <ol className="desk-activity">
+          {profile.events.map((event) => (
+            <li key={event.id}>
+              <time dateTime={event.createdAt.toISOString()}>
+                {event.createdAt.toLocaleDateString("en-US", { timeZone: "UTC" })}
+              </time>
+              <span>
+                {event.kind} · {event.detail}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <ProactiveWork account={profile.account} />
+    </>
+  );
+}
+
+function AccountOutreach({ profile, current }: { profile: Profile; current: number }) {
+  const active = current >= 5 ? 3 : current >= 4 ? (profile.outreach.length ? 2 : 1) : 0;
+  return (
+    <>
+      <nav className="desk-stepper" aria-label="Outreach progress">
+        {outreachSteps.map((label, index) => (
+          <a
+            key={label}
+            href={`#outreach-${index}`}
+            aria-current={active === index ? "step" : undefined}
+          >
+            <span>{index + 1}</span>
+            {label}
+          </a>
+        ))}
+      </nav>
+      <details className="desk-card" id="outreach-0" open={active === 0}>
+        <summary>Contact review</summary>
+        <AccountReview account={profile.account} />
+      </details>
+      <details className="desk-card" id="outreach-1" open={active === 1}>
+        <summary>Draft review</summary>
+        <ExperimentStatus account={profile.account} experiment={profile.experiment} />
+        <ReviewedSequenceForm account={profile.account} experiment={profile.experiment} />
+      </details>
+      <details className="desk-card" id="outreach-2" open={active === 2}>
+        <summary>Delivery</summary>
+        <DeliveryReview account={profile.account} outreach={profile.outreach} />
+      </details>
+      <details className="desk-card" id="outreach-3" open={active === 3}>
+        <summary>Reply</summary>
+        <OriginalAnswers feedback={profile.feedback} replies={profile.replies} />
+        <DealFeedback account={profile.account} feedback={profile.feedback} />
+      </details>
+    </>
+  );
+}
+
+const accountPanels = {
+  overview: AccountSignals,
+  fit: () => null,
+  sources: AccountSources,
+  activity: AccountActivity,
+  outreach: AccountOutreach,
+};
+
+/** Tab-scoped account reviews reuse the growth commands and original evidence. */
+export function GrowthAccountContent({
+  profile,
+  tab,
+  current,
+}: {
+  profile: Profile;
+  tab: AccountTab;
+  current: number;
+}) {
+  const Panel = accountPanels[tab];
+  return <Panel profile={profile} current={current} />;
 }
 
 /** Shows only sanitized access failures; unexpected failures reach the application boundary.

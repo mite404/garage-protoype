@@ -39,8 +39,7 @@ export default async function GrowthPage({
   return (
     <section className="growth-page">
       <header>
-        <p className="eyebrow">Growth operations · NY</p>
-        <h1>A loop you can inspect.</h1>
+        <h1>Outcomes</h1>
         <p className="mt-4 text-muted-foreground">
           Observed account states and human-reported outcomes. No customer validation, revenue
           uplift or causal attribution is implied.
