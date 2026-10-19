@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./desk-shell": "./src/desk-shell.tsx",
+    "./desk-state": "./src/desk-state.ts",
     "./account-screen": "./src/account-screen.tsx",
     "./assets/*": "./src/assets/*",
     "./assistance-card": "./src/assistance-cards.tsx",
