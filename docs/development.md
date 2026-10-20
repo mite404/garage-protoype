@@ -82,7 +82,8 @@ scanned documents.
 
 ## Supabase developer access
 
-The prototype project is `garage-prototype`, reference `iyjdwksmwccwslcioutd`.
+The prototype project is `garage-prototype-spike`, reference `ivjecumiizlpufwkkfpq`; the live
+Worker's Hyperdrive connects to it, so migrate this project, not any other.
 `npm ci` installs the pinned Supabase CLI, including in fresh orbs through `.agents/setup`.
 Run `npm exec -- supabase --version` to check it and `npm exec -- supabase --help` for commands.
 CLI installation does not authenticate, link the checkout, or apply database migrations.
