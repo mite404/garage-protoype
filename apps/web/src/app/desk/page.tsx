@@ -46,9 +46,7 @@ function Kpi({ label, value, pill, note }: Record<"label" | "value" | "pill" | "
         <p className="text-muted-foreground">{label}</p>
         <p className="flex flex-wrap items-center gap-3">
           <span className="font-display text-4xl font-semibold tabular-nums">{value}</span>
-          <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium">
-            {pill}
-          </span>
+          <span className="border border-border px-2 py-0.5 text-xs font-medium">{pill}</span>
         </p>
         <p className="text-muted-foreground">{note}</p>
       </CardContent>
