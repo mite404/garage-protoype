@@ -467,7 +467,7 @@
 .sourcing-fit table {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 0;
   border-collapse: separate;
   border-spacing: 0;
   background: var(--card);

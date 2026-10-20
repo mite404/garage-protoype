@@ -127,7 +127,7 @@
 .desk-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 16px 18px;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -138,7 +138,7 @@
   gap: 18px;
   align-items: center;
   border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--card));
-  border-radius: 8px;
+  border-radius: 0;
   padding: 16px;
   background: color-mix(in srgb, var(--warning) 8%, var(--card));
 }
@@ -213,7 +213,7 @@
   padding: 12px;
   background: var(--muted);
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   gap: 6px;
 }
 .desk-why .card-citation {
@@ -264,7 +264,7 @@
 .desk-account .sourcing-fit table {
   font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
 }
 .desk-account .sourcing-fit th,
 .desk-account .sourcing-fit td {
@@ -344,7 +344,7 @@
 }
 .desk-source-quote {
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--muted);
   font-size: 12px;
 }
@@ -439,7 +439,7 @@
   background: color-mix(in srgb, var(--destructive) 8%, var(--card));
   border: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--card));
   color: var(--destructive);
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 13px;
 }
 .desk-lock svg {
@@ -585,7 +585,7 @@
   margin: 8px 0 0;
   padding: 12px 14px;
   background: var(--muted);
-  border-radius: 6px;
+  border-radius: 0;
   font-style: italic;
   font-size: 14px;
 }
@@ -599,7 +599,7 @@
   padding: 12px 14px;
   background: color-mix(in srgb, var(--warning) 8%, var(--card));
   border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--card));
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 13px;
 }
 .desk-effect svg {
@@ -624,7 +624,7 @@
   gap: 14px;
   padding: 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--card);
 }
 .desk-reply-banner > svg {
@@ -766,7 +766,7 @@
   padding: 14px 18px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   font-size: 12px;
 }
 .desk-rail li {
@@ -838,7 +838,7 @@
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   font-size: 13px;
   text-decoration: none;
 }

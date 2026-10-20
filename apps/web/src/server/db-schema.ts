@@ -702,6 +702,26 @@ export const pairingEvents = privateSchema.table("pairing_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** One obstacle on a connection, open from when it was first seen until evidence resolves it.
+ * A requirement that becomes unmet again opens a new row, so each row has one duration. */
+export const connectionBlockers = privateSchema.table(
+  "connection_blockers",
+  {
+    id: text("id").primaryKey(),
+    caseId: text("case_id")
+      .notNull()
+      .references(() => sourcingCases.id),
+    kind: text("kind").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("connection_blockers_open")
+      .on(table.caseId, table.kind)
+      .where(sql`resolved_at is null`),
+  ],
+);
+
 /** One immutable account allocation, independent of contacts, flag changes and sourcing cases. */
 export const outreachExperiments = privateSchema.table("outreach_experiments", {
   accountId: text("account_id")
