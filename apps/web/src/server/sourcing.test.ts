@@ -10,6 +10,7 @@ import { resolveActor } from "./access";
 import { prepareTestDatabase } from "./test-database";
 import {
   createBuyerNeed,
+  getBlockerMetrics,
   getSourcingAccount,
   openConnection,
   listSourcingCases,
@@ -44,6 +45,7 @@ async function removeFixtures(db: PoolClient, users: string[]) {
     `delete from signal_desk.pairing_events where case_id in (${cases})`,
     `delete from signal_desk.pairing_facts where case_id in (${cases})`,
     `delete from signal_desk.source_changes where case_id in (${cases})`,
+    `delete from signal_desk.connection_blockers where case_id in (${cases})`,
     "delete from signal_desk.sourcing_cases where owner_id = any($1)",
     "delete from signal_desk.buyer_needs where owner_id = any($1)",
     `delete from signal_desk.growth_receipts where message_id in (select id from signal_desk.growth_messages where account_id in (${accounts}))`,
@@ -614,6 +616,22 @@ test(
         revision: current.revision,
         factIds: current.account.facts.map((fact) => fact.id),
       });
+      // Accepted evidence resolves the fit blockers opened with the connection; each keeps a
+      // duration. Seller contact was never reviewed, so that blocker stays open.
+      const blockers = await getBlockerMetrics(actor, [first]);
+      assert.deepEqual(
+        blockers.kinds
+          .map(({ kind, open, resolved }) => ({ kind, open, resolved }))
+          .sort((a, b) => a.kind.localeCompare(b.kind)),
+        [
+          { kind: "authority", open: 0, resolved: 1 },
+          { kind: "available", open: 0, resolved: 1 },
+          { kind: "budget", open: 0, resolved: 1 },
+          { kind: "contact_permission", open: 1, resolved: 0 },
+          { kind: "height", open: 0, resolved: 1 },
+        ],
+      );
+      assert.equal(typeof blockers.medianHours, "number");
       current = await getSourcingAccount(actor, first);
       await runSourcingCommand(actor, first, {
         kind: "decide",

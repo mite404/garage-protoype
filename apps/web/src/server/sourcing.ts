@@ -1,6 +1,18 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, asc, count, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import {
@@ -15,11 +27,13 @@ import {
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
 import { sourcingCardRef } from "@signal-desk/contracts/assistance-schema";
+import { connectionOpen } from "@signal-desk/catalog/desk-state";
 import { requireSession, type Actor } from "./access";
 import { lockedTransaction, orm } from "./db";
 import {
   buyerNeeds,
   cardCalls,
+  connectionBlockers,
   growthAccounts,
   organizations,
   pairingEvents,
@@ -339,6 +353,42 @@ function writeTransaction<T>(
   );
 }
 
+// Opens a blocker for each requirement the reviewed evidence does not meet and resolves the open
+// ones that it now meets. Closed connections keep their rows as they were.
+async function syncBlockers(
+  client: PoolClient,
+  row: Awaited<ReturnType<typeof requireSourcingCase>>,
+) {
+  if (!connectionOpen(row.pairing.stage)) return;
+  const facts = (
+    await orm(client).select().from(pairingFacts).where(eq(pairingFacts.caseId, row.pairing.id))
+  ).map(factRow); // → Fact[]
+  const unmet = new Set<string>(
+    evaluateFit(needProjection(row.need), facts)
+      .filter((fit) => fit.status !== "met")
+      .map((fit) => fit.requirement),
+  );
+  if (!row.seller.contactable) unmet.add("contact_permission");
+  const open = await orm(client)
+    .select()
+    .from(connectionBlockers)
+    .where(
+      and(eq(connectionBlockers.caseId, row.pairing.id), isNull(connectionBlockers.resolvedAt)),
+    );
+  const resolved = open.filter((blocker) => !unmet.has(blocker.kind)).map((blocker) => blocker.id);
+  // An empty list matches nothing, so this is a no-op when nothing resolved.
+  await orm(client)
+    .update(connectionBlockers)
+    .set({ resolvedAt: sql`now()` })
+    .where(inArray(connectionBlockers.id, resolved));
+  const fresh = [...unmet].filter((kind) => !open.some((blocker) => blocker.kind === kind));
+  if (fresh.length)
+    await orm(client)
+      .insert(connectionBlockers)
+      .values(fresh.map((kind) => ({ id: crypto.randomUUID(), caseId: row.pairing.id, kind })))
+      .onConflictDoNothing();
+}
+
 /** Serializes one case's changes and rechecks both owners before commit.
  * @throws {AppError} For revoked access, lost ownership or a stale revision.
  */
@@ -358,7 +408,7 @@ async function changeCase<T>(
         "This case changed. Review the current record again.",
       );
     const result = await action(client, row);
-    await requireSourcingCase(actor, caseId, client);
+    await syncBlockers(client, await requireSourcingCase(actor, caseId, client));
     return result;
   });
 }
@@ -1091,7 +1141,7 @@ export async function openConnection(actor: Actor, raw: unknown) {
     const caseId = existing
       ? await reuseConnection(client, existing, current.userId, input.vehicleId)
       : await insertConnection(client, current.userId, sellerId, input);
-    await requireProspect(actor, sellerId, client);
+    await syncBlockers(client, await requireSourcingCase(actor, caseId, client));
     return caseId;
   });
 }
@@ -1168,4 +1218,45 @@ export async function qualifySeller(actor: Actor, id: string, raw: unknown) {
     for (const row of open) await attachVehicle(client, row, actor.userId, vehicleId);
     return { vehicleId, organizationId };
   });
+}
+
+/** Brings the given open connections' blockers up to date with current evidence and contact
+ * review, then summarizes the specialist's blocker records: open blockers on those connections
+ * and how long resolved ones took, per kind and overall.
+ * @throws {AppError} For revoked specialist access.
+ */
+export async function getBlockerMetrics(actor: Actor, openCaseIds: string[]) {
+  const current = await requireGrowthActor(actor);
+  // ponytail: one short transaction per open connection on each desk view, so contact reviews
+  // made on the prospect page resolve here; move to growth's review write if the queue grows.
+  for (const caseId of openCaseIds)
+    await lockedTransaction(lockKey(caseId), async (client) =>
+      syncBlockers(client, await requireSourcingCase(actor, caseId, client)),
+    );
+  const hours = sql`extract(epoch from ${connectionBlockers.resolvedAt} - ${connectionBlockers.openedAt}) / 3600`;
+  const owned = and(
+    eq(sourcingCases.ownerId, current.userId),
+    eq(sourcingCases.id, connectionBlockers.caseId),
+  );
+  const kinds = await orm()
+    .select({
+      kind: connectionBlockers.kind,
+      open: sql<number>`(count(*) filter (where ${and(isNull(connectionBlockers.resolvedAt), inArray(connectionBlockers.caseId, openCaseIds))}))::int`,
+      resolved: sql<number>`count(${connectionBlockers.resolvedAt})::int`,
+      averageHours: sql<number | null>`avg(${hours})::float`,
+    })
+    .from(connectionBlockers)
+    .innerJoin(sourcingCases, owned)
+    .groupBy(connectionBlockers.kind); // → per-kind counts and average hours
+  const [overall] = await orm()
+    .select({
+      medianHours: sql<
+        number | null
+      >`(percentile_cont(0.5) within group (order by ${hours}))::float`,
+    })
+    .from(connectionBlockers)
+    .innerJoin(sourcingCases, owned)
+    .where(isNotNull(connectionBlockers.resolvedAt));
+  await requireGrowthActor(actor);
+  return { kinds, medianHours: overall?.medianHours ?? null };
 }
