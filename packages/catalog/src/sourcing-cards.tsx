@@ -56,7 +56,7 @@ const saleStatuses = {
   not_selling: "Not selling",
 };
 const suggestions = {
-  reject: "Rule check: a hard constraint fails. Reject this pairing.",
+  reject: "Rule check: a hard constraint fails. Reject this connection.",
   proceed: "Every hard constraint is met by reviewed evidence.",
   investigate: "No recommendation until hard constraints are resolved.",
 };
@@ -433,7 +433,7 @@ export function ReplyReview({
               <strong>Effect on {need.buyer}&apos;s need</strong>
               <p>
                 Accepting {fieldLabels[proposal.field].toLowerCase()} {factValue(proposal)} fails “
-                {failed}”. Reject this pairing, not the seller account. Keep the buyer need open.
+                {failed}”. Reject this connection, not the seller account. Keep the buyer need open.
               </p>
             </div>
           </div>
@@ -498,7 +498,7 @@ function Recorded({
   );
 }
 
-/** Records proceed, investigate or reject for this pairing only. */
+/** Records proceed, investigate or reject for this connection only. */
 export function DecisionPacket({
   need,
   rows,
@@ -520,7 +520,7 @@ export function DecisionPacket({
   const failed = rows.filter((row) => row.status === "not_met");
   return (
     <Card className="assistance-card sourcing-card" data-card="decision">
-      <h3>Pairing decision</h3>
+      <h3>Connection decision</h3>
       <Recorded decision={decision} suggested={suggested} stale={stale} />
       {failed.length > 0 && (
         <ul className="card-list">
@@ -557,7 +557,7 @@ export function DecisionPacket({
         />
       </div>
       <p className="card-caveat">
-        Applies to this pairing only. {need.buyer}&apos;s need stays open after a rejection. No
+        Applies to this connection only. {need.buyer}&apos;s need stays open after a rejection. No
         mechanical or safety guarantee.
       </p>
       <Button

@@ -28,6 +28,7 @@ const deal = "e2e-demo-deal";
 const directory = [
   ["NY-SYN-MAPLE-GROVE", "Maple Grove Fire Department", "Maple Grove", "12534"],
   ["NY-SYN-NORTHFIELD", "Northfield Fire District", "Northfield", "13820"],
+  ["NY-SYN-OAK-HOLLOW", "Oak Hollow Fire Company", "Oak Hollow", "12550"],
 ].map(([sourceId, name, city, postalCode]) => ({ sourceId, name, city, state: "NY", postalCode }));
 const syntheticAnswer =
   "(Synthetic local model) First confirm **sale intent and authority**. Then resolve height " +
@@ -75,7 +76,10 @@ async function seedDeal(db: PoolClient) {
 }
 
 // Maple Grove already has a recorded reply; Northfield starts at identity review.
-async function seedWalkthrough(actor: Awaited<ReturnType<typeof resolveActor>>) {
+type Actor = Awaited<ReturnType<typeof resolveActor>>;
+type Prospect = { id: string; name: string; directory: { sourceId: string } };
+
+async function seedWalkthrough(actor: Actor) {
   await seedSourcing(actor);
   await growth.importDirectory(actor, {
     source: "usfa",
@@ -103,7 +107,7 @@ async function seedWalkthrough(actor: Awaited<ReturnType<typeof resolveActor>>) 
   const [need] = (await sourcing.listSourcingCases(actor)).map(
     (item: { needId: string }) => item.needId,
   );
-  const caseId = await sourcing.openSourcingCase(actor, {
+  const caseId = await sourcing.openConnection(actor, {
     needId: need,
     sellerProspectId: maple.id,
     nextAction: "Review the reply before changing the fit.",
@@ -128,6 +132,80 @@ async function seedWalkthrough(actor: Awaited<ReturnType<typeof resolveActor>>) 
     kind: "record_original",
     revision: drafted.revision,
     text: "Maybe later, once the new truck arrives. Our current pumper is 121 inches tall.",
+  });
+  await seedReadyConnection(actor, prospects, maple.id);
+}
+
+// Oak Hollow is a qualified seller whose listing already meets Harbor Point's need, so the queue
+// has a connection ready for the introduction; Maple Grove competes for the same need.
+async function seedReadyConnection(actor: Actor, prospects: Prospect[], mapleId: string) {
+  const oak = prospects.find((prospect) => prospect.directory.sourceId === "NY-SYN-OAK-HOLLOW")!;
+  await growth.reviewProspect(actor, oak.id, {
+    name: oak.name,
+    fit: "fit",
+    identity: "confirmed",
+    signal: {
+      text: "Oak Hollow's board voted to sell its 2012 pumper this winter.",
+      source: "Synthetic board minutes",
+      quote: "sell its 2012 pumper",
+      permission: "synthetic",
+    },
+    contact: null,
+  });
+  const listing = await sourcing.qualifySeller(actor, oak.id, {
+    vehicleTitle: "2012 Oak Hollow pumper",
+    reply: "Yes, the 2012 pumper is for sale and the board has authorized it.",
+    provenance: "Synthetic call note",
+    permission: "synthetic",
+  });
+  const needId = await sourcing.createBuyerNeed(actor, {
+    buyerLabel: "Harbor Point FD",
+    statement: "Harbor Point FD needs a pumper priced at most $150,000 and 120 in high.",
+    provenance: "Synthetic permissioned call note",
+    constraints: {
+      vehicleClass: "Pumper",
+      budgetBasis: "purchase_price",
+      maxBudgetCents: 15_000_000,
+      maxHeightIn: 120,
+    },
+    synthetic: true,
+  });
+  const caseId = await sourcing.openConnection(actor, {
+    needId,
+    vehicleId: listing.vehicleId,
+    nextAction: "Introduce Harbor Point to Oak Hollow.",
+  });
+  await sourcing.openConnection(actor, {
+    needId,
+    sellerProspectId: mapleId,
+    nextAction: "Confirm whether Maple Grove's pumper fits Harbor Point.",
+  });
+  const opened = await sourcing.getSourcingAccount(actor, caseId);
+  await sourcing.runSourcingCommand(actor, caseId, {
+    kind: "record_original",
+    revision: opened.revision,
+    text: "Yes, it is for sale at $140,000. It is 118 inches tall. Chief Park authorizes it.",
+  });
+  let current = await sourcing.getSourcingAccount(actor, caseId);
+  const sourceRef = current.account.replies[0]!.id;
+  for (const answer of [
+    { field: "saleStatus", value: "available" },
+    { field: "authority", value: "Chief Park" },
+    { field: "priceCents", value: 14_000_000 },
+  ])
+    await sourcing.proposeSourcingFact(actor, caseId, current.revision, { sourceRef, answer });
+  current = await sourcing.getSourcingAccount(actor, caseId);
+  await sourcing.runSourcingCommand(actor, caseId, {
+    kind: "accept",
+    revision: current.revision,
+    factIds: current.account.facts.map((fact: { id: string }) => fact.id),
+  });
+  current = await sourcing.getSourcingAccount(actor, caseId);
+  await sourcing.runSourcingCommand(actor, caseId, {
+    kind: "decide",
+    revision: current.revision,
+    decision: "proceed",
+    reason: "Available, 118 in, $140,000 and authorized by the chief.",
   });
 }
 

@@ -12,7 +12,6 @@ import {
   importDirectory,
   listProspects,
   reviewProspect,
-  qualifyProspect,
   getProspect,
   routeProspect,
 } from "./growth";
@@ -25,6 +24,7 @@ import {
   readExperimentReport,
 } from "./outreach-experiment";
 import { drainGrowthTelemetry } from "./growth-measurement";
+import { qualifySeller } from "./sourcing";
 
 const url = process.env.TEST_DATABASE_URL;
 if (process.env.CI && !url) throw new Error("CI requires TEST_DATABASE_URL.");
@@ -210,19 +210,15 @@ test(
       await db.query(
         "insert into signal_desk.vehicles(id,title,published_at) values ('ph-contract-truck','Synthetic pumper',now())",
       );
-      const qualified = await qualifyProspect(actor, id, {
-        vehicleId: "ph-contract-truck",
-        reply: "Yes, please send the pumper specifications.",
+      const sellerReply = {
+        vehicleTitle: "Synthetic pumper",
+        reply: "Yes, the pumper is for sale.",
         provenance: "PRIVATE synthetic reply",
         permission: "synthetic",
-      });
-      await qualifyProspect(actor, id, {
-        vehicleId: "ph-contract-truck",
-        reply: "Yes, please send the pumper specifications.",
-        provenance: "PRIVATE synthetic reply",
-        permission: "synthetic",
-      });
-      assert.equal(qualified.opportunityId, `growth-${id}`);
+      };
+      const qualified = await qualifySeller(actor, id, sellerReply);
+      await qualifySeller(actor, id, sellerReply);
+      assert.equal(qualified.vehicleId, `listing-${id}`);
       await drainGrowthTelemetry();
       assert.equal(
         captures.filter((value) => JSON.stringify(value).includes('"growth_qualified_reply"'))
@@ -341,12 +337,10 @@ test(
         [owner],
       );
       await linkProspectAccount(actor, matched.id, { organizationId: "ph-existing" });
-      await qualifyProspect(actor, matched.id, {
-        vehicleId: "ph-contract-truck",
-        existingOpportunityId: "ph-existing",
-        reply: "Yes, specifications please",
+      await qualifySeller(actor, matched.id, {
+        ...sellerReply,
+        reply: "Yes, it is for sale",
         provenance: "PRIVATE matched reply",
-        permission: "synthetic",
       });
       assert.equal(
         (
@@ -451,6 +445,9 @@ test(
         "delete from signal_desk.opportunity_members where opportunity_id in (select id from signal_desk.opportunities where vehicle_id='ph-contract-truck')",
       );
       await db.query("delete from signal_desk.opportunities where vehicle_id='ph-contract-truck'");
+      await db.query(
+        "delete from signal_desk.vehicles where owner_organization_id='ph-existing' or owner_organization_id in (select id from signal_desk.organizations where name='Private department')",
+      );
       await db.query("delete from signal_desk.organizations where name='Private department'");
       await db.query("delete from signal_desk.organizations where id='ph-existing'");
       await db.query("delete from signal_desk.vehicles where id='ph-contract-truck'");

@@ -11,11 +11,13 @@ import { prepareTestDatabase } from "./test-database";
 import {
   createBuyerNeed,
   getSourcingAccount,
-  openSourcingCase,
+  openConnection,
   listSourcingCases,
   proposeSourcingFact,
+  qualifySeller,
   runSourcingCommand,
 } from "./sourcing";
+import { importDirectory, listProspects, reviewProspect } from "./growth";
 import { seedSourcing } from "./sourcing-seed";
 import { cancelSourcingStream, readSourcingStreams, submitSourcingStream } from "./streaming";
 import { nodeRuntime, type StreamingTestRuntime } from "./test-streaming-owner";
@@ -49,7 +51,12 @@ async function removeFixtures(db: PoolClient, users: string[]) {
     `delete from signal_desk.growth_insights where account_id in (${accounts})`,
     `delete from signal_desk.growth_invitations where account_id in (${accounts})`,
     `delete from signal_desk.growth_observations where account_id in (${accounts})`,
-    "delete from signal_desk.growth_accounts where owner_id = any($1)",
+    // Draft listings and the departments qualification created go with their seller accounts.
+    `with gone as (delete from signal_desk.growth_accounts where owner_id = any($1)
+      returning listing_vehicle_id, organization_id),
+    listings as (delete from signal_desk.vehicles where id in (select listing_vehicle_id from gone))
+    delete from signal_desk.organizations
+      where id in (select organization_id from gone) and id like 'growth-%'`,
     "delete from auth.sessions where user_id = any($1)",
     "delete from signal_desk.identities where user_id = any($1)",
   ])
@@ -372,7 +379,7 @@ test(
       assert.equal(page.status, 200);
       assert.match(await page.text(), /Cedar Valley Fire District/);
       const queue = await fetch(`${app.origin}/desk/sourcing`, { headers });
-      assert.match(await queue.text(), /Pairing rejected/);
+      assert.match(await queue.text(), /Connection rejected/);
       const stale = await fetch(`${app.origin}/api/v1/desk/sourcing/${caseId}`, {
         method: "POST",
         headers,
@@ -395,7 +402,7 @@ test(
           inventory: { searchedAt: new Date("2026-10-19T00:00:00Z"), reviewedMatches: 0 },
           synthetic: true,
         });
-        const open = await openSourcingCase(actor, {
+        const open = await openConnection(actor, {
           needId,
           sellerProspectId: decided.sellerHref.split("/").at(-1),
           nextAction: "Confirm height and all-in cost before buyer outreach.",
@@ -432,6 +439,231 @@ test(
       await app?.stop();
       provider.closeAllConnections();
       await new Promise<void>((resolve) => provider.close(() => resolve()));
+      await removeFixtures(db, [user, foreignUser]);
+      db.release();
+      await pool.end();
+    }
+  },
+);
+
+test(
+  "connections open from either side and one closed sale ends competing connections",
+  { skip: !url },
+  async () => {
+    if (!url) return;
+    const pool = new Pool({ connectionString: url });
+    const db = await pool.connect();
+    const user = "93000000-0000-4000-8000-000000000011";
+    const session = "93000000-0000-4000-8000-000000000012";
+    const foreignUser = "93000000-0000-4000-8000-000000000013";
+    const foreignSession = "93000000-0000-4000-8000-000000000014";
+    const runtime = new URL(url);
+    runtime.searchParams.set("options", "-c role=signal_desk_runtime");
+    process.env.DATABASE_URL = runtime.toString();
+    await db.query("begin");
+    await prepareTestDatabase(db);
+    await db.query("commit");
+    try {
+      await db.query(
+        "insert into signal_desk.identities(user_id,role) values ($1,'specialist'),($2,'specialist')",
+        [user, foreignUser],
+      );
+      await db.query("insert into auth.sessions(id,user_id) values ($1,$2),($3,$4)", [
+        session,
+        user,
+        foreignSession,
+        foreignUser,
+      ]);
+      const actor = await resolveActor({ userId: user, sessionId: session });
+      const foreign = await resolveActor({ userId: foreignUser, sessionId: foreignSession });
+      await importDirectory(actor, {
+        source: "usfa",
+        snapshot: "synthetic-connections",
+        synthetic: true,
+        rows: [
+          ["NY-SYN-ELM-RIDGE", "Elm Ridge Fire District", "Elm Ridge", "12401"],
+          ["NY-SYN-BIRCH-HOLLOW", "Birch Hollow Fire Company", "Birch Hollow", "12402"],
+        ].map(([sourceId, name, city, postalCode]) => ({
+          sourceId: sourceId!,
+          name: name!,
+          city: city!,
+          state: "NY",
+          postalCode: postalCode!,
+        })),
+      });
+      const prospects = await listProspects(actor);
+      const seller = (sourceId: string) =>
+        prospects.find((prospect) => prospect.directory.sourceId === sourceId)!;
+      const elmId = seller("NY-SYN-ELM-RIDGE").id;
+      const birchId = seller("NY-SYN-BIRCH-HOLLOW").id;
+      for (const prospect of [seller("NY-SYN-ELM-RIDGE"), seller("NY-SYN-BIRCH-HOLLOW")])
+        await reviewProspect(actor, prospect.id, {
+          name: prospect.name,
+          fit: "fit",
+          identity: "confirmed",
+          signal: {
+            text: "The board approved selling the 2008 pumper.",
+            source: "Synthetic board minutes",
+            quote: "selling the 2008 pumper",
+            permission: "synthetic",
+          },
+          contact: null,
+        });
+      const need = (buyerLabel: string, owner = actor) =>
+        createBuyerNeed(owner, {
+          buyerLabel,
+          statement: `${buyerLabel} needs a pumper priced at most $150,000 and 120 in high.`,
+          provenance: "Synthetic permissioned call note",
+          constraints: {
+            vehicleClass: "Pumper",
+            budgetBasis: "purchase_price",
+            maxBudgetCents: 15_000_000,
+            maxHeightIn: 120,
+          },
+          synthetic: true,
+        });
+      const harbor = await need("Harbor Point FD");
+      const willow = await need("Willow Creek FD");
+
+      // From a buyer need toward a seller that has no listing yet.
+      const toSeller = { needId: harbor, sellerProspectId: elmId, nextAction: "Confirm sale." };
+      const first = await openConnection(actor, toSeller);
+      assert.equal(await openConnection(actor, toSeller), first);
+      await assert.rejects(openConnection(foreign, toSeller), { code: "NOT_FOUND" });
+      assert.equal((await getSourcingAccount(actor, first)).account.connection.vehicle, null);
+      await assert.rejects(
+        runSourcingCommand(actor, first, { kind: "introduce", revision: 1, note: "Too early" }),
+        { code: "STAGE_REQUIRED" },
+      );
+
+      // Qualifying the seller drafts its listing and adds it to the open connection.
+      const listing = await qualifySeller(actor, elmId, {
+        vehicleTitle: "2008 Elm Ridge pumper",
+        reply: "Yes, the 2008 pumper is for sale.",
+        provenance: "Synthetic call note",
+        permission: "synthetic",
+      });
+      const attached = await getSourcingAccount(actor, first);
+      assert.deepEqual(attached.account.connection.vehicle, {
+        id: listing.vehicleId,
+        title: "2008 Elm Ridge pumper",
+        listed: false,
+      });
+      assert.equal(attached.revision, 2, "adding the vehicle invalidates earlier reviews");
+
+      // From the listed vehicle toward another buyer need; the vehicle names its seller.
+      const fromVehicle = {
+        needId: willow,
+        vehicleId: listing.vehicleId,
+        nextAction: "Check fit.",
+      };
+      const second = await openConnection(actor, fromVehicle);
+      assert.equal(
+        (await listSourcingCases(actor)).find((item) => item.id === second)?.sellerId,
+        elmId,
+      );
+      const foreignNeed = await need("Foreign FD", foreign);
+      await assert.rejects(openConnection(foreign, { ...fromVehicle, needId: foreignNeed }), {
+        code: "NOT_FOUND",
+      });
+      await assert.rejects(openConnection(actor, { ...fromVehicle, sellerProspectId: birchId }), {
+        code: "MATCH_REQUIRED",
+      });
+      const competing = await openConnection(actor, { ...toSeller, sellerProspectId: birchId });
+
+      // Reviewed answers and a proceed decision make the first connection ready for the buyer.
+      await runSourcingCommand(actor, first, {
+        kind: "record_original",
+        revision: 2,
+        text: "Yes, it is for sale at $140,000. It is 120 in tall. Chief Ortiz authorizes it.",
+      });
+      let current = await getSourcingAccount(actor, first);
+      const sourceRef = current.account.replies[0]!.id;
+      for (const answer of [
+        { field: "saleStatus", value: "available" },
+        { field: "authority", value: "Chief Ortiz" },
+        { field: "priceCents", value: 14_000_000 },
+      ])
+        await proposeSourcingFact(actor, first, current.revision, { sourceRef, answer });
+      current = await getSourcingAccount(actor, first);
+      await runSourcingCommand(actor, first, {
+        kind: "accept",
+        revision: current.revision,
+        factIds: current.account.facts.map((fact) => fact.id),
+      });
+      current = await getSourcingAccount(actor, first);
+      await runSourcingCommand(actor, first, {
+        kind: "decide",
+        revision: current.revision,
+        decision: "proceed",
+        reason: "Available, 120 in, $140,000 and authorized.",
+      });
+      current = await getSourcingAccount(actor, first);
+      assert.equal(current.stage, "ready_for_buyer_review");
+      await assert.rejects(
+        runSourcingCommand(actor, first, {
+          kind: "close_sale",
+          revision: current.revision,
+          note: "Skipped the introduction",
+        }),
+        { code: "STAGE_REQUIRED" },
+      );
+      const introduction = "Introduced Harbor Point's chief to Elm Ridge by phone.";
+      await runSourcingCommand(actor, first, {
+        kind: "introduce",
+        revision: current.revision,
+        note: introduction,
+      });
+      current = await getSourcingAccount(actor, first);
+      assert.equal(current.stage, "introduced");
+      // After the introduction only a rejection still applies.
+      await assert.rejects(
+        runSourcingCommand(actor, first, {
+          kind: "decide",
+          revision: current.revision,
+          decision: "proceed",
+          reason: "Again",
+        }),
+        { code: "CONNECTION_ADVANCED" },
+      );
+      const sale = "Harbor Point signed the purchase agreement.";
+      await runSourcingCommand(actor, first, {
+        kind: "close_sale",
+        revision: current.revision,
+        note: sale,
+      });
+      current = await getSourcingAccount(actor, first);
+      assert.equal(current.stage, "sale_closed");
+      assert.deepEqual(
+        current.account.connection.milestones.map((milestone) => [milestone.kind, milestone.note]),
+        [
+          ["introduced", introduction],
+          ["sale_closed", sale],
+        ],
+      );
+
+      // One sale ends the vehicle's other connection and the need's other seller, once.
+      const stages = Object.fromEntries(
+        (await listSourcingCases(actor)).map((item) => [item.id, [item.stage, item.needState]]),
+      );
+      assert.deepEqual(stages, {
+        [first]: ["sale_closed", "fulfilled"],
+        [second]: ["closed_elsewhere", "active"],
+        [competing]: ["closed_elsewhere", "fulfilled"],
+      });
+      await assert.rejects(openConnection(actor, fromVehicle), { code: "VEHICLE_SOLD" });
+      await assert.rejects(openConnection(actor, toSeller), { code: "NEED_INACTIVE" });
+      const closed = await getSourcingAccount(actor, competing);
+      await assert.rejects(
+        runSourcingCommand(actor, competing, {
+          kind: "decide",
+          revision: closed.revision,
+          decision: "investigate",
+          reason: "Reopen",
+        }),
+        { code: "CONNECTION_CLOSED" },
+      );
+    } finally {
       await removeFixtures(db, [user, foreignUser]);
       db.release();
       await pool.end();

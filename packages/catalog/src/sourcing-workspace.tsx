@@ -1,4 +1,4 @@
-import { type ReactNode, type ComponentProps } from "react";
+import { useState, type ReactNode, type ComponentProps } from "react";
 import {
   evaluateFit,
   isStale,
@@ -18,7 +18,15 @@ import {
   SourceChangeCard,
 } from "./sourcing-cards";
 import { AccountFrame, DeskIcon, NextAction, type AccountTab } from "./desk-shell";
-import { outreachStep, outreachSteps, pairingAction } from "./desk-state";
+import { Button } from "@signal-desk/ui/components/ui/button";
+import {
+  connectionStages,
+  connectionStep,
+  connectionSteps,
+  outreachStep,
+  outreachSteps,
+  pairingAction,
+} from "./desk-state";
 
 const date = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -35,7 +43,7 @@ const outreachStates = {
   stopped: "Stopped",
 };
 const suggestions = {
-  reject: "Reject this pairing and continue sourcing for the buyer.",
+  reject: "Reject this connection and continue sourcing for the buyer.",
   investigate: "Ask when availability and the unresolved requirements can be confirmed.",
   proceed: "Prepare the reviewed evidence for buyer review.",
 };
@@ -83,7 +91,7 @@ function WhyHere({ data }: { data: SourcingAccount }) {
             </a>
           </div>
         ) : (
-          <p>No source change recorded for this pairing.</p>
+          <p>No source change recorded for this connection.</p>
         )}
       </div>
     </section>
@@ -134,6 +142,10 @@ function PairingActivity({ data }: { data: SourcingAccount }) {
     ...(data.decision
       ? [{ at: data.decision.decidedAt, text: `Decision recorded: ${data.decision.decision}` }]
       : []),
+    ...data.connection.milestones.map((milestone) => ({
+      at: milestone.at,
+      text: milestoneLabels[milestone.kind],
+    })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   return (
     <section className="desk-card">
@@ -151,6 +163,136 @@ function PairingActivity({ data }: { data: SourcingAccount }) {
   );
 }
 
+// Each recordable milestone: what it records, from which stage, and its human-only caveat.
+const milestoneForms = {
+  ready_for_buyer_review: {
+    kind: "introduce",
+    label: "Introduction note",
+    button: "Record introduction",
+    caveat:
+      "Record the introduction you made. Nothing is sent from here and no availability is promised.",
+  },
+  introduced: {
+    kind: "close_sale",
+    label: "Sale note",
+    button: "Record closed sale",
+    caveat:
+      "Record a sale the buyer and seller agreed. No payment, reservation or commitment is made here.",
+  },
+} as const;
+// Why the next action matters once a connection is past investigating.
+const stageReasons: Record<string, string> = {
+  ready_for_buyer_review:
+    "Reviewed evidence meets the need. Introduce the buyer and seller yourself; nothing is sent from here.",
+  introduced: "The buyer and seller are talking. Record the outcome when they agree or walk away.",
+  sale_closed: "This connection ended in a recorded sale. Competing connections were closed.",
+  closed_elsewhere: "Another connection closed the sale for this vehicle or buyer need.",
+};
+const milestoneLabels = { introduced: "Introduced", sale_closed: "Sale closed" };
+
+function MilestoneForm({
+  stage,
+  onRecord,
+}: {
+  stage: keyof typeof milestoneForms;
+  onRecord: (kind: "introduce" | "close_sale", note: string) => void;
+}) {
+  const form = milestoneForms[stage];
+  const [note, setNote] = useState("");
+  return (
+    <form
+      className="sourcing-note"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onRecord(form.kind, note.trim());
+        setNote("");
+      }}
+    >
+      <label htmlFor="connection-milestone">{form.label}</label>
+      <textarea
+        id="connection-milestone"
+        rows={2}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+      />
+      <p className="card-caveat">{form.caveat}</p>
+      <Button type="submit" disabled={!note.trim()}>
+        {form.button}
+      </Button>
+    </form>
+  );
+}
+
+/** Where a connection stands on its way to a sale, with the next milestone the specialist can
+ * record. Milestones record what people did; nothing here sends or commits anything. */
+export function ConnectionProgress({
+  data,
+  sellerHref,
+  onMilestone,
+}: {
+  data: SourcingAccount;
+  sellerHref: string;
+  onMilestone?: (kind: "introduce" | "close_sale", note: string) => void;
+}) {
+  const { stage, vehicle, milestones } = data.connection;
+  const reached = connectionStep(stage);
+  const form = stage in milestoneForms ? (stage as keyof typeof milestoneForms) : null;
+  return (
+    <section className="desk-card" id="connection-progress">
+      <h2>Connection to a sale</h2>
+      <ol className="desk-rail" aria-label="Connection progress">
+        {connectionSteps.map((label, index) => (
+          <li
+            key={label}
+            data-state={
+              reached === null || index > reached
+                ? "pending"
+                : index < reached || stage === "sale_closed"
+                  ? "done"
+                  : "current"
+            }
+            aria-current={index === reached ? "step" : undefined}
+          >
+            <span aria-hidden="true" />
+            {label}
+          </li>
+        ))}
+      </ol>
+      <p>
+        {data.need.buyer} ← {data.account.name} ·{" "}
+        {vehicle ? (
+          <>
+            <strong>{vehicle.title}</strong> · {vehicle.listed ? "Listed" : "Draft listing"}
+          </>
+        ) : (
+          <>
+            No listing yet. <a href={`${sellerHref}?tab=outreach&step=3`}>Qualify the seller</a> to
+            draft its listing before the introduction.
+          </>
+        )}
+      </p>
+      {reached === null && (
+        <p>
+          {connectionStages[stage]}. {data.nextAction}
+        </p>
+      )}
+      {milestones.length > 0 && (
+        <ol className="desk-activity mt-4">
+          {milestones.map((milestone) => (
+            <li key={`${milestone.kind}:${milestone.at.toISOString()}`}>
+              <time dateTime={milestone.at.toISOString()}>{date.format(milestone.at)}</time>
+              <span>
+                {milestoneLabels[milestone.kind]}: {milestone.note}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {form && vehicle && onMilestone && <MilestoneForm stage={form} onRecord={onMilestone} />}
+    </section>
+  );
+}
+
 type PanelProps = Omit<ComponentProps<typeof SourcingWorkspace>, "tab" | "onTab" | "onStep"> & {
   review: (tab: AccountTab, step?: number) => void;
 };
@@ -164,7 +306,7 @@ function PairingFit({ data, onDecide }: PanelProps) {
         <FitTable need={data.need} rows={rows} />
       </section>
       <section className="desk-card">
-        <h2>Decision for this pairing</h2>
+        <h2>Decision for this connection</h2>
         <DecisionPacket
           need={data.need}
           rows={rows}
@@ -181,7 +323,7 @@ function PairingFit({ data, onDecide }: PanelProps) {
   );
 }
 
-function PairingOverview({ data, sellerHref, review }: PanelProps) {
+function PairingOverview({ data, sellerHref, review, onMilestone }: PanelProps) {
   const rows = evaluateFit(data.need, data.facts);
   const questions = openQuestions(rows);
   const action = pairingAction(data);
@@ -190,16 +332,24 @@ function PairingOverview({ data, sellerHref, review }: PanelProps) {
       <NextAction
         title={data.nextAction}
         reason={
-          data.trigger
+          stageReasons[data.connection.stage] ??
+          (data.trigger
             ? "Replacement notice found. Sale intent and authority need reviewed evidence."
-            : "Review the evidence against this buyer need."
+            : "Review the evidence against this buyer need.")
         }
         action={
-          <button className="button" onClick={() => review(action.tab, action.step)}>
-            {action.label}
-          </button>
+          "anchor" in action ? (
+            <a className="button" href={`#${action.anchor}`}>
+              {action.label}
+            </a>
+          ) : (
+            <button className="button" onClick={() => review(action.tab, action.step)}>
+              {action.label}
+            </button>
+          )
         }
       />
+      <ConnectionProgress data={data} sellerHref={sellerHref!} onMilestone={onMilestone} />
       <WhyHere data={data} />
       <section className="desk-card">
         <h2>Can this candidate meet the need?</h2>
@@ -252,7 +402,7 @@ function FrozenRequest({
       <h2>Availability request</h2>
       <p>
         {rejected
-          ? "This pairing was rejected, so no further requests are offered."
+          ? "This connection was rejected, so no further requests are offered."
           : "The reviewed request is enrolled. A reply, opt-out or uncertain delivery stops follow-up."}
       </p>
       {request && (
@@ -421,7 +571,7 @@ const panels = {
   activity: PairingActivity,
 };
 
-/** Account-first review of one pairing, with a persistent caller-owned conversation. */
+/** Account-first review of one buyer-seller connection, with a persistent caller-owned conversation. */
 export default function SourcingWorkspace({
   data,
   chat,
@@ -436,6 +586,7 @@ export default function SourcingWorkspace({
   onAccept,
   onDecide,
   onRecordNote,
+  onMilestone,
 }: {
   data: SourcingAccount;
   chat?: ReactNode;
@@ -450,6 +601,7 @@ export default function SourcingWorkspace({
   onAccept?: (ids: string[]) => void;
   onDecide?: (decision: Decision) => void;
   onRecordNote?: (text: string) => void;
+  onMilestone?: (kind: "introduce" | "close_sale", note: string) => void;
 }) {
   const review = (nextTab: AccountTab, nextStep = outreachStep(data)) => {
     onStep(nextStep);
@@ -461,7 +613,8 @@ export default function SourcingWorkspace({
       name={data.account.name}
       place={data.account.place}
       synthetic={data.account.synthetic}
-      context="Seller research"
+      context="Buyer-seller connection"
+      role={data.connection.vehicle ? "Qualified seller" : undefined}
       secondary={`Buyer need: ${data.need.buyer}`}
       tab={tab}
       onTab={onTab}
@@ -482,6 +635,7 @@ export default function SourcingWorkspace({
         onDecide={onDecide}
         onClarify={onClarify}
         onRecordNote={onRecordNote}
+        onMilestone={onMilestone}
       />
     </AccountFrame>
   );

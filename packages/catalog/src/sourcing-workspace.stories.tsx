@@ -79,6 +79,7 @@ const cedarValley: SourcingAccount = {
     },
   ],
   decision: null,
+  connection: { stage: "awaiting_seller", vehicle: null, milestones: [] },
 };
 const research: SourcingAccount = {
   ...cedarValley,
@@ -162,7 +163,7 @@ export const ReplyRejectsPairing: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Outreach" }));
-    await expect(canvas.getByText(/Reject this pairing, not the seller account/)).toBeVisible();
+    await expect(canvas.getByText(/Reject this connection, not the seller account/)).toBeVisible();
     await userEvent.click(canvas.getByRole("checkbox", { name: /Height: 121 in/ }));
     await userEvent.click(canvas.getByRole("button", { name: "Save selected reviewed answers" }));
     // Sale timing was not selected, so it remains an unresolved proposal.

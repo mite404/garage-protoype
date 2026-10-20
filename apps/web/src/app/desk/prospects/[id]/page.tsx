@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { requireActor } from "@/server/auth";
 import { getGrowthProfile } from "@/server/growth-views";
-import { listSourcingCases } from "@/server/sourcing";
+import { listBuyerNeeds, listSellerListings, listSourcingCases } from "@/server/sourcing";
 import { AccountFrame, NextAction, accountTab } from "@signal-desk/catalog/desk-shell";
-import { pipelineStage, pairingStages, prospectRole } from "@signal-desk/catalog/desk-state";
+import { connectionStages, pipelineStage, prospectRole } from "@signal-desk/catalog/desk-state";
 import { GrowthAccountContent, GrowthUnavailable } from "../../growth-profile";
+import { ConnectionForm } from "../../sourcing/connection-forms";
 
 export const dynamic = "force-dynamic";
 const pipeline = [
@@ -14,7 +15,7 @@ const pipeline = [
   "Contact permission",
   "Sequence",
   "Reply",
-  "Active deal",
+  "Qualified seller",
 ];
 // One next review per pipeline stage, indexed like `pipeline`.
 const actions = [
@@ -24,15 +25,22 @@ const actions = [
   ["Review contact", "Record the contact's source and permission before any outreach."],
   ["Review outreach", "Approve a reviewed sequence. Delivery stays disabled in this workspace."],
   ["Review reply", "Read the original answer before changing qualification."],
-  ["Open active deal", "This account is qualified. Continue in its deal workspace."],
+  ["Connect a buyer", "This seller is qualified. Connect its listing with a buyer need."],
 ] as const;
 
-function Pipeline({ current, organizationId }: { current: number; organizationId: string | null }) {
+type Account = Awaited<ReturnType<typeof getGrowthProfile>>["account"];
+
+// A qualified seller continues with its listing; an account qualified as a buyer before listings
+// existed continues in its department workspace.
+function pipelineHref(current: number, account: Account) {
+  if (current < 6) return "?tab=outreach";
+  if (account.listingVehicleId) return "?tab=fit#listing";
+  return `/desk/municipalities/${encodeURIComponent(account.organizationId ?? "")}`;
+}
+
+function Pipeline({ current, account }: { current: number; account: Account }) {
   const [title, reason] = actions[current]!;
-  const href =
-    current === 6 && organizationId
-      ? `/desk/municipalities/${encodeURIComponent(organizationId)}`
-      : "?tab=outreach";
+  const href = pipelineHref(current, account);
   return (
     <>
       <NextAction
@@ -94,43 +102,82 @@ function ProspectDock({
         </article>
       ))}
       {!themes.length && <p>No background analysis is saved for this account yet.</p>}
-      <h3>Ask about a pairing</h3>
-      <p>Conversation runs inside a buyer-need pairing so answers stay tied to its evidence.</p>
+      <h3>Ask about a connection</h3>
+      <p>Conversation runs inside a buyer connection so answers stay tied to its evidence.</p>
       {pairings.map((item) => (
         <Link className="desk-dock-link" key={item.id} href={`/desk/sourcing/${item.id}`}>
           <strong>{item.buyer}</strong>
-          <span>{pairingStages[item.stage]}</span>
+          <span>{connectionStages[item.stage]}</span>
         </Link>
       ))}
-      {!pairings.length && <p>No pairing yet. Start from a confirmed buyer need.</p>}
+      {!pairings.length && <p>No connection yet. Connect a buyer need to this seller.</p>}
     </section>
   );
 }
 
-function Pairings({ cases }: { cases: Awaited<ReturnType<typeof listSourcingCases>> }) {
+function Pairings({ cases }: { cases: Pairing[] }) {
   return (
     <section className="desk-card">
-      <h2>Buyer-need pairings</h2>
+      <h2>Buyer connections</h2>
       <div className="desk-pairings">
         {cases.map((item) => (
           <Link className="desk-dock-link" key={item.id} href={`/desk/sourcing/${item.id}`}>
             <strong>For {item.buyer}</strong>
             <span>
-              {pairingStages[item.stage]} · {item.nextAction}
+              {connectionStages[item.stage]} · {item.nextAction}
             </span>
           </Link>
         ))}
       </div>
-      {!cases.length && (
-        <p>
-          Pairings start from a confirmed buyer need. No pairing has been linked to this account.
-        </p>
-      )}
+      {!cases.length && <p>No buyer need is connected to this seller yet.</p>}
     </section>
   );
 }
 
-/** Authorized account evidence and review controls; conversation remains scoped to a pairing. */
+type Listing = Awaited<ReturnType<typeof listSellerListings>>[number];
+type Need = Awaited<ReturnType<typeof listBuyerNeeds>>[number];
+
+// Each listing can start a connection toward any active buyer need not yet connected to it.
+function SellerListings({
+  listings,
+  needs,
+  cases,
+}: {
+  listings: Listing[];
+  needs: Need[];
+  cases: Pairing[];
+}) {
+  if (!listings.length) return null;
+  const connected = new Set(cases.map((item) => item.needId));
+  const options = needs
+    .filter((need) => need.state === "active" && !connected.has(need.id))
+    .map((need) => ({ value: need.id, label: `${need.buyer} · ${need.constraints.vehicleClass}` }));
+  return (
+    <section className="desk-card" id="listing">
+      <h2>Listings</h2>
+      {listings.map((listing) => (
+        <article key={listing.id} className="mt-4">
+          <h3>{listing.title}</h3>
+          <p className="desk-note">
+            {listing.listed ? "Listed" : "Draft listing · unpublished"} · Owned by this seller
+          </p>
+          <ConnectionForm
+            label="Connect buyer need"
+            fieldLabel="Buyer need"
+            name="needId"
+            options={options}
+            base={{ vehicleId: listing.id }}
+          />
+          {!options.length && (
+            <p>No unconnected active buyer need. Record one under Buyer needs.</p>
+          )}
+        </article>
+      ))}
+    </section>
+  );
+}
+
+/** Authorized account evidence and review controls; conversation remains scoped to a connection. */
 export default async function ProspectPage({
   params,
   searchParams,
@@ -140,14 +187,18 @@ export default async function ProspectPage({
 }) {
   let profile;
   let cases;
+  let needs;
+  let listings;
   const query = await searchParams;
   const tab = accountTab(query.tab);
   const step = outreachStepParam(query.step);
   try {
     const actor = await requireActor();
-    [profile, cases] = await Promise.all([
+    [profile, cases, needs, listings] = await Promise.all([
       getGrowthProfile(actor, (await params).id),
       listSourcingCases(actor),
+      listBuyerNeeds(actor),
+      listSellerListings(actor),
     ]);
   } catch (error) {
     return (
@@ -168,13 +219,22 @@ export default async function ProspectPage({
       place={`${account.directory.city}, NY`}
       synthetic={account.directory.synthetic}
       context="Prospect review"
-      role={prospectRole(account.qualified)}
+      role={prospectRole(account)}
       tab={tab}
       dock={<ProspectDock insights={profile.insights} pairings={pairings} />}
     >
-      {tab === "overview" && <Pipeline current={current} organizationId={account.organizationId} />}
+      {tab === "overview" && <Pipeline current={current} account={account} />}
       <GrowthAccountContent profile={profile} tab={tab} current={current} step={step} />
-      {["overview", "fit"].includes(tab) && <Pairings cases={pairings} />}
+      {["overview", "fit"].includes(tab) && (
+        <>
+          <SellerListings
+            listings={listings.filter((listing) => listing.sellerId === account.id)}
+            needs={needs}
+            cases={pairings}
+          />
+          <Pairings cases={pairings} />
+        </>
+      )}
     </AccountFrame>
   );
 }

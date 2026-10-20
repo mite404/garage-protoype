@@ -28,14 +28,14 @@ try {
   browser("open", `${origin}/desk/sourcing`);
   browser("wait", "--text", "Cedar Valley Fire District for Pine Brook FD");
   check(
-    `${text("stays open after this pairing was rejected")} && ${text("Find another candidate")} && ${text("Harbor Point FD")}`,
+    `${text("stays open after this connection was rejected")} && ${text("Find another candidate")} && ${text("Harbor Point FD")}`,
   );
   capture("queue");
 
   // The rejected pairing keeps its recorded basis; the seller is not marked rejected.
   browser("open", `${origin}/desk/sourcing/${rejected}`);
   browser("find", "role", "button", "click", "--name", "Vehicles & fit");
-  browser("wait", "--text", "Decision for this pairing");
+  browser("wait", "--text", "Decision for this connection");
   check(`${text("Reviewed height 121 in exceeds 120 in.")} && ${text("Potential seller")}`);
   scrollTo("Can this candidate meet the need?");
   check(text("Does not meet"));
@@ -54,7 +54,7 @@ try {
   browser("find", "role", "button", "click", "--name", "Save selected reviewed answers");
   browser("wait", "--fn", "!document.querySelector('.sourcing-proposal input:checked')");
   browser("find", "role", "button", "click", "--name", "Vehicles & fit");
-  browser("wait", "--text", "Decision for this pairing");
+  browser("wait", "--text", "Decision for this connection");
   scrollTo("Can this candidate meet the need?");
   browser("wait", "1000");
   browser("record", "stop");
@@ -71,8 +71,10 @@ try {
   browser("wait", "--text", "review the proposal before deciding");
   check("document.querySelector('#sale-chat').innerText.includes('Height ≤125 in')");
   capture("assistant-fit-card");
+  // At the page end the footer pushes the sticky dock's header under the top bar.
+  browser("eval", "window.scrollTo(0, 0)");
   browser("find", "role", "button", "click", "--name", "Minimize account assistant");
-  scrollTo("Decision for this pairing");
+  scrollTo("Decision for this connection");
   check(`${text("No recommendation until")} || ${text("Investigate")}`);
   capture("decision-open");
 

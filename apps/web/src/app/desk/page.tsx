@@ -5,18 +5,83 @@ import { listEvidenceOpportunities } from "@/server/evidence";
 import { listMunicipalities } from "@/server/municipalities";
 import { listSourcingCases } from "@/server/sourcing";
 import { getGrowthOperations } from "@/server/growth-views";
-import { countLabel, pairingStages, stagePriority } from "@signal-desk/catalog/desk-state";
+import {
+  compareConnections,
+  connectionOpen,
+  connectionStages,
+  connectionWaitingOn,
+  countLabel,
+} from "@signal-desk/catalog/desk-state";
 
 export const dynamic = "force-dynamic";
 
-type WorkItem =
-  | { kind: "pairing"; data: Awaited<ReturnType<typeof listSourcingCases>>[number] }
-  | { kind: "prospect"; data: Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number] };
+type Connection = Awaited<ReturnType<typeof listSourcingCases>>[number];
+type Prospect = Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number];
 
-function ReviewQueue({ items }: { items: WorkItem[] }) {
+const waitingLabels = {
+  you: "You",
+  seller: "Seller reply",
+  "buyer and seller": "Buyer and seller",
+};
+
+function ActiveDeals({ connections }: { connections: Connection[] }) {
   return (
     <section className="desk-card mt-6">
-      <h2>Needs your review</h2>
+      <h2>Active deals</h2>
+      <p className="desk-note">
+        Buyer-seller connections in progress. Those waiting on you come first, closest to a sale.
+      </p>
+      {connections.length ? (
+        <div className="desk-table-scroll mt-4">
+          <table className="desk-table">
+            <thead>
+              <tr>
+                <th scope="col">Connection</th>
+                <th scope="col" className="whitespace-nowrap">
+                  Stage
+                </th>
+                <th scope="col" className="whitespace-nowrap">
+                  Waiting on
+                </th>
+                <th scope="col">Next action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {connections.map((item) => (
+                <tr key={item.id}>
+                  <th scope="row">
+                    <Link href={`/desk/sourcing/${item.id}`}>
+                      {item.buyer} ← {item.seller}
+                    </Link>
+                    <span className="block text-sm font-normal text-muted-foreground">
+                      {item.vehicle?.title ?? "No listing yet"}
+                    </span>
+                  </th>
+                  <td className="whitespace-nowrap">{connectionStages[item.stage]}</td>
+                  <td className="whitespace-nowrap">
+                    {waitingLabels[connectionWaitingOn(item.stage, item.proposals)]}
+                  </td>
+                  <td>{item.nextAction}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="mt-4">
+          No connection in progress. <Link href="/desk/sourcing">Connect a buyer need</Link> with a
+          seller to start one.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Sourcing({ prospects }: { prospects: Prospect[] }) {
+  return (
+    <section className="desk-card mt-6">
+      <h2>Sourcing</h2>
+      <p className="desk-note">Seller prospects waiting on review before outreach.</p>
       <div className="desk-table-scroll">
         <table className="desk-table">
           <thead>
@@ -24,55 +89,40 @@ function ReviewQueue({ items }: { items: WorkItem[] }) {
               <th>Account</th>
               <th>Why</th>
               <th>Next action</th>
-              <th>Stage</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) =>
-              item.kind === "pairing" ? (
-                <tr key={item.data.id}>
-                  <th>
-                    <Link href={`/desk/sourcing/${item.data.id}`}>{item.data.seller}</Link>
-                  </th>
-                  <td>Candidate for {item.data.buyer}</td>
-                  <td>{item.data.nextAction}</td>
-                  <td>{pairingStages[item.data.stage]}</td>
-                </tr>
-              ) : (
-                <tr key={item.data.id}>
-                  <th>
-                    <Link href={`/desk/prospects/${item.data.id}`}>{item.data.name}</Link>
-                  </th>
-                  <td>
-                    {item.data.identityState !== "confirmed"
-                      ? "Identity needs review"
-                      : "No reviewed contact"}
-                  </td>
-                  <td>
-                    {item.data.identityState !== "confirmed"
-                      ? "Confirm identity"
-                      : "Review contact"}
-                  </td>
-                  <td>Pre-opportunity</td>
-                </tr>
-              ),
-            )}
+            {prospects.map((prospect) => (
+              <tr key={prospect.id}>
+                <th>
+                  <Link href={`/desk/prospects/${prospect.id}`}>{prospect.name}</Link>
+                </th>
+                <td>
+                  {prospect.identityState !== "confirmed"
+                    ? "Identity needs review"
+                    : "No reviewed contact"}
+                </td>
+                <td>
+                  {prospect.identityState !== "confirmed" ? "Confirm identity" : "Review contact"}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      {!items.length && <p>No accounts need review.</p>}
+      {!prospects.length && <p>No seller prospects need review.</p>}
     </section>
   );
 }
 
-function ActiveDeals({
+function BuyerAccounts({
   municipalities,
   opportunities,
 }: {
   municipalities: Awaited<ReturnType<typeof listMunicipalities>>;
   opportunities: Awaited<ReturnType<typeof listEvidenceOpportunities>>;
 }) {
-  const deals = [
+  const accounts = [
     ...municipalities.map((organization) => ({
       href: `/desk/municipalities/${encodeURIComponent(organization.id)}`,
       name: organization.name,
@@ -86,36 +136,33 @@ function ActiveDeals({
       kind: "Evidence workbench",
     })),
   ];
+  if (!accounts.length) return null;
   return (
     <section className="desk-card mt-6">
-      <h2>Active deals</h2>
-      <p className="desk-note">Qualified accounts continue here with their evidence packets.</p>
-      {deals.length ? (
-        <div className="desk-table-scroll mt-4">
-          <table className="desk-table">
-            <thead>
-              <tr>
-                <th scope="col">Deal</th>
-                <th scope="col">Next step</th>
-                <th scope="col">Workspace</th>
+      <h2>Buyer accounts</h2>
+      <p className="desk-note">Assigned buyers and the vehicle evidence they are reviewing.</p>
+      <div className="desk-table-scroll mt-4">
+        <table className="desk-table">
+          <thead>
+            <tr>
+              <th scope="col">Account</th>
+              <th scope="col">Next step</th>
+              <th scope="col">Workspace</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((account) => (
+              <tr key={account.href}>
+                <th scope="row">
+                  <Link href={account.href}>{account.name}</Link>
+                </th>
+                <td>{account.detail}</td>
+                <td>{account.kind}</td>
               </tr>
-            </thead>
-            <tbody>
-              {deals.map((deal) => (
-                <tr key={deal.href}>
-                  <th scope="row">
-                    <Link href={deal.href}>{deal.name}</Link>
-                  </th>
-                  <td>{deal.detail}</td>
-                  <td>{deal.kind}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="mt-4">No active deals yet. Qualifying a reviewed reply opens one.</p>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -154,8 +201,20 @@ export default async function Desk() {
     <section>
       <h1>Work queue</h1>
       <p className="mt-3 text-muted-foreground">
-        Review the evidence and move the next buyer-need pairing forward.
+        Connect buyers with sellers and move each connection toward a sale.
       </p>
+      <ActiveDeals
+        connections={cases
+          .filter((item) => connectionOpen(item.stage))
+          .toSorted(compareConnections)}
+      />
+      <Sourcing
+        prospects={operations.accounts.filter(
+          (account) =>
+            !account.qualified && (account.identityState !== "confirmed" || !account.contactable),
+        )}
+      />
+      <BuyerAccounts municipalities={municipalities} opportunities={opportunities} />
       <section className="desk-card mt-6">
         <h2>NY growth pipeline</h2>
         <div className="desk-pipeline">
@@ -170,17 +229,6 @@ export default async function Desk() {
           Counts cover up to 100 of your accounts. Columns are distinct conditions, not a funnel.
         </p>
       </section>
-      <ReviewQueue
-        items={[
-          ...cases
-            .toSorted((a, b) => (stagePriority[a.stage] ?? 7) - (stagePriority[b.stage] ?? 7))
-            .map((data) => ({ kind: "pairing" as const, data })),
-          ...operations.accounts
-            .filter((account) => account.identityState !== "confirmed" || !account.contactable)
-            .map((data) => ({ kind: "prospect" as const, data })),
-        ]}
-      />
-      <ActiveDeals municipalities={municipalities} opportunities={opportunities} />
       <section className="desk-card mt-6">
         <h2>Background work</h2>
         <p className="desk-note">

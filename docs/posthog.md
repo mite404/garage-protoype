@@ -95,9 +95,9 @@ Queued, admitted, dispatched-but-uncertain and failed messages are not exposed a
 The primary outcome is a reply human-qualified within 14 days of first observed delivery,
 including the endpoint. It uses the committed qualification timestamp, not an inferred reply date;
 review delays can therefore bias the measure. Any reply, an open, a click and opportunity creation
-alone do not qualify. `qualifyProspect` requires reviewed identity, fit, cited need, reply
-provenance and a published vehicle. Qualification creates a new opportunity or matches an existing
-one, with the evidence blocker committed transactionally. Only a new opportunity counts as created.
+alone do not qualify. `qualifySeller` requires reviewed identity, fit, a cited sale signal and
+reply provenance. Qualification makes the prospect a seller and drafts one unpublished listing
+(ADR-039); it creates no buyer opportunity, so `opportunity_created` is no longer recorded.
 Report eligible, assigned, delivered/exposed and mature accounts separately for each arm. The
 qualified conversion denominator is exposed accounts whose full 14-day window has elapsed; show
 pending accounts separately. Report sample sizes and uncertainty rather than declaring a winner

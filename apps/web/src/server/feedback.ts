@@ -60,13 +60,15 @@ export async function inviteFeedback(actor: Actor, id: string, raw: unknown) {
     raw,
   );
   return changeProspect(actor, id, async (client, account) => {
-    if (!account.opportunityId || !account.review?.contact)
+    if (!account.qualified || !account.review?.contact)
       throw new AppError(
         409,
         "CALL_REQUIRED",
-        "A qualified deal and reviewed contact are required.",
+        "A qualified account and reviewed contact are required.",
       );
-    await requireOpportunity(actor, account.opportunityId, "specialist", client);
+    // A qualified seller is reached through its own account; a buyer through its assigned deal.
+    if (account.opportunityId)
+      await requireOpportunity(actor, account.opportunityId, "specialist", client);
     const [existing] = await orm(client)
       .select()
       .from(growthInvitations)

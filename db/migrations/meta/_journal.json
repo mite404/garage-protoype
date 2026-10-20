@@ -211,6 +211,20 @@
       "when": 1792428365294,
       "tag": "0029_posthog-access",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792447836585,
+      "tag": "0030_buyer-seller-connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792447848034,
+      "tag": "0031_connection-stages",
+      "breakpoints": true
     }
   ]
 }

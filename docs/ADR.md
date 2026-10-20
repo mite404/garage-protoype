@@ -81,6 +81,10 @@ implemented functionality, and proposed entries remain open for review.
 - ADR-038: Drive the specialist funnel end to end with Playwright against the production build and a
   recreated `_test` database, because broken steps, links and stepper states only show up when a
   real browser clicks through the connected workflow.
+- ADR-039: Treat a qualified sourcing prospect as a seller whose qualification drafts a listing,
+  and make the buyer-need and seller connection, staged from investigating through ready for buyer
+  review and introduced to sale closed, the specialist's primary record, because connecting a buyer
+  with a seller toward a sale deserves more effort than sourcing more candidates.
 
 ## Proposed
 

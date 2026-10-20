@@ -12,7 +12,7 @@ const identityLabels: Record<string, string> = {
 };
 const contactLabels = { true: "Reviewed contact", false: "No contact permission" };
 const signalLabels = { true: "Cited buying signal", false: "Not established" };
-const stageLabels = { true: "Deal linked", false: "Pre-opportunity" };
+const stageLabels = { true: "Qualified seller", false: "Prospect" };
 
 type Account = Awaited<ReturnType<typeof getGrowthOperations>>["accounts"][number];
 

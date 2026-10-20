@@ -7,7 +7,8 @@ import {
   recordGrowthOutcome,
   linkProspectAccount,
 } from "@/server/growth-views";
-import { importDirectory, qualifyProspect, reviewProspect, routeProspect } from "@/server/growth";
+import { importDirectory, reviewProspect, routeProspect } from "@/server/growth";
+import { qualifySeller } from "@/server/sourcing";
 import { enrollSequence, stopOutreach, reconcileMessage } from "@/server/outreach";
 import { inviteFeedback } from "@/server/feedback";
 import { configureGrowthSchedule } from "@/server/growth-scheduler";
@@ -42,7 +43,7 @@ const accountCommands = {
   experiment: prepareOutreachExperiment,
   stop: stopOutreach,
   reconcile: reconcileMessage,
-  qualify: qualifyProspect,
+  qualify: qualifySeller,
   invite: inviteFeedback,
   outcome: recordGrowthOutcome,
 };
