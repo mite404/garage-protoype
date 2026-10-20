@@ -13,11 +13,26 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-md: calc(var(--radius) - 2px);
   --font-display: "Space Grotesk", sans-serif;
+  --font-heading: "Space Grotesk", sans-serif;
   --font-sans: "Roboto", Arial, sans-serif;
+}
+
+/* shadcn base-sera primitives set headings with this class. */
+.cn-font-heading {
+  font-family: var(--font-display);
 }
 
 @font-face {
@@ -163,21 +178,29 @@ h2 {
 
 :root {
   color-scheme: light dark;
-  --background: light-dark(#f5f7f9, #191e22);
-  --foreground: light-dark(#20252a, #f0f2f4);
-  --card: light-dark(#ffffff, #24292d);
-  --primary: light-dark(#b33418, #ffad91);
-  --primary-foreground: light-dark(#fffdf8, #32190f);
-  --accent: light-dark(#f0552a, #ffad91);
-  --secondary: var(--chat-assistant);
-  --muted: light-dark(#f0f2f4, #30363c);
-  --muted-foreground: light-dark(#59636f, #b5bec7);
-  --border: light-dark(#d6dbe0, #4e575e);
-  --input: light-dark(#c5cdd4, #68727a);
+  /* shadcn preset b6SurtB6Qa (base-sera, neutral, amber), as light-dark pairs. Deviations from
+     the preset keep WCAG AA: dark primary uses the preset's lighter amber, muted text is darker,
+     and the focus ring stays on primary instead of a faint gray. */
+  --background: light-dark(oklch(0.985 0 0), oklch(0.145 0 0));
+  --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+  --card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+  --primary: light-dark(oklch(0.555 0.163 48.998), oklch(0.769 0.188 70.08));
+  --primary-foreground: light-dark(oklch(0.987 0.022 95.277), oklch(0.279 0.077 45.635));
+  --accent: var(--primary);
+  --secondary: light-dark(oklch(0.967 0.001 286.375), oklch(0.274 0.006 286.033));
+  --muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+  --muted-foreground: light-dark(oklch(0.5 0 0), oklch(0.708 0 0));
+  --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+  --input: light-dark(oklch(0.87 0 0), oklch(1 0 0 / 15%));
   --ring: var(--primary);
-  --destructive: light-dark(#a32118, #ffaea5);
+  --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
   --warning: light-dark(#78550e, #e8cb85);
   --success: light-dark(#166534, #9ed5b1);
+  --chart-1: oklch(0.879 0.169 91.605);
+  --chart-2: oklch(0.769 0.188 70.08);
+  --chart-3: oklch(0.666 0.179 58.318);
+  --chart-4: oklch(0.555 0.163 48.998);
+  --chart-5: oklch(0.473 0.137 46.201);
   --radius: 10px;
   --font-display: "Space Grotesk", sans-serif;
   --font-sans: "Roboto", Arial, sans-serif;
