@@ -15,10 +15,9 @@ import {
   waitingOn,
   weeklyFlow,
 } from "./data";
+import { ResolveChart } from "./resolve-chart";
 import { Resume } from "./resume";
 
-const hatch =
-  "repeating-linear-gradient(135deg, var(--muted-foreground) 0 1px, transparent 1px 7px)";
 const thisWeek = weeklyFlow.at(-1)!;
 
 function Kpi({
@@ -49,7 +48,6 @@ function Kpi({
 }
 
 function ResolveFlow() {
-  const max = Math.max(...resolveByType.map((r) => r.days), 1);
   const total = metrics.inFlight;
   return (
     <Card>
@@ -58,18 +56,7 @@ function ResolveFlow() {
         <p className="text-muted-foreground">Average days, opened to reviewed · Simulated</p>
       </CardHeader>
       <CardContent className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <ul className="flex h-56 items-end gap-3" aria-label="Average days to resolve by type">
-          {resolveByType.map((r) => (
-            <li key={r.type} className="flex h-full flex-1 flex-col justify-end gap-2 text-center">
-              <span className="text-sm font-semibold tabular-nums">{r.days.toFixed(1)} d</span>
-              <span
-                className="rounded-t-md border border-border bg-muted"
-                style={{ height: `${(r.days / max) * 70}%`, backgroundImage: hatch }}
-              />
-              <span className="min-h-8 text-xs leading-tight text-muted-foreground">{r.type}</span>
-            </li>
-          ))}
-        </ul>
+        <ResolveChart data={resolveByType} />
         <div className="grid content-start gap-4">
           <p>
             <span className="font-display text-5xl font-semibold">
@@ -78,7 +65,8 @@ function ResolveFlow() {
             <span className="text-xl text-muted-foreground">days median</span>
           </p>
           <p className="text-muted-foreground">
-            Across {metrics.resolvedCount} blockers a rep reviewed and resolved.
+            Across {metrics.resolvedCount} resolved blockers in {resolveByType.length} types, each
+            reviewed by a rep.
           </p>
           <div className="grid gap-2 rounded-lg border border-border p-4">
             <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
