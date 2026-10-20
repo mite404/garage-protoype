@@ -30,6 +30,18 @@
       "entrypoint": "StreamOwner",
     },
   ],
+  // Branch previews from `wrangler preview` inherit none of the production settings above. They
+  // get no database, owner or secrets, so they cannot reach staging data, and every outbound path
+  // stays off. Mutations are refused without APP_ORIGIN.
+  "previews": {
+    "vars": {
+      "POSTHOG_ENABLED": "false",
+      "NEXT_PUBLIC_POSTHOG_ENABLED": "false",
+      "NEXT_PUBLIC_POSTHOG_REPLAY_ENABLED": "false",
+      "GROWTH_DELIVERY_MODE": "disabled",
+      "GROWTH_ANALYSIS_ENABLED": "false",
+    },
+  },
   "placement": { "region": "aws:us-west-2" },
   "observability": { "enabled": true },
 }
