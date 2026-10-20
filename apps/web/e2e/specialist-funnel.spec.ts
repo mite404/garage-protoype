@@ -74,8 +74,8 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(recent.getByRole("row", { name: /Height/ })).toContainText("118 in");
     await expect(recent.getByRole("row", { name: /Height/ })).toContainText("Met");
     await expect(page.locator("main > section > section.desk-card > h2")).toHaveText([
-      "NY growth pipeline",
       "Active deals",
+      "NY growth pipeline",
       "Sourcing",
       "Buyer accounts",
       "Background work",
