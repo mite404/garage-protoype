@@ -11,6 +11,10 @@
   right: 20px;
   z-index: 50;
 }
+/* On the desk the account button scrolls away with the header it sits in. */
+body:has(.desk-shell) .account-control {
+  position: absolute;
+}
 .account-avatar {
   display: grid;
   place-items: center;
@@ -304,7 +308,7 @@
 .growth-form textarea {
   width: 100%;
   min-width: 0;
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px;

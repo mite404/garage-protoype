@@ -1,5 +1,9 @@
 {
   "extends": "@signal-desk/config/tsconfig.base.json",
-  "compilerOptions": { "lib": ["dom", "dom.iterable", "esnext"], "jsx": "react-jsx" },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "paths": { "@signal-desk/ui/*": ["./src/*"] }
+  },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

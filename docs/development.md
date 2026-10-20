@@ -6,8 +6,10 @@ Use the Node version pinned in `.node-version` and `.nvmrc`, and npm.
 Run `npm run storybook` to review Dispatch components and synthetic assistance states at port
 6006. Run `npm run build-storybook` to check the independent React-Vite catalog. It writes ignored
 `storybook-static/`. The shared palette, display font, focus color, radii, and card review states
-live in `packages/ui/src/theme.css`. The seven UI components in `packages/ui/src/components/ui/`
-came from the official shadcn `base-nova` registry, configured in `packages/ui/components.json`.
+live in `packages/ui/src/theme.css`. The UI components in `packages/ui/src/components/ui/`
+come from the official shadcn `base-nova` registry, configured in `packages/ui/components.json`.
+Add more with `npx shadcn@latest add <name>` from `packages/ui`, declining overwrites of customized
+primitives. Chart colors come from shadcn preset `b6SurtB6Qa`; sidebar tokens reuse the app palette.
 The agent-selectable authored cards and their stories live in `packages/catalog/`; stock primitives
 are not agent-selectable. Stories do not load server operations or send messages.
 

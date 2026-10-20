@@ -1,64 +1,28 @@
 .desk-shell {
-  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
   font: 14px/1.5 var(--font-sans);
 }
-.desk-topbar {
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 40px;
-  padding: 0 84px 0 24px;
-  background: var(--chat-header);
-  color: var(--chat-header-text);
-}
-.desk-topbar p {
-  flex: 1;
-  font-size: 12px;
-}
 .desk-brand {
-  font: 700 27px var(--font-display);
-  letter-spacing: -1px;
+  font: 700 18px var(--font-display);
+  letter-spacing: -0.5px;
   white-space: nowrap;
 }
-.desk-layout {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  min-height: calc(100vh - 56px);
-}
-.desk-nav {
-  background: var(--card);
-  padding: 24px 12px;
-}
-.desk-nav > p {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  padding: 0 12px 16px;
-}
-.desk-nav nav {
-  display: grid;
-  gap: 4px;
-}
-.desk-nav nav a {
-  display: flex;
-  gap: 14px;
-  padding: 13px 12px;
-  align-items: center;
-  border-radius: 8px;
-  font-weight: 550;
-}
-.desk-nav [aria-current] {
+/* Keeps the desk's brand-tinted current page instead of sidebar-07's gray. */
+[data-sidebar="menu-button"][data-active] {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   color: var(--primary);
 }
-.desk-secondary-nav {
+.desk-brand-mark {
   display: grid;
-  gap: 16px;
-  margin: 30px 12px 0;
-  padding-top: 22px;
-  font-size: 12px;
-  color: var(--muted-foreground);
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: 700 16px var(--font-display);
 }
 .desk-body,
 .desk-account-main,
@@ -83,11 +47,6 @@
 .desk-shell h3 {
   font-size: 14px;
   font-weight: 600;
-}
-.desk-footer {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  padding: 20px 24px;
 }
 .desk-account {
   display: grid;
@@ -657,7 +616,7 @@
   gap: 12px;
 }
 .desk-split-actions button {
-  min-height: 40px;
+  min-height: 44px;
 }
 .desk-reply-banner {
   display: flex;
@@ -889,50 +848,7 @@
 .desk-dock-link span {
   color: var(--muted-foreground);
 }
-@media (min-width: 1180px) {
-  .desk-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-  }
-}
 @media (max-width: 760px) {
-  .desk-topbar {
-    height: auto;
-    min-height: 56px;
-    flex-wrap: wrap;
-    gap: 8px 20px;
-    padding: 12px 16px;
-  }
-  .desk-topbar p {
-    order: 3;
-    flex-basis: 100%;
-    font-size: 10px;
-  }
-  .desk-topbar > a:last-child {
-    margin-left: auto;
-  }
-  .desk-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .desk-nav {
-    padding: 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .desk-nav > p,
-  .desk-secondary-nav {
-    display: none;
-  }
-  .desk-nav nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .desk-nav nav a {
-    padding: 8px 4px;
-    gap: 5px;
-    flex-direction: column;
-    font-size: 11px;
-  }
   .desk-account-main,
   .desk-body > main > section {
     padding: 18px 14px;
@@ -954,7 +870,7 @@
     margin-left: 10px;
   }
   .desk-tabs {
-    gap: 14px;
+    gap: 4px;
     margin-top: 14px;
     font-size: 13px;
   }
@@ -981,11 +897,78 @@
     font-size: 10px;
     text-align: center;
   }
+  /* Review tables with checkboxes keep columns; the rest stack so Next action stays visible. */
+  /* Fit rows wrap to the card instead of sitting exactly at its edge. */
   .desk-account .sourcing-fit table {
-    min-width: 530px;
+    width: 100%;
+    table-layout: fixed;
+    overflow-wrap: break-word;
   }
-  .desk-table {
+  .desk-account .sourcing-fit th:first-child {
+    width: 40%;
+  }
+  .desk-account .sourcing-fit th:last-child {
+    width: 6.5rem;
+  }
+  .desk-account .sourcing-fit .desk-requirement svg {
+    display: none;
+  }
+  .desk-table:has(input) {
     min-width: 550px;
+  }
+  .desk-table:not(:has(input)) :is(tbody, tr, th, td) {
+    display: block;
+  }
+  .desk-table:not(:has(input)) thead {
+    display: none;
+  }
+  .desk-table:not(:has(input)) tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .desk-table:not(:has(input)) :is(th, td) {
+    padding: 2px 0;
+    border: 0;
+    white-space: normal;
+  }
+  .desk-table td[data-label] {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 8px;
+  }
+  .desk-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted-foreground);
+  }
+  .desk-table td[data-label] > * {
+    grid-column: 2;
+  }
+  .desk-tabs {
+    justify-content: space-between;
+  }
+  .desk-tabs > * {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .desk-back {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  /* Stays a list item so the disclosure marker survives. */
+  .desk-shell summary {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+  .desk-shell label:has(> input:is([type="checkbox"], [type="radio"])) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+  }
+  .desk-body:has(.sale-chat-launcher) {
+    padding-bottom: 88px;
   }
   .desk-activity li {
     display: grid;
