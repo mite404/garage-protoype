@@ -37,7 +37,13 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-md: calc(var(--radius) - 2px);
   --font-display: "Space Grotesk", sans-serif;
+  --font-heading: "Space Grotesk", sans-serif;
   --font-sans: "Roboto", Arial, sans-serif;
+}
+
+/* shadcn base-sera primitives set headings with this class. */
+.cn-font-heading {
+  font-family: var(--font-display);
 }
 
 @font-face {
