@@ -209,8 +209,12 @@ Durable Object namespaces. Do not create replacement resources when updating the
 
 For Cloudflare Git builds, connect `mite404/garage-protoype`, branch `main`, with repository root
 `/`, build command `npm run website:build`, and deploy command
-`npm run website:deploy -w @signal-desk/web`. Keep runtime secrets on the Worker, not in build
-variables. Server measurement uses PostHog US Cloud; browser replay and outreach remain disabled.
+`npm run website:deploy -w @signal-desk/web`. Pull request builds use Worker Previews: set the
+Previews Base preview command to `cd apps/web && npx wrangler preview`, never the deploy command,
+which would publish a branch to production. Previews take only the `previews` block in
+`apps/web/wrangler.jsonc`, so they have no database or owner binding and every outbound path off.
+Preview URLs are public. Keep runtime secrets on the Worker, not in build variables. Server
+measurement uses PostHog US Cloud; browser replay and outreach remain disabled.
 Keep `signal-desk-web-staging` available until a separate retirement is approved.
 
 To provision a separate environment, copy the configs and select its Worker names and resources
