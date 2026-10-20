@@ -898,6 +898,21 @@
     text-align: center;
   }
   /* Review tables with checkboxes keep columns; the rest stack so Next action stays visible. */
+  /* Fit rows wrap to the card instead of sitting exactly at its edge. */
+  .desk-account .sourcing-fit table {
+    width: 100%;
+    table-layout: fixed;
+    overflow-wrap: break-word;
+  }
+  .desk-account .sourcing-fit th:first-child {
+    width: 40%;
+  }
+  .desk-account .sourcing-fit th:last-child {
+    width: 6.5rem;
+  }
+  .desk-account .sourcing-fit .desk-requirement svg {
+    display: none;
+  }
   .desk-table:has(input) {
     min-width: 550px;
   }

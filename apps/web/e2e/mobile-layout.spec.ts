@@ -47,6 +47,7 @@ test("desk pages fit a phone with 44px touch targets", async ({ page }) => {
   const urls = [...listPages, prospect, ...accountTabs.map((tab) => `${connection}?tab=${tab}`)];
   for (const url of urls) {
     await page.goto(url);
+    await page.evaluate(() => document.fonts.ready);
     await expect(page.getByRole("navigation", { name: "Workspace" })).toBeVisible();
     expect(await sidewaysScrolling(page), `${url} scrolls sideways`).toEqual([]);
     expect(await smallTargets(page), `${url} targets under 44px`).toEqual([]);
