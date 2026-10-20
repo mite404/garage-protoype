@@ -75,7 +75,6 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
           Signal Desk
         </a>
         <p>Independent prototype · Synthetic or permissioned data · Message sending disabled</p>
-        <a href="/account">Account</a>
       </header>
       <div className="desk-layout">
         <aside className="desk-nav">
@@ -95,9 +94,6 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
           <div className="desk-secondary-nav">
             <a href="/desk/tokens">MCP tokens</a>
             <a href="/vehicles/demo-pumper">Public record</a>
-            <form action="/auth/sign-out" method="post">
-              <button>Sign out</button>
-            </form>
           </div>
         </aside>
         <div className="desk-body">
@@ -189,7 +185,7 @@ function AccountHeader({
   );
 }
 
-/** Account identity, evidence tabs and a persistent caller-owned assistant. */
+/** Account identity and evidence tabs with a caller-owned floating assistant. */
 export function AccountFrame({
   name,
   place,
@@ -200,15 +196,15 @@ export function AccountFrame({
   tab,
   onTab,
   children,
-  dock,
+  chat,
 }: Identity & {
   tab: AccountTab;
   onTab?: (tab: AccountTab) => void;
   children: ReactNode;
-  dock?: ReactNode;
+  chat?: ReactNode;
 }) {
   return (
-    <div className={`desk-account${dock ? " desk-with-dock" : ""}`}>
+    <div className="desk-account">
       <div className="desk-account-main">
         <AccountHeader
           name={name}
@@ -221,11 +217,7 @@ export function AccountFrame({
         <AccountTabs tab={tab} onTab={onTab} />
         <div className="desk-account-content">{children}</div>
       </div>
-      {dock && (
-        <aside className="desk-dock" aria-label="Account assistant">
-          {dock}
-        </aside>
-      )}
+      {chat}
     </div>
   );
 }

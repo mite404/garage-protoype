@@ -77,7 +77,7 @@ function outreachStepParam(value: string | undefined) {
 type Profile = Awaited<ReturnType<typeof getGrowthProfile>>;
 type Pairing = Awaited<ReturnType<typeof listSourcingCases>>[number];
 
-function ProspectDock({
+function BackgroundProposals({
   insights,
   pairings,
 }: {
@@ -90,8 +90,8 @@ function ProspectDock({
   return (
     <section className="desk-prospect-dock">
       <header>
-        <h2>Account assistant</h2>
-        <p>Background analyst proposals · Needs your review</p>
+        <h2>Background research proposals</h2>
+        <p>Automated suggestions, not approved facts. Review before using them.</p>
       </header>
       {themes.map(({ key, theme }) => (
         <article className="desk-card desk-chat-card" key={key}>
@@ -221,7 +221,6 @@ export default async function ProspectPage({
       context="Prospect review"
       role={prospectRole(account)}
       tab={tab}
-      dock={<ProspectDock insights={profile.insights} pairings={pairings} />}
     >
       {tab === "overview" && <Pipeline current={current} account={account} />}
       <GrowthAccountContent profile={profile} tab={tab} current={current} step={step} />
@@ -233,6 +232,7 @@ export default async function ProspectPage({
             cases={pairings}
           />
           <Pairings cases={pairings} />
+          <BackgroundProposals insights={profile.insights} pairings={pairings} />
         </>
       )}
     </AccountFrame>

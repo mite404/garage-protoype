@@ -50,9 +50,6 @@ export default async function Account() {
       >
         {actor.role === "specialist" ? "Return to workspace" : "Back to overview"}
       </Link>
-      <form action="/auth/sign-out" method="post" className="account-sign-out">
-        <button type="submit">Sign out</button>
-      </form>
     </>
   );
 }

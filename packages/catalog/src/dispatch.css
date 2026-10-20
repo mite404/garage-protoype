@@ -31,7 +31,7 @@
 .dispatch-brand span {
   display: block;
   margin-top: 10px;
-  color: #c8cdd2;
+  color: var(--muted-foreground);
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 400;
@@ -45,7 +45,7 @@
 }
 .dispatch-disclaimer span {
   display: block;
-  color: #c8cdd2;
+  color: var(--muted-foreground);
 }
 .dispatch-body {
   display: flex;

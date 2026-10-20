@@ -13,7 +13,7 @@ import ChatAdapter from "../../chat-adapter";
 
 type View = Awaited<ReturnType<typeof getSourcingAccount>>;
 const copy = {
-  title: "Account assistant",
+  title: "Sale assistant",
   empty:
     "Ask what would make this account worth pursuing, compare it with the buyer need, or draft questions for the seller.",
   placeholder: "Ask about this account…",
@@ -182,7 +182,6 @@ export default function SourcingDesk({
       }}
       chat={
         <ChatAdapter
-          variant="dock"
           composerRef={composer}
           subject="sourcing"
           subjectId={view.caseId}

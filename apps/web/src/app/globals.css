@@ -5,6 +5,85 @@
 @source "../../../../packages/ui/src";
 @source "../../../../packages/catalog/src";
 
+.account-control {
+  position: fixed;
+  top: 6px;
+  right: 20px;
+  z-index: 50;
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.account-avatar:active {
+  transform: scale(0.97);
+}
+.account-popover {
+  position: fixed;
+  inset: 58px 20px auto auto;
+  margin: 0;
+  width: min(260px, calc(100vw - 40px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.18);
+}
+.account-popover p {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.account-popover a,
+.account-popover button {
+  display: block;
+  width: 100%;
+  padding: 10px 8px;
+  min-height: 44px;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.account-popover :is(a, button):hover {
+  background: var(--muted);
+}
+.account-popover label {
+  margin: 12px 8px 6px;
+  color: var(--muted-foreground);
+}
+.account-popover select {
+  width: 100%;
+}
+.account-popover form {
+  margin-top: 12px;
+}
+.municipal-topbar-context {
+  padding-right: 56px;
+}
+
+.desk-recent {
+  display: grid;
+  gap: 16px;
+}
+.desk-recent > header {
+  flex-wrap: wrap;
+  align-items: start;
+}
+.desk-recent > header h2 {
+  display: inline;
+  font-size: clamp(24px, 2.5vw, 32px);
+}
+.desk-recent > header .desk-note {
+  max-width: 320px;
+}
+
 .workbench-title {
   font-size: clamp(32px, 3vw, 42px);
   letter-spacing: 0;
@@ -264,9 +343,6 @@
 .growth-card summary {
   cursor: pointer;
   font-weight: 600;
-}
-.growth-account-link:hover {
-  border-color: var(--primary);
 }
 @media (max-width: 760px) {
   .growth-grid {

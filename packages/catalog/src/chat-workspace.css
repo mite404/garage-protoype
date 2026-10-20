@@ -103,7 +103,7 @@
   min-width: 0;
 }
 .chat-window-title p {
-  color: #c8cdd2;
+  color: var(--muted-foreground);
   font-size: 12px;
   margin-top: 3px;
 }
@@ -113,7 +113,7 @@
   color: var(--chat-header-text);
 }
 .chat-window-header button:hover {
-  background: #3b4349;
+  background: var(--muted);
 }
 .chat-vehicle-context {
   display: flex;

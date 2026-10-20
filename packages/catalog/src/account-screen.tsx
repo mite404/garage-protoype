@@ -90,7 +90,7 @@ export function AccountLayout({
   slides: SignInSlide[];
 }) {
   return (
-    <div className="sign-in-screen" data-theme="light">
+    <div className="sign-in-screen">
       <a className="dispatch-skip" href="#main-content">
         Skip to content
       </a>

@@ -4,7 +4,8 @@ import { AppError } from "@/server/errors";
 import { listEvidenceOpportunities } from "@/server/evidence";
 import { listMunicipalities } from "@/server/municipalities";
 import { listSourcingCases } from "@/server/sourcing";
-import { getGrowthOperations } from "@/server/growth-views";
+import { getGrowthOperations, getRecentAccount } from "@/server/growth-views";
+import { RecentAccount } from "./recent-account";
 import {
   compareConnections,
   connectionOpen,
@@ -36,7 +37,7 @@ function ActiveDeals({ connections }: { connections: Connection[] }) {
           <table className="desk-table">
             <thead>
               <tr>
-                <th scope="col">Connection</th>
+                <th scope="col">Buyer and seller</th>
                 <th scope="col" className="whitespace-nowrap">
                   Stage
                 </th>
@@ -51,7 +52,8 @@ function ActiveDeals({ connections }: { connections: Connection[] }) {
                 <tr key={item.id}>
                   <th scope="row">
                     <Link href={`/desk/sourcing/${item.id}`}>
-                      {item.buyer} ← {item.seller}
+                      <span className="block">Buyer: {item.buyer}</span>
+                      <span className="block">Seller: {item.seller}</span>
                     </Link>
                     <span className="block text-sm font-normal text-muted-foreground">
                       {item.vehicle?.title ?? "No listing yet"}
@@ -174,13 +176,15 @@ export default async function Desk() {
   let municipalities;
   let cases;
   let operations;
+  let recent;
   try {
     actor = await requireActor();
-    [opportunities, municipalities, cases, operations] = await Promise.all([
+    [opportunities, municipalities, cases, operations, recent] = await Promise.all([
       listEvidenceOpportunities(actor),
       listMunicipalities(actor),
       listSourcingCases(actor),
       getGrowthOperations(actor),
+      getRecentAccount(actor),
     ]);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
@@ -203,6 +207,22 @@ export default async function Desk() {
       <p className="mt-3 text-muted-foreground">
         Connect buyers with sellers and move each connection toward a sale.
       </p>
+      <RecentAccount recent={recent} />
+      <section className="desk-card mt-6">
+        <h2>NY growth pipeline</h2>
+        <div className="desk-pipeline">
+          {Object.entries(operations.counts).map(([label, count]) => (
+            <p key={label}>
+              <strong>{count}</strong>
+              <span>{countLabel(label)}</span>
+            </p>
+          ))}
+        </div>
+        <p className="desk-note">
+          Counts cover up to 100 of your accounts. An account can appear in several counts. These
+          are current states, not a conversion funnel.
+        </p>
+      </section>
       <ActiveDeals
         connections={cases
           .filter((item) => connectionOpen(item.stage))
@@ -216,27 +236,17 @@ export default async function Desk() {
       />
       <BuyerAccounts municipalities={municipalities} opportunities={opportunities} />
       <section className="desk-card mt-6">
-        <h2>NY growth pipeline</h2>
-        <div className="desk-pipeline">
-          {Object.entries(operations.counts).map(([label, count]) => (
-            <p key={label}>
-              <strong>{count}</strong>
-              <span>{countLabel(label)}</span>
-            </p>
-          ))}
-        </div>
-        <p className="desk-note">
-          Counts cover up to 100 of your accounts. Columns are distinct conditions, not a funnel.
-        </p>
-      </section>
-      <section className="desk-card mt-6">
         <h2>Background work</h2>
+        <p>
+          Automated research and draft proposals run under approved schedules. They do not replace
+          your review tasks above or approve facts, contact sellers, or make sale decisions.
+        </p>
         <p className="desk-note">
           {operations.schedules.length} approved schedules.{" "}
           {operations.budget
-            ? `${operations.budget.active} active attempts, ${operations.budget.spentMicroUsd} micro-USD settled.`
+            ? `${operations.budget.active} active model attempts.`
             : "No spending budget provisioned. Paid work cannot run."}{" "}
-          Analyst proposals wait on each account for review.
+          Saved proposals appear on their account for human review.
         </p>
       </section>
     </section>

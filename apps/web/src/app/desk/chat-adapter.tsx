@@ -40,7 +40,6 @@ export default function ChatAdapter({
   copy,
   renderSourcingCard,
   onSettled,
-  variant,
   composerRef,
 }: {
   subject?: keyof typeof subjects;
@@ -49,10 +48,7 @@ export default function ChatAdapter({
   initialStreams: Turn[];
   /** Called when a saved turn finishes, so the page can reload records the assistant changed. */
   onSettled?: () => void;
-} & Pick<
-  ComponentProps<typeof SaleChat>,
-  "copy" | "renderSourcingCard" | "variant" | "composerRef"
->) {
+} & Pick<ComponentProps<typeof SaleChat>, "copy" | "renderSourcingCard" | "composerRef">) {
   const { base: root, schema } = subjects[subject];
   const base = `${root}/${encodeURIComponent(subjectId)}`;
   const endpoint = `${base}/stream`;
@@ -128,7 +124,6 @@ export default function ChatAdapter({
   }
   return (
     <SaleChat
-      variant={variant}
       composerRef={composerRef}
       copy={copy}
       renderSourcingCard={renderSourcingCard}

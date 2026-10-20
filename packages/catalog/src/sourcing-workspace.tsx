@@ -53,7 +53,8 @@ function inventoryText(search: SourcingAccount["inventorySearch"]) {
   return `${search.reviewedMatches ? `${search.reviewedMatches} reviewed matches` : "No suitable reviewed match"} · ${date.format(search.searchedAt)}`;
 }
 
-function WhyHere({ data }: { data: SourcingAccount }) {
+/** Buyer requirements, inventory checks and the cited trigger, without inferring sale intent. */
+export function WhyHere({ data }: { data: SourcingAccount }) {
   return (
     <section className="desk-card">
       <h2>Why this account is here</h2>
@@ -74,7 +75,11 @@ function WhyHere({ data }: { data: SourcingAccount }) {
           <div>
             <DeskIcon name="inventory" />
             <div>
-              <h3>Existing inventory checked</h3>
+              <h3>
+                {data.inventorySearch
+                  ? "Existing inventory checked"
+                  : "Inventory search not recorded"}
+              </h3>
               <p>{inventoryText(data.inventorySearch)}</p>
             </div>
           </div>
@@ -259,7 +264,7 @@ export function ConnectionProgress({
         ))}
       </ol>
       <p>
-        {data.need.buyer} ← {data.account.name} ·{" "}
+        Buyer: {data.need.buyer} · Seller: {data.account.name} ·{" "}
         {vehicle ? (
           <>
             <strong>{vehicle.title}</strong> · {vehicle.listed ? "Listed" : "Draft listing"}
@@ -618,7 +623,7 @@ export default function SourcingWorkspace({
       secondary={`Buyer need: ${data.need.buyer}`}
       tab={tab}
       onTab={onTab}
-      dock={chat}
+      chat={chat}
     >
       {problem && (
         <p role="alert" className="sourcing-problem">

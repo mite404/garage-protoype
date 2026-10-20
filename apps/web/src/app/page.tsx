@@ -1,8 +1,18 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { requireActor } from "@/server/auth";
+import { AppError } from "@/server/errors";
 import { TelemetryPreferences } from "./telemetry-preferences";
 
-/** Offers read-only evidence separately from invited workspace access. */
-export default function Home() {
+/** Uses the work dashboard as specialist home; visitors retain the public introduction. */
+export default async function Home() {
+  let specialist = false;
+  try {
+    specialist = (await requireActor()).role === "specialist";
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+  }
+  if (specialist) redirect("/desk");
   return (
     <div data-replay-safe className="grid items-start gap-12 md:grid-cols-[1.3fr_1fr]">
       <section className="max-w-xl py-5">

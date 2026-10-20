@@ -2,32 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { WorkspaceShell } from "@signal-desk/catalog/workspace-shell";
-
-const destinations = [
-  { href: "/", label: "Overview" },
-  { href: "/desk", label: "Workspace" },
-  { href: "/desk/prospects", label: "Prospect inbox" },
-  { href: "/desk/sourcing", label: "Sourcing" },
-  { href: "/desk/growth", label: "Growth operations" },
-  { href: "/vehicles/demo-pumper", label: "Public record" },
-  { href: "/desk/tokens", label: "MCP tokens" },
-  { href: "/account", label: "Account" },
-];
+import { DeskShell } from "@signal-desk/catalog/desk-shell";
 
 /** Marks navigation from the current route without loading private records. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   if (["/sign-in", "/sign-up", "/account"].includes(pathname)) return children;
   if (pathname === "/desk" || pathname.startsWith("/desk/")) return children;
-  const active = destinations.findLast(
-    ({ href }) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)),
-  );
-  return (
-    <WorkspaceShell
-      links={destinations.map((link) => ({ ...link, current: active?.href === link.href }))}
-    >
-      {children}
-    </WorkspaceShell>
-  );
+  return <DeskShell pathname={pathname}>{children}</DeskShell>;
 }

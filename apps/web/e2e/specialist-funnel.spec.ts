@@ -62,14 +62,32 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
   });
 
   await test.step("work queue leads with the connection closest to a sale", async () => {
-    await page.goto("/desk");
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/desk$/);
     await expect(page.getByRole("heading", { name: "Work queue", level: 1 })).toBeVisible();
+    const recent = page.getByRole("region", { name: "Last account worked" });
+    await expect(recent.getByRole("heading", { name: "Oak Hollow Fire Company" })).toBeVisible();
+    await expect(recent.getByRole("heading", { name: "Why this account is here" })).toBeVisible();
+    await expect(
+      recent.getByRole("heading", { name: "Can this candidate meet the need?" }),
+    ).toBeVisible();
+    await expect(recent.getByRole("row", { name: /Height/ })).toContainText("118 in");
+    await expect(recent.getByRole("row", { name: /Height/ })).toContainText("Met");
+    await expect(page.locator("main > section > section.desk-card > h2")).toHaveText([
+      "NY growth pipeline",
+      "Active deals",
+      "Sourcing",
+      "Buyer accounts",
+      "Background work",
+    ]);
     const deals = section(page, "Active deals");
     await expect(deals.getByRole("row").nth(1)).toContainText(
-      /Harbor Point FD ← Oak Hollow Fire Company.*2012 Oak Hollow pumper.*Ready for buyer review.*You/,
+      /Buyer: Harbor Point FDSeller: Oak Hollow Fire Company.*2012 Oak Hollow pumper.*Ready for buyer review.*You/,
     );
     for (const seller of ["Cedar Valley Fire District", "Maple Grove Fire Department"])
-      await expect(deals.getByRole("link", { name: `Pine Brook FD ← ${seller}` })).toBeVisible();
+      await expect(
+        deals.getByRole("link", { name: `Buyer: Pine Brook FD Seller: ${seller}` }),
+      ).toBeVisible();
     await expect(deals.getByRole("row", { name: /Maple Grove.*Awaiting seller/ })).toContainText(
       "You",
     );
@@ -99,6 +117,15 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
       "step",
     );
     await expect(steps.getByRole("link", { name: /Contact review/ })).toContainText("✓");
+    const accountUrl = page.url();
+    await page.goto("/desk");
+    const recent = page.getByRole("region", { name: "Last account worked" });
+    await expect(
+      recent.getByRole("heading", { name: "Northfield Fire District", exact: true }),
+    ).toBeVisible();
+    await expect(recent).toContainText("No confirmed buyer need is linked");
+    await expect(recent).toContainText("Synthetic board minutes, October 2026");
+    await page.goto(accountUrl);
   });
 
   await test.step("reviewed sequence queues with delivery disabled", async () => {
@@ -142,7 +169,7 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await expect(page).toHaveURL(/\/desk\/sourcing\/[0-9a-f-]{36}/);
     await expect(page.getByRole("heading", { name: "Northfield Fire District" })).toBeVisible();
     await expect(page.locator("#connection-progress")).toContainText(
-      "Pine Brook FD ← Northfield Fire District · 2005 Northfield engine · Draft listing",
+      "Buyer: Pine Brook FD · Seller: Northfield Fire District · 2005 Northfield engine · Draft listing",
     );
     const rail = page.getByRole("list", { name: "Connection progress" });
     await expect(rail.getByRole("listitem").filter({ hasText: "Investigating" })).toHaveAttribute(
@@ -189,14 +216,31 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await page.getByRole("navigation", { name: "Account sections" }).getByText("Activity").click();
     await expect(page.getByText("Height accepted")).toBeVisible();
     await expect(page.getByText("Decision recorded: investigate")).toBeVisible();
+    const accountUrl = page.url();
+    await page.goto("/desk");
+    const recent = page.getByRole("region", { name: "Last account worked" });
+    await expect(recent.getByRole("row", { name: /Height/ })).toContainText("118 in");
+    await expect(recent.getByRole("row", { name: /Height/ })).toContainText("Met");
+    await expect(recent.getByRole("row", { name: /Available for sale/ })).toContainText("Unknown");
+    await page.goto(accountUrl);
   });
 
-  await test.step("docked assistant streams a labelled synthetic answer", async () => {
-    await page.getByLabel("Message account assistant").fill("What is still blocking this pairing?");
-    await page.getByRole("button", { name: "Send to account assistant" }).click();
-    const dock = page.getByRole("complementary", { name: "Account assistant" });
-    await expect(dock.getByText(/Synthetic local model/)).toBeVisible();
-    await expect(dock.getByRole("heading", { name: "Information request" })).toBeVisible();
+  await test.step("popup assistant streams and preserves its draft when minimized", async () => {
+    const assistant = page.getByRole("dialog", { name: "Sale assistant" });
+    await expect(assistant).toBeHidden();
+    await page.getByRole("button", { name: "Sale assistant", exact: true }).click();
+    await page.getByLabel("Message sale assistant").fill("What is still blocking this pairing?");
+    await page.getByRole("button", { name: "Send to sale assistant" }).click();
+    await expect(assistant.getByText(/Synthetic local model/)).toBeVisible();
+    await expect(assistant.getByRole("heading", { name: "Information request" })).toBeVisible();
+    await page.getByLabel("Message sale assistant").fill("Keep this unsent draft");
+    await page.getByRole("button", { name: "Minimize sale assistant" }).click();
+    await expect(assistant).toBeHidden();
+    await page.getByRole("button", { name: "Sale assistant", exact: true }).click();
+    await expect(page.getByLabel("Message sale assistant")).toHaveValue("Keep this unsent draft");
+    await page.keyboard.press("Escape");
+    await expect(assistant).toBeHidden();
+    await expect(page.getByRole("button", { name: "Sale assistant", exact: true })).toBeFocused();
   });
 
   await test.step("reply review keeps answers unresolved and drafts a clarification", async () => {
@@ -206,7 +250,7 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     await page.getByRole("button", { name: "Keep unresolved" }).click();
     await expect(page.getByText("Kept unresolved. No reviewed facts changed.")).toBeVisible();
     await page.getByRole("button", { name: "Draft clarification" }).click();
-    await expect(page.getByLabel("Message account assistant")).toHaveValue(
+    await expect(page.getByLabel("Message sale assistant")).toHaveValue(
       /Draft a clarification for Maple Grove Fire Department/,
     );
     await page.getByRole("link", { name: "Open buyer need" }).click();
@@ -239,7 +283,9 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
 
   await test.step("the connection closest to a sale is introduced, then closed", async () => {
     await page.goto("/desk");
-    await page.getByRole("link", { name: "Harbor Point FD ← Oak Hollow Fire Company" }).click();
+    await page
+      .getByRole("link", { name: "Buyer: Harbor Point FD Seller: Oak Hollow Fire Company" })
+      .click();
     const progress = page.locator("#connection-progress");
     await page.getByRole("link", { name: "Record introduction" }).click();
     await progress
@@ -301,4 +347,42 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     expect(broken).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+});
+
+test("account menu controls appearance and existing sign-out", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/desk");
+  const avatar = page.getByRole("button", { name: "Account and appearance" });
+  const menu = page.locator("#account-menu");
+  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeHidden();
+  await avatar.click();
+  await expect(menu.getByLabel("Appearance")).toHaveValue("system");
+  await expect(menu.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await menu.getByLabel("Appearance").selectOption("light");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await avatar.click();
+  await menu.getByLabel("Appearance").selectOption("dark");
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(avatar).toBeFocused();
+  await page.getByRole("link", { name: "Public record", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("navigation", { name: "Workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reviewed specifications" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Ask a question or record offer terms" }),
+  ).toBeVisible();
+  await avatar.click();
+  await menu.getByLabel("Appearance").selectOption("system");
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator(".desk-shell")).toHaveCSS("background-color", "rgb(245, 247, 249)");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator(".desk-shell")).toHaveCSS("background-color", "rgb(25, 30, 34)");
+  await menu.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await avatar.click();
+  await expect(menu.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });

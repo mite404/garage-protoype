@@ -30,6 +30,60 @@ import {
 import { readOutreach } from "./outreach";
 import { parseInput } from "./validation";
 import { readOutreachExperiment } from "./outreach-experiment";
+import { getSourcingAccount } from "./sourcing";
+
+/** Resumes the latest stored human account action or session chat, not automated activity.
+ * Page views are not recorded. Historical growth events identify the account, not its actor.
+ * @throws {AppError} For revoked specialist access or lost account ownership.
+ */
+export async function getRecentAccount(actor: Actor) {
+  const current = await requireGrowthActor(actor);
+  const result = await orm().execute(sql`
+    with interactions as (
+      select c.seller_prospect_id as account_id, e.case_id, e.created_at as at,
+        'pairing:' || e.id as event_id
+      from signal_desk.pairing_events e
+      join signal_desk.sourcing_cases c on c.id = e.case_id
+      join signal_desk.buyer_needs n on n.id = c.need_id
+      where c.owner_id = ${current.userId} and n.owner_id = ${current.userId}
+        and e.actor_id = ${current.userId}
+        and e.kind in ('opened', 'accepted', 'fact_rejected', 'original', 'draft_enrolled',
+          'decided_proceed', 'decided_investigate', 'decided_reject',
+          'source_kept', 'source_dismissed', 'introduced', 'sale_closed')
+      union all
+      select e.account_id, null::text, e.created_at, 'growth:' || e.id
+      from signal_desk.growth_events e
+      where e.kind in ('reviewed', 'qualified', 'intervention', 'progressed',
+        'closed_lost', 'reconciled')
+      union all
+      select c.seller_prospect_id, c.id, t.created_at, 'chat:' || t.id
+      from signal_desk.stream_turns t
+      join signal_desk.sourcing_cases c on c.id = t.sourcing_case_id
+      join signal_desk.buyer_needs n on n.id = c.need_id
+      where c.owner_id = ${current.userId} and n.owner_id = ${current.userId}
+        and t.actor_id = ${current.userId} and t.credential->>'kind' = 'supabase-session'
+    )
+    select i.account_id, i.at, coalesce(i.case_id, (
+      select c.id from signal_desk.sourcing_cases c
+      join signal_desk.buyer_needs n on n.id = c.need_id
+      where c.seller_prospect_id = i.account_id
+        and c.owner_id = ${current.userId} and n.owner_id = ${current.userId}
+      order by c.created_at desc, c.id limit 1
+    )) as case_id
+    from interactions i
+    join signal_desk.growth_accounts a on a.id = i.account_id
+    where a.owner_id = ${current.userId}
+    order by i.at desc, i.event_id desc limit 1
+  `);
+  const row = z
+    .object({ account_id: z.string(), case_id: z.string().nullable(), at: z.coerce.date() })
+    .optional()
+    .parse(result.rows[0]);
+  if (!row) return null;
+  const account = await getProspect(actor, row.account_id);
+  const sourcing = row.case_id ? await getSourcingAccount(actor, row.case_id) : null;
+  return { account, sourcing, at: row.at };
+}
 
 /** Reads durable enrichment, source provenance, answers and inferences for one owned account.
  * @throws {AppError} For revoked credentials or inaccessible accounts.

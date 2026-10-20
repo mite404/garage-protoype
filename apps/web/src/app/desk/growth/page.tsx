@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 const dueDate = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
-  timeZone: "UTC",
+  timeZone: "America/New_York",
+});
+const dollars = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 6,
 });
 
 function SpendingStatus({
@@ -21,7 +26,7 @@ function SpendingStatus({
   return (
     <p className="mt-4">
       {budget
-        ? `${budget.spentMicroUsd} micro-USD settled · ${budget.reservedMicroUsd} reserved · ${budget.active} active attempts`
+        ? `${dollars.format(Number(budget.spentMicroUsd) / 1_000_000)} spent · ${dollars.format(Number(budget.reservedMicroUsd) / 1_000_000)} reserved for unfinished work · ${budget.active} active model attempts`
         : "No spending budget provisioned. Paid work cannot run."}
     </p>
   );
@@ -47,22 +52,22 @@ export default async function GrowthPage({
       <header>
         <h1>Outcomes</h1>
         <p className="mt-4 text-muted-foreground">
-          Observed account states and human-reported outcomes. No customer validation, revenue
-          uplift or causal attribution is implied.
+          Track account progress, reviewed replies and automated work. These records do not prove
+          increased sales or that outreach caused an outcome.
         </p>
       </header>
       <section className="growth-card mt-6">
-        <h2>Reviewed outreach trial · 14-day qualified replies</h2>
+        <h2>Outreach trial: qualified replies within 14 days</h2>
         <p className="text-sm text-muted-foreground">
-          All accounts allocated in your scope, not just this page. Assignment is not exposure.
-          Exposure starts at the first observed provider delivery confirmation. Qualification must
-          be human-confirmed within 14 days, inclusive. Only mature exposed accounts enter the
-          conversion denominator; pending windows are separate. No winner is established.
+          Compares request-first and evidence-first outreach across your assigned trial accounts.
+          Assigned means placed in a trial group, not sent a message. Delivered requires provider
+          confirmation. A qualified reply must be confirmed by a person within 14 days of delivery.
+          Results count only accounts whose full 14-day window has ended. No winner is established.
         </p>
         {experiment.eligibility.map((row) => (
           <p className="mt-3 text-sm" key={String(row.synthetic)}>
             {row.synthetic ? "Synthetic demonstration" : "Real permissioned cohort"}: {row.eligible}{" "}
-            eligible · {row.unassigned} awaiting allocation.
+            eligible · {row.unassigned} not yet assigned to a group.
           </p>
         ))}
         <div className="growth-grid mt-4">
@@ -73,27 +78,29 @@ export default async function GrowthPage({
                 {row.synthetic ? "Synthetic" : "Real"}
               </h3>
               <p>
-                {row.assigned} assigned · {row.exposed} delivered · {row.pending} pending ·{" "}
-                {row.mature} mature.
+                {row.assigned} assigned · {row.exposed} delivered · {row.pending} still within 14
+                days · {row.mature} completed the 14-day window.
               </p>
               <p>
-                {row.qualified}/{row.mature} qualified · {row.interval}.
+                {row.mature
+                  ? `${row.qualified} qualified replies out of ${row.mature} completed windows. Estimated reply-rate range: ${row.interval}.`
+                  : "No completed delivery windows yet. A reply rate is not available."}
               </p>
             </article>
           ))}
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          Synthetic observations prove plumbing, never uplift. Sampling, human-review delays and
-          routing can bias this small trial; inspect allocation balance before interpreting results.
-          Email/Google Forms surveys are unchanged.
+          Synthetic results test the workflow, not sales performance. The range shows statistical
+          uncertainty, not a guaranteed result. Small groups, review delays and routing differences
+          can affect the comparison. Email and Google Forms survey workflows are unchanged.
         </p>
       </section>
       <section className="growth-card mt-6">
-        <h2>This account page, not the whole population</h2>
+        <h2>Account progress</h2>
         <p className="text-sm text-muted-foreground">
-          Denominator {operations.counts.discovered} owned accounts displayed, up to 100. Columns
-          are distinct conditions, not mutually exclusive funnel stages. Sent means provider
-          acceptance, not delivery or a reply.
+          Covers {operations.counts.discovered} of your accounts on this page, up to 100. An account
+          can appear in several counts, so these numbers are not a conversion funnel. Sent means
+          accepted by the provider, not confirmed delivered or replied to.
         </p>
         <div className="growth-metrics">
           {Object.entries(operations.counts).map(([name, count]) => (
@@ -110,22 +117,23 @@ export default async function GrowthPage({
         )}
       </section>
       <section className="growth-card mt-6">
-        <h2>Backlog and technical cost</h2>
+        <h2>Queued messages and AI spending</h2>
         <p className="text-sm text-muted-foreground">
-          Message counts use the displayed account page. Budget counters are this specialist's
-          shared inference budget, including conversational work, not a growth-only cost estimate.
-          Micro-USD are one millionth of a US dollar.
+          Message counts cover the accounts on this page. Spending is shown in US dollars across
+          your shared AI budget, including conversations, not just growth research.
         </p>
         {operations.backlog.map((row) => (
           <p className="growth-quote" key={row.state}>
             {row.count} {row.state} messages · earliest due{" "}
-            {row.oldestDue ? `${dueDate.format(new Date(row.oldestDue))} UTC` : "not recorded"}
+            {row.oldestDue
+              ? `${dueDate.format(new Date(row.oldestDue))} New York time`
+              : "not recorded"}
           </p>
         ))}
         <SpendingStatus budget={operations.budget} />
       </section>
       <section className="growth-card mt-6">
-        <h2>Integration boundaries</h2>
+        <h2>Connected services and limits</h2>
         <ul className="space-y-3 mt-4">
           <li>{operations.delivery}</li>
           <li>{operations.analysis}</li>
@@ -134,7 +142,7 @@ export default async function GrowthPage({
         <GrowthCommand
           kind="schedule"
           input={{ kind: "forms" }}
-          label="Approve incremental Forms reads"
+          label="Approve reading new Forms responses"
         />
         <p className="text-sm text-muted-foreground">
           No form is created. OAuth, versioned question IDs and an existing approved form are
@@ -142,18 +150,22 @@ export default async function GrowthPage({
         </p>
       </section>
       <section className="growth-card mt-6">
-        <h2>Scheduled work and recovery</h2>
+        <h2>Automated background work</h2>
         <p className="text-sm text-muted-foreground">
-          At most three due jobs and one due message per sweep. Five-minute leases recover after
-          interruption. Business keys prevent duplicate effects. An uncertain send never re-enters
-          the queue.
+          Each check processes up to three due jobs and one due message. Interrupted jobs can resume
+          after five minutes without duplicating their effects. A message with an uncertain send
+          status is held for review, not automatically sent again.
         </p>
         {!operations.schedules.length && (
           <p className="mt-4">No recurring work approved under this identity.</p>
         )}
         {operations.schedules.map((schedule) => (
           <article className="growth-quote" key={schedule.id}>
-            <h3>{JSON.stringify(schedule.configuration)}</h3>
+            <h3>Approved recurring job</h3>
+            <details>
+              <summary>Job configuration</summary>
+              <pre>{JSON.stringify(schedule.configuration, null, 2)}</pre>
+            </details>
             <p>
               {schedule.lastCode ?? "Not run yet"} ·{" "}
               {schedule.durationMs === null
@@ -161,10 +173,10 @@ export default async function GrowthPage({
                 : `${schedule.durationMs} ms last sweep`}
             </p>
             <p className="text-sm">
-              Next {schedule.nextAt.toISOString()} ·{" "}
+              Next check {dueDate.format(schedule.nextAt)} New York time ·{" "}
               {schedule.leaseUntil
-                ? `Lease until ${schedule.leaseUntil.toISOString()}`
-                : "No active lease"}
+                ? `Running, reserved until ${dueDate.format(schedule.leaseUntil)} New York time`
+                : "Not currently running"}
             </p>
           </article>
         ))}

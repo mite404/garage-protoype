@@ -18,6 +18,7 @@ import {
   runSourcingCommand,
 } from "./sourcing";
 import { importDirectory, listProspects, reviewProspect } from "./growth";
+import { getRecentAccount } from "./growth-views";
 import { seedSourcing } from "./sourcing-seed";
 import { cancelSourcingStream, readSourcingStreams, submitSourcingStream } from "./streaming";
 import { nodeRuntime, type StreamingTestRuntime } from "./test-streaming-owner";
@@ -160,6 +161,7 @@ test(
       const actor = await resolveActor({ userId: user, sessionId: session });
       const foreign = await resolveActor({ userId: foreignUser, sessionId: foreignSession });
 
+      assert.equal(await getRecentAccount(actor), null);
       const caseId = await seedSourcing(actor);
       assert.equal(await seedSourcing(actor), caseId);
       // Growth's single owner per seller holds; the walkthrough is never duplicated.
@@ -509,6 +511,27 @@ test(
           },
           contact: null,
         });
+      assert.equal((await getRecentAccount(actor))?.account.id, birchId);
+      assert.equal((await getRecentAccount(actor))?.sourcing, null);
+      // Newer automation and received replies must not replace the last human-reviewed account.
+      await db.query(
+        `insert into signal_desk.growth_events(id,account_id,kind,detail,created_at)
+         values ($1,$2,'analysed','Synthetic automation',now()+interval '1 day'),
+                ($3,$2,'reply','Synthetic incoming reply',now()+interval '2 days')`,
+        [`${elmId}:recent-auto`, elmId, `${elmId}:recent-reply`],
+      );
+      assert.equal((await getRecentAccount(actor))?.account.id, birchId);
+      assert.equal(await getRecentAccount(foreign), null);
+      await db.query("update signal_desk.growth_accounts set owner_id=$1 where id=$2", [
+        foreignUser,
+        birchId,
+      ]);
+      assert.equal((await getRecentAccount(actor))?.account.id, elmId);
+      assert.equal((await getRecentAccount(foreign))?.account.id, birchId);
+      await db.query("update signal_desk.growth_accounts set owner_id=$1 where id=$2", [
+        user,
+        birchId,
+      ]);
       const need = (buyerLabel: string, owner = actor) =>
         createBuyerNeed(owner, {
           buyerLabel,
