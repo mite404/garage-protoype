@@ -55,7 +55,8 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
     const dots = page.getByRole("button", { name: /Go to slide/ });
     await expect(dots).toHaveCount(4);
     await expect(dots.nth(0)).toHaveAttribute("aria-current", "true");
-    await expect(dots.nth(1)).toHaveAttribute("aria-current", "true", { timeout: 7_000 });
+    // The 5 s timer starts at hydration, which a cold first load can delay by several seconds.
+    await expect(dots.nth(1)).toHaveAttribute("aria-current", "true", { timeout: 15_000 });
     await dots.nth(3).click();
     await expect(page.getByText("Elba-Salem Fire Protection District, Illinois")).toBeVisible();
   });
