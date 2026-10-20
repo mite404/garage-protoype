@@ -43,8 +43,8 @@ function Connections({ items }: { items: Connection[] }) {
                   </span>
                 )}
               </th>
-              <td>{connectionStages[item.stage]}</td>
-              <td>
+              <td data-label="Stage">{connectionStages[item.stage]}</td>
+              <td data-label="Next action">
                 {item.nextAction}
                 {item.stage === "rejected" && (
                   <small>Buyer need stays open after this connection was rejected</small>

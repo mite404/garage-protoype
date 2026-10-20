@@ -32,10 +32,12 @@ function AccountRow({ account }: { account: Account }) {
   return (
     <tr>
       <AccountIdentity account={account} />
-      <td>{identityLabels[account.identityState] ?? account.identityState}</td>
-      <td>{contactLabels[`${account.contactable}`]}</td>
-      <td>{signalLabels[`${Boolean(account.buyingSignal)}`]}</td>
-      <td>{stageLabels[`${account.qualified}`]}</td>
+      <td data-label="Identity">
+        {identityLabels[account.identityState] ?? account.identityState}
+      </td>
+      <td data-label="Contact">{contactLabels[`${account.contactable}`]}</td>
+      <td data-label="Signal">{signalLabels[`${Boolean(account.buyingSignal)}`]}</td>
+      <td data-label="Stage">{stageLabels[`${account.qualified}`]}</td>
     </tr>
   );
 }

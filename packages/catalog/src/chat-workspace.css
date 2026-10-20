@@ -513,9 +513,25 @@
     right: 12px;
     bottom: 12px;
   }
+  /* Icon-only on phones so it covers less of the page; the title stays the accessible name. */
   .sale-chat-launcher {
     right: 12px;
     bottom: 12px;
+    width: 52px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0;
+  }
+  .sale-chat-launcher:has(span)::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary);
   }
   .chat-workspace {
     padding: 8px;

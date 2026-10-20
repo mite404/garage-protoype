@@ -59,11 +59,13 @@ function ActiveDeals({ connections }: { connections: Connection[] }) {
                       {item.vehicle?.title ?? "No listing yet"}
                     </span>
                   </th>
-                  <td className="whitespace-nowrap">{connectionStages[item.stage]}</td>
-                  <td className="whitespace-nowrap">
+                  <td data-label="Stage" className="whitespace-nowrap">
+                    {connectionStages[item.stage]}
+                  </td>
+                  <td data-label="Waiting on" className="whitespace-nowrap">
                     {waitingLabels[connectionWaitingOn(item.stage, item.proposals)]}
                   </td>
-                  <td>{item.nextAction}</td>
+                  <td data-label="Next action">{item.nextAction}</td>
                 </tr>
               ))}
             </tbody>
@@ -99,12 +101,12 @@ function Sourcing({ prospects }: { prospects: Prospect[] }) {
                 <th>
                   <Link href={`/desk/prospects/${prospect.id}`}>{prospect.name}</Link>
                 </th>
-                <td>
+                <td data-label="Why">
                   {prospect.identityState !== "confirmed"
                     ? "Identity needs review"
                     : "No reviewed contact"}
                 </td>
-                <td>
+                <td data-label="Next action">
                   {prospect.identityState !== "confirmed" ? "Confirm identity" : "Review contact"}
                 </td>
               </tr>
@@ -158,8 +160,8 @@ function BuyerAccounts({
                 <th scope="row">
                   <Link href={account.href}>{account.name}</Link>
                 </th>
-                <td>{account.detail}</td>
-                <td>{account.kind}</td>
+                <td data-label="Next step">{account.detail}</td>
+                <td data-label="Workspace">{account.kind}</td>
               </tr>
             ))}
           </tbody>

@@ -616,7 +616,7 @@
   gap: 12px;
 }
 .desk-split-actions button {
-  min-height: 40px;
+  min-height: 44px;
 }
 .desk-reply-banner {
   display: flex;
@@ -870,7 +870,7 @@
     margin-left: 10px;
   }
   .desk-tabs {
-    gap: 14px;
+    gap: 4px;
     margin-top: 14px;
     font-size: 13px;
   }
@@ -897,11 +897,63 @@
     font-size: 10px;
     text-align: center;
   }
-  .desk-account .sourcing-fit table {
-    min-width: 530px;
-  }
-  .desk-table {
+  /* Review tables with checkboxes keep columns; the rest stack so Next action stays visible. */
+  .desk-table:has(input) {
     min-width: 550px;
+  }
+  .desk-table:not(:has(input)) :is(tbody, tr, th, td) {
+    display: block;
+  }
+  .desk-table:not(:has(input)) thead {
+    display: none;
+  }
+  .desk-table:not(:has(input)) tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .desk-table:not(:has(input)) :is(th, td) {
+    padding: 2px 0;
+    border: 0;
+    white-space: normal;
+  }
+  .desk-table td[data-label] {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 8px;
+  }
+  .desk-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted-foreground);
+  }
+  .desk-table td[data-label] > * {
+    grid-column: 2;
+  }
+  .desk-tabs {
+    justify-content: space-between;
+  }
+  .desk-tabs > * {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .desk-back {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  /* Stays a list item so the disclosure marker survives. */
+  .desk-shell summary {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+  .desk-shell label:has(> input:is([type="checkbox"], [type="radio"])) {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+  }
+  .desk-body:has(.sale-chat-launcher) {
+    padding-bottom: 88px;
   }
   .desk-activity li {
     display: grid;

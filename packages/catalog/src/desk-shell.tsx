@@ -163,7 +163,7 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
           <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-card py-2 md:border-b md:bg-background pr-20 pl-3">
             <SidebarTrigger className="max-md:hidden" />
             <Separator orientation="vertical" className="h-4 max-md:hidden" />
-            <a href="/desk" className="desk-brand md:hidden">
+            <a href="/desk" className="desk-brand inline-flex min-h-11 items-center md:hidden">
               Signal Desk
             </a>
             <p className="basis-full text-xs text-muted-foreground md:basis-auto">
