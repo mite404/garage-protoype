@@ -73,9 +73,13 @@ session; a still-unexpired access token cannot pass the subsequent database sess
 ## Seed the optional read-only example
 
 Run `db/demo.sql` with the operator connection only in a disposable or explicitly approved prototype
-database. It inserts a synthetic vehicle and one deliberately approved, shareable year fact.
-The public vehicle URL is `/vehicles/demo-pumper`. The seed creates no identity, buyer conversation,
-photo evidence, or inference job. Without the seed, that record remains unavailable.
+database. It inserts the synthetic `demo-pumper` with one approved year fact, plus three model
+reference vehicles whose facts come from the frozen labels for the public documents in
+`fixtures/seller-documents`, citing document and page. They describe models, not vehicles for sale.
+Public URLs are `/vehicles/demo-pumper`, `demo-hme-wildland`, `demo-army-2500l` and
+`demo-bme-sierra`.
+The seed creates no identity, buyer conversation, photo evidence, or inference job. Without the
+seed, those records remain unavailable.
 
 ## Verify live authentication separately
 
