@@ -1,4 +1,20 @@
 import type { ReactNode } from "react";
+import { Separator } from "@signal-desk/ui/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@signal-desk/ui/components/ui/sidebar";
+import { TooltipProvider } from "@signal-desk/ui/components/ui/tooltip";
 
 const icons = {
   queue: "M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1",
@@ -63,50 +79,107 @@ export const deskNavigation = [
   { href: "/desk/growth", label: "Outcomes", icon: "outcomes", matches: /^\/desk\/growth/ },
 ] as const;
 
-/** Specialist navigation with one main landmark; municipal workspaces use their own shell. */
+const secondaryNavigation = [
+  { href: "/desk/tokens", label: "MCP tokens", icon: "lock" },
+  { href: "/vehicles/demo-pumper", label: "Public record", icon: "source" },
+] as const;
+
+/** Specialist navigation on shadcn sidebar-07 with one main landmark; municipal workspaces use
+ * their own shell. Collapses to icons on desktop and to a sheet on mobile.
+ */
 export function DeskShell({ children, pathname }: { children: ReactNode; pathname: string }) {
   return (
-    <div className="desk-shell">
-      <a className="dispatch-skip" href="#main-content">
-        Skip to content
-      </a>
-      <header className="desk-topbar">
-        <a href="/desk" className="desk-brand">
-          Signal Desk
+    <TooltipProvider>
+      <SidebarProvider className="desk-shell">
+        <a className="dispatch-skip" href="#main-content">
+          Skip to content
         </a>
-        <p>Independent prototype · Synthetic or permissioned data · Message sending disabled</p>
-      </header>
-      <div className="desk-layout">
-        <aside className="desk-nav">
-          <p>Workspace</p>
-          <nav aria-label="Workspace">
-            {deskNavigation.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                aria-current={item.matches.test(pathname) ? "page" : undefined}
-              >
-                <DeskIcon name={item.icon} />
-                {item.label}
-              </a>
-            ))}
-          </nav>
-          <div className="desk-secondary-nav">
-            <a href="/desk/tokens">MCP tokens</a>
-            <a href="/vehicles/demo-pumper">Public record</a>
-          </div>
-        </aside>
-        <div className="desk-body">
+        <Sidebar collapsible="icon">
+          <SidebarHeader>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="lg"
+                  render={<a href="/desk" aria-label="Signal Desk home" />}
+                >
+                  <span className="desk-brand-mark" aria-hidden="true">
+                    S
+                  </span>
+                  <span className="desk-brand">Signal Desk</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+              <nav aria-label="Workspace">
+                <SidebarMenu>
+                  {deskNavigation.map((item) => {
+                    const current = item.matches.test(pathname);
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          isActive={current}
+                          tooltip={item.label}
+                          render={
+                            <a
+                              href={item.href}
+                              aria-label={item.label}
+                              aria-current={current ? "page" : undefined}
+                            />
+                          }
+                        >
+                          <DeskIcon name={item.icon} />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </nav>
+            </SidebarGroup>
+            <SidebarGroup className="mt-auto">
+              <SidebarGroupLabel>Tools</SidebarGroupLabel>
+              <SidebarMenu>
+                {secondaryNavigation.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      size="sm"
+                      tooltip={item.label}
+                      render={<a href={item.href} aria-label={item.label} />}
+                    >
+                      <DeskIcon name={item.icon} />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarRail />
+        </Sidebar>
+        <SidebarInset className="desk-body">
+          <header className="sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background py-2 pr-20 pl-3">
+            <SidebarTrigger />
+            <Separator orientation="vertical" className="h-4" />
+            <a href="/desk" className="desk-brand md:hidden">
+              Signal Desk
+            </a>
+            <p className="basis-full text-xs text-muted-foreground md:basis-auto">
+              Independent prototype · Synthetic or permissioned data · Message sending disabled
+            </p>
+          </header>
           <main id="main-content" tabIndex={-1}>
             {children}
           </main>
-          <footer className="desk-footer">
+          <footer className="px-6 py-5 text-[11px] text-muted-foreground">
             Independent prototype. Not affiliated with Garage. No messages, payments or commercial
             commitments.
           </footer>
-        </div>
-      </div>
-    </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 
