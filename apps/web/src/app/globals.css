@@ -11,6 +11,10 @@
   right: 20px;
   z-index: 50;
 }
+/* On the desk the account button scrolls away with the header it sits in. */
+body:has(.desk-shell) .account-control {
+  position: absolute;
+}
 .account-avatar {
   display: grid;
   place-items: center;

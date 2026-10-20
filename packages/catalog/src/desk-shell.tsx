@@ -160,9 +160,9 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
           <SidebarRail />
         </Sidebar>
         <SidebarInset className="desk-body">
-          <header className="sticky top-0 z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background py-2 pr-20 pl-3">
-            <SidebarTrigger />
-            <Separator orientation="vertical" className="h-4" />
+          <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background py-2 pr-20 pl-3">
+            <SidebarTrigger className="max-md:hidden" />
+            <Separator orientation="vertical" className="h-4 max-md:hidden" />
             <a href="/desk" className="desk-brand md:hidden">
               Signal Desk
             </a>
@@ -170,6 +170,19 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
               Independent prototype · Synthetic or permissioned data · Message sending disabled
             </p>
           </header>
+          <nav aria-label="Workspace" className="grid grid-cols-4 gap-1 border-b p-2 md:hidden">
+            {deskNavigation.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                aria-current={item.matches.test(pathname) ? "page" : undefined}
+                className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-[11px] font-medium aria-[current=page]:bg-primary/8 aria-[current=page]:text-primary"
+              >
+                <DeskIcon name={item.icon} />
+                {item.label}
+              </a>
+            ))}
+          </nav>
           <main id="main-content" tabIndex={-1}>
             {children}
           </main>
