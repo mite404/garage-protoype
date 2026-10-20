@@ -104,6 +104,15 @@ const stageSteps: Record<string, number> = {
 /** Milestone a stage has reached, or null once the connection closed without this sale. */
 export const connectionStep = (stage: string): number | null => stageSteps[stage] ?? null;
 
+/** Reads a blocker duration at a useful grain: minutes, then hours, then days past two days.
+ * Null means no blocker has resolved yet. */
+export function blockerDuration(hours: number | null) {
+  if (hours === null) return "None";
+  if (hours < 1 / 60) return "< 1 min";
+  if (hours < 1) return `${Math.round(hours * 60)} min`;
+  return hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} d`;
+}
+
 /** Whether a connection is still in progress toward a sale. */
 export const connectionOpen = (stage: string) =>
   connectionStep(stage) !== null && stage !== "sale_closed";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  blockerDuration,
   compareConnections,
   connectionOpen,
   outreachStep,
@@ -92,5 +93,17 @@ test("a qualified prospect with a listing is a seller; legacy qualification stay
     "Draft listing",
     "Qualified",
     "Not qualified",
+  ]);
+});
+
+test("blocker durations switch from minutes to hours to days at their boundaries", () => {
+  assert.deepEqual([null, 0.001, 0.5, 1, 47.9, 48, 120].map(blockerDuration), [
+    "None",
+    "< 1 min",
+    "30 min",
+    "1.0 h",
+    "47.9 h",
+    "2.0 d",
+    "5.0 d",
   ]);
 });

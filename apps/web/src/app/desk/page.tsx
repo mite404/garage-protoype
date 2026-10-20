@@ -9,6 +9,7 @@ import { getGrowthOperations, getRecentAccount } from "@/server/growth-views";
 import { RecentAccount } from "./recent-account";
 import { ResolveChart } from "./resolve-chart";
 import {
+  blockerDuration,
   compareConnections,
   connectionOpen,
   connectionStages,
@@ -37,12 +38,6 @@ const blockerLabels: Record<string, string> = {
   authority: "Sale authority",
   contact_permission: "Contact permission",
 };
-
-// Hours under two days read as hours, longer ones as days; null means nothing resolved yet.
-function duration(hours: number | null) {
-  if (hours === null) return "None";
-  return hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} d`;
-}
 
 function Kpi({ label, value, pill, note }: Record<"label" | "value" | "pill" | "note", string>) {
   return (
@@ -80,13 +75,12 @@ function ResolveFlow({
           Average time from a blocker opening to reviewed evidence resolving it
         </p>
       </CardHeader>
-      <CardContent className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <CardContent className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {resolved.length ? (
           <ResolveChart
             data={resolved.map((kind) => ({
               kind: blockerLabels[kind.kind] ?? kind.kind,
               hours: kind.averageHours!,
-              label: duration(kind.averageHours!),
             }))}
           />
         ) : (
@@ -98,7 +92,7 @@ function ResolveFlow({
         <div className="grid content-start gap-4">
           <p>
             <span className="font-display text-5xl font-semibold">
-              {duration(blockers.medianHours)}
+              {blockerDuration(blockers.medianHours)}
             </span>{" "}
             <span className="text-xl text-muted-foreground">median</span>
           </p>
@@ -374,7 +368,7 @@ export default async function Desk() {
         />
         <Kpi
           label="Median time to resolve"
-          value={duration(blockers.medianHours)}
+          value={blockerDuration(blockers.medianHours)}
           pill={`n = ${resolvedBlockers}`}
           note="Blocker opened to reviewed resolution"
         />
