@@ -123,6 +123,12 @@ h2 {
   outline-offset: 3px;
 }
 @layer base {
+  /* shadcn primitives expect unqualified borders to use the theme border, not currentColor. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
   input,
   select,
   textarea {

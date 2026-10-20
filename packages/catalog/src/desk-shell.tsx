@@ -160,7 +160,7 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
           <SidebarRail />
         </Sidebar>
         <SidebarInset className="desk-body">
-          <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background py-2 pr-20 pl-3">
+          <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 bg-card py-2 md:border-b md:bg-background pr-20 pl-3">
             <SidebarTrigger className="max-md:hidden" />
             <Separator orientation="vertical" className="h-4 max-md:hidden" />
             <a href="/desk" className="desk-brand md:hidden">
@@ -170,7 +170,10 @@ export function DeskShell({ children, pathname }: { children: ReactNode; pathnam
               Independent prototype · Synthetic or permissioned data · Message sending disabled
             </p>
           </header>
-          <nav aria-label="Workspace" className="grid grid-cols-4 gap-1 border-b p-2 md:hidden">
+          <nav
+            aria-label="Workspace"
+            className="grid grid-cols-4 gap-1 border-b bg-card p-2 md:hidden"
+          >
             {deskNavigation.map((item) => (
               <a
                 key={item.href}
