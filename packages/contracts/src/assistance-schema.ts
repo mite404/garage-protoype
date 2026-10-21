@@ -100,6 +100,8 @@ export const inlineCard = z.discriminatedUnion("kind", [
     inquiryId: z.string(),
     amountMinor: z.number(),
     currency: z.literal("USD"),
+    // Current deal terms for comparison; null when the deal has none or the viewer is the buyer.
+    termsAmountMinor: z.number().nullable(),
     timingText: z.string(),
     conditions: z.array(z.string()),
     unansweredQuestions: z.array(z.string()),

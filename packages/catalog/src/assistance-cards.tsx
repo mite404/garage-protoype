@@ -6,12 +6,24 @@ import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse, Prose } from "./prose";
 
+// Handoff status drives the badge copy and tone.
+const handoffStates = {
+  recorded_not_accepted: ["Offer recorded · Not accepted", "state-needs_review"],
+} as const;
+
 const reviewReasons = {
   low_confidence: "Jev was not confident about a single field.",
   multiple: "The question asks about more than one fact.",
   judgment: "The question asks for a judgment, not a recorded fact.",
   other: "No evidence field fits this question.",
 };
+
+// "$6,500 below current terms of $171,500", so the offer is read against the deal it changes.
+function termsComparison(amount: number, terms: number) {
+  const gap = amount - terms;
+  if (gap === 0) return `Matches current terms of ${formatUsd(terms)}`;
+  return `${formatUsd(Math.abs(gap))} ${gap < 0 ? "below" : "above"} current terms of ${formatUsd(terms)}`;
+}
 
 function Suggestion({
   suggestion,
@@ -50,10 +62,20 @@ function Suggestion({
 function OfferCard({ card }: { card: Extract<InlineCard, { kind: "handoff" }> }) {
   return (
     <Card className="assistance-card" data-card="handoff">
-      <Badge variant="outline" className="state state-needs_review border-transparent">
-        Offer recorded · Not accepted
+      <Badge
+        variant="outline"
+        className={`state border-transparent ${handoffStates[card.status][1]}`}
+      >
+        {handoffStates[card.status][0]}
       </Badge>
-      <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
+      <div>
+        <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
+        {card.termsAmountMinor !== null && (
+          <p className="reading-label">
+            {termsComparison(card.amountMinor, card.termsAmountMinor)}
+          </p>
+        )}
+      </div>
       <div>
         <p className="reading-label">Stated timing</p>
         <LiteralProse text={card.timingText} />

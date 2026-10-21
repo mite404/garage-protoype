@@ -32,6 +32,7 @@ const handoff = {
   inquiryId: "synthetic-offer-1",
   amountMinor: 16500000,
   currency: "USD",
+  termsAmountMinor: 17150000,
   timingText: "Delivery before December",
   conditions: ["Review the pump-test report"],
   unansweredQuestions: ["Was the odometer photo legible?"],
@@ -164,10 +165,12 @@ export const OfferNotAccepted: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Offer recorded · Not accepted")).toBeVisible();
     await expect(canvas.getByText("$165,000")).toBeVisible();
+    await expect(canvas.getByText("$6,500 below current terms of $171,500")).toBeVisible();
   },
 };
 export const EmptyConditions: Story = {
-  args: { card: { ...handoff, conditions: [], unansweredQuestions: [] } },
+  // Buyer view: no deal-terms comparison.
+  args: { card: { ...handoff, termsAmountMinor: null, conditions: [], unansweredQuestions: [] } },
 };
 export const UnsentDraft: Story = { args: { card: draft } };
 export const StaleDraft: Story = { args: { card: { ...draft, reviewState: "stale" } } };

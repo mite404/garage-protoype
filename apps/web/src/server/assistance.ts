@@ -18,6 +18,7 @@ import {
   inquiryRouting,
   inquirySuggestions,
   opportunities,
+  opportunityDealTerms,
   opportunityMembers,
   publicFacts,
   sources,
@@ -179,6 +180,15 @@ async function ensureBlocker(
   );
 }
 
+// Current proposed deal terms, the reference an incoming offer is read against.
+async function dealTermsAmount(db: PoolClient, opportunityId: string) {
+  const [terms] = await orm(db)
+    .select({ amountCents: opportunityDealTerms.amountCents })
+    .from(opportunityDealTerms)
+    .where(eq(opportunityDealTerms.opportunityId, opportunityId));
+  return terms?.amountCents ?? null;
+}
+
 async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: string, id: string) {
   const result = await orm(db)
     .select({ id: inquiryTable.id, input: inquiryTable.input })
@@ -234,6 +244,7 @@ async function readInquiry(db: PoolClient, opportunityId: string, vehicleId: str
       inquiryId: id,
       amountMinor: inquiry.input.amountMinor,
       currency: inquiry.input.currency,
+      termsAmountMinor: await dealTermsAmount(db, opportunityId),
       timingText: inquiry.input.timingText,
       conditions: inquiry.input.conditions,
       unansweredQuestions: inquiry.input.unansweredQuestions,
@@ -398,10 +409,13 @@ function buyerInquiry(
   inquiry: Awaited<ReturnType<typeof readInquiry>>,
 ): Omit<Awaited<ReturnType<typeof readInquiry>>, "suggestion"> {
   const { suggestion: _suggestion, ...visible } = inquiry;
+  // Buyers see their own offer, not the specialist's comparison against current deal terms.
   const card =
     inquiry.card.kind === "review"
       ? (({ suggestion: _cardSuggestion, ...review }) => review)(inquiry.card)
-      : inquiry.card;
+      : inquiry.card.kind === "handoff"
+        ? { ...inquiry.card, termsAmountMinor: null }
+        : inquiry.card;
   return {
     ...visible,
     history: [],
