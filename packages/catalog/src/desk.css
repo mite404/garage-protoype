@@ -591,7 +591,15 @@
 }
 .desk-proposals {
   display: grid;
+  /* A wide table scrolls in its wrapper instead of widening the card. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  container-type: inline-size;
+}
+@container (width < 480px) {
+  .desk-proposals .desk-table :is(th, td) {
+    padding-inline: 6px;
+  }
 }
 .desk-effect {
   display: flex;
@@ -611,11 +619,12 @@
   margin-top: 2px;
 }
 .desk-split-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .desk-split-actions button {
+  flex: 1 1 auto;
   min-height: 44px;
 }
 .desk-reply-banner {
@@ -696,6 +705,8 @@
   border-collapse: collapse;
   font-size: 13px;
   text-align: left;
+  /* Cards wrap anywhere; table headers and values stay whole words. */
+  overflow-wrap: normal;
 }
 .desk-table thead {
   background: var(--muted);
