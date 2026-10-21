@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   evaluateFit,
+  isStale,
   openQuestions,
   requirementLabel,
   suggestDecision,
@@ -11,7 +12,7 @@ import {
   type Need,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
-import { Badge } from "@signal-desk/ui/components/ui/badge";
+import { formatUsd } from "@signal-desk/contracts/money";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse } from "./prose";
@@ -22,11 +23,6 @@ const date = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
   timeZone: "UTC",
-});
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
 });
 const fitStates: Record<FitStatus, [label: string, tone: string]> = {
   met: ["Met", "state-reviewed"],
@@ -67,7 +63,7 @@ function factValue(fact: Fact) {
   if (fact.field === "saleStatus") return saleStatuses[fact.value];
   if (fact.field === "heightIn") return `${fact.value} in`;
   if (fact.field === "authority") return fact.value;
-  return usd.format(fact.value / 100);
+  return formatUsd(fact.value);
 }
 
 // Names what accepting one proposal would newly fail, so reviewers see the consequence first.
@@ -93,9 +89,7 @@ export function SourceChangeCard({
 }) {
   return (
     <Card className="assistance-card sourcing-card" data-card="source-change">
-      <Badge variant="outline" className="state state-needs_review border-transparent">
-        Research trigger only
-      </Badge>
+      <span className="state state-needs_review">Research trigger only</span>
       <blockquote className="card-citation">
         <p className="reading-label">
           {trigger.sourceLabel} · {date.format(trigger.observedAt)}
@@ -111,6 +105,14 @@ export function SourceChangeCard({
     </Card>
   );
 }
+
+// Fit rows name the requirement only; a measured row states its distance from the limit instead.
+const fitNames = (need: Need): Record<FitRow["requirement"], string> => ({
+  available: "Available for sale",
+  height: "Height",
+  budget: need.budgetBasis === "total" ? "All-in cost" : "Purchase price",
+  authority: "Seller authority",
+});
 
 /** Hard constraints against reviewed evidence; unknowns stay visible and never pass. */
 export function FitTable({ need, rows }: { need: Need; rows: FitRow[] }) {
@@ -135,12 +137,21 @@ export function FitTable({ need, rows }: { need: Need; rows: FitRow[] }) {
                 <th scope="row">
                   <span className="desk-requirement">
                     <DeskIcon name={row.requirement} />
-                    {requirementLabel(need, row.requirement)}
+                    {fitNames(need)[row.requirement]}
                   </span>
                 </th>
                 <td>{row.evidence}</td>
                 <td>
-                  <span className={`state ${tone}`}>{label}</span>
+                  <span className={`state ${tone}`}>
+                    {row.margin ? (
+                      <>
+                        <span className="sr-only">{label}: </span>
+                        {row.margin}
+                      </>
+                    ) : (
+                      label
+                    )}
+                  </span>
                 </td>
               </tr>
             );
@@ -467,6 +478,8 @@ export function ReplyReview({
   );
 }
 
+// A recorded connection decision with its date and need revision, flagged when stale; otherwise
+// the rule suggestion.
 function Recorded({
   decision,
   suggested,
@@ -495,6 +508,34 @@ function Recorded({
         <strong>{capitalize(decision.decision)}</strong>: {decision.reason}
       </p>
     </div>
+  );
+}
+
+/** The chat summary of the connection decision; a decision made against an older need or
+ * evidence is flagged and asks for a new one. */
+export function DecisionChatCard({
+  account,
+  rows,
+  onOpen,
+}: {
+  account: Pick<SourcingAccount, "decision" | "need" | "facts">;
+  rows: FitRow[];
+  onOpen: () => void;
+}) {
+  const stale = Boolean(
+    account.decision && isStale(account.decision.basis, account.need, account.facts),
+  );
+  const [buttonClass, action] = stale
+    ? ["button", "Decide again"]
+    : ["quiet-button", "Open decision"];
+  return (
+    <section className="desk-card desk-chat-card">
+      <h3>Connection decision</h3>
+      <Recorded decision={account.decision} suggested={suggestDecision(rows)} stale={stale} />
+      <button className={buttonClass} onClick={onOpen}>
+        {action}
+      </button>
+    </section>
   );
 }
 

@@ -63,6 +63,9 @@ test(
         "insert into signal_desk.opportunity_members values ('assist-deal',$1),('assist-other',$1)",
         [specialist],
       );
+      await db.query(
+        "insert into signal_desk.opportunity_deal_terms values ('assist-deal',17150000,'USD','proposed','{Synthetic terms}')",
+      );
       const actor = await resolveActor({ userId: specialist, sessionId: sessions[0]! });
       const buyerActor = await resolveActor({ userId: buyer, sessionId: sessions[1]! });
       const outsider = await resolveActor({ userId: other, sessionId: sessions[2]! });
@@ -158,7 +161,15 @@ test(
         assert.deepEqual(offer.card.conditions, ["Review pump-test report"]);
         assert.equal(offer.card.timingText, "Delivery before December");
         assert.equal(offer.card.status, "recorded_not_accepted");
+        assert.equal(offer.card.termsAmountMinor, null);
       }
+      const specialistOffer = (await getAssistance(actor, "assist-deal")).inquiries.find(
+        (q) => q.id === offer.id,
+      )?.card;
+      assert.equal(
+        specialistOffer?.kind === "handoff" && specialistOffer.termsAmountMinor,
+        17150000,
+      );
       await t.test(
         "routing correction keeps original text and cannot fabricate an offer",
         async () => {

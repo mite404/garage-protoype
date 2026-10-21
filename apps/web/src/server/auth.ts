@@ -1,6 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import { authenticateToken, resolveActor } from "./access";
@@ -45,10 +46,11 @@ export async function authClient() {
 }
 
 /** Verifies token claims and current Supabase identity, then reloads application access.
- * Never accepts a user ID, role, or metadata supplied by a caller.
+ * Never accepts a user ID, role, or metadata supplied by a caller. Memoized per server render,
+ * so the root layout and its page share one check instead of repeating the auth round trips.
  * @throws {AppError} If no valid invited session exists.
  */
-export async function requireActor(client?: PoolClient) {
+export const requireActor = cache(async (client?: PoolClient) => {
   const jar = await cookies();
   if (!jar.getAll().some((cookie) => cookie.name.startsWith("sb-")))
     throw new AppError(401, "UNAUTHENTICATED", "Sign in with an invited account.");
@@ -72,7 +74,7 @@ export async function requireActor(client?: PoolClient) {
   )
     throw new AppError(401, "UNAUTHENTICATED", "Session has expired or is invalid.");
   return resolveActor({ userId: user.data.user.id, sessionId: claims.data.session_id }, client);
-}
+});
 
 /** Authenticates explicit bearer credentials without cookie fallback; browser writes retain Origin checks.
  * @throws {AppError} For invalid credentials or cross-site cookie mutations.

@@ -450,7 +450,44 @@
   z-index: 50;
   width: min(440px, calc(100vw - 24px));
   height: min(720px, calc(100dvh - 24px));
+  /* Bounds for a resized window, whose size is set inline. */
+  min-width: min(320px, calc(100vw - 24px));
+  min-height: min(360px, calc(100dvh - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
   font: 14px/1.5 var(--font-sans);
+}
+.chat-resize {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.chat-resize::before {
+  content: "";
+  position: absolute;
+  inset: 5px auto auto 5px;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid var(--muted-foreground);
+  border-left: 2px solid var(--muted-foreground);
+  border-top-left-radius: 2px;
+  opacity: 0.5;
+}
+.chat-resize:hover::before,
+.chat-resize:focus-visible::before {
+  opacity: 1;
+}
+/* The window's rounded corner clips an outside ring. */
+.chat-resize:focus-visible {
+  outline-offset: -2px;
+  border-top-left-radius: 10px;
 }
 .sale-chat-launcher {
   position: fixed;
@@ -602,7 +639,8 @@
   border-radius: 999px;
   background: var(--primary);
   transform-origin: bottom;
-  animation: turn-progress-wave 900ms ease-in-out infinite;
+  animation: turn-progress-wave 900ms infinite;
+  animation-timing-function: var(--ease-in-out);
 }
 .turn-progress-glyph span:nth-child(2) {
   animation-delay: 150ms;
@@ -621,10 +659,88 @@
     opacity: 1;
   }
 }
+/* A fire-truck roof beacon seen from the front: the lamp dome fills the top half and its beam
+   sweeps the lower half from left to right. The beam leaves the lamp as a 20° wedge along the
+   left horizon, widens until it fills the lower half while facing the viewer, holds there
+   briefly, then narrows into the right horizon and goes dark behind the lamp. Angles run
+   clockwise from up, so 90deg is right, 180deg down and 270deg left; the wedge spans
+   --siren-from to --siren-from + --siren-spread. */
+@property --siren-from {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 90deg;
+}
+@property --siren-spread {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 180deg;
+}
+.turn-progress-siren {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background: conic-gradient(
+      from var(--siren-from) at 50% 0%,
+      var(--destructive) var(--siren-spread),
+      transparent 0
+    )
+    bottom / 100% 50% no-repeat;
+  animation: turn-progress-siren 1200ms linear infinite;
+}
+/* The dome on its base, centred over the beam's origin. */
+.turn-progress-siren::before,
+.turn-progress-siren::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+}
+.turn-progress-siren::before {
+  top: 1px;
+  width: 6px;
+  height: 4px;
+  border-radius: 3px 3px 0 0;
+  background: var(--destructive);
+}
+.turn-progress-siren::after {
+  top: 5px;
+  width: 10px;
+  height: 1px;
+  background: var(--foreground);
+}
+@keyframes turn-progress-siren {
+  0%,
+  10% {
+    --siren-from: 270deg;
+    --siren-spread: 0deg;
+  }
+  10.01% {
+    --siren-from: 250deg;
+    --siren-spread: 20deg;
+  }
+  48%,
+  52% {
+    --siren-from: 90deg;
+    --siren-spread: 180deg;
+  }
+  90% {
+    --siren-from: 90deg;
+    --siren-spread: 20deg;
+  }
+  90.01%,
+  100% {
+    --siren-from: 90deg;
+    --siren-spread: 0deg;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .turn-progress-glyph span {
     animation: none;
     transform: scaleY(0.7);
+  }
+  .turn-progress-siren {
+    animation: none;
   }
 }
 .chat-bubble .turn-progress {

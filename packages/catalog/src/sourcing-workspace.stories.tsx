@@ -1,13 +1,20 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, fn, userEvent, within } from "storybook/test";
 import { useState } from "react";
 import {
   acceptSelected,
   decisionBasis,
   evaluateFit,
+  type Fact,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
-import { DecisionPacket, FitTable, ReplyReview, SourceChangeCard } from "./sourcing-cards";
+import {
+  DecisionChatCard,
+  DecisionPacket,
+  FitTable,
+  ReplyReview,
+  SourceChangeCard,
+} from "./sourcing-cards";
 import SourcingWorkspace from "./sourcing-workspace";
 import { DeskShell, type AccountTab } from "./desk-shell";
 
@@ -170,7 +177,7 @@ export const ReplyRejectsPairing: Story = {
     ).not.toBeChecked();
     await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
     const fit = within(canvas.getByRole("table"));
-    await expect(fit.getByText("Does not meet")).toBeVisible();
+    await expect(fit.getByText("1 in over")).toBeVisible();
     await expect(fit.getByText("121 in")).toBeVisible();
     await expect(canvas.getByRole("radio", { name: "Reject" })).toBeChecked();
     await userEvent.type(canvas.getByLabelText("Reason"), "Reviewed height 121 in exceeds 120 in.");
@@ -238,5 +245,75 @@ export const ConflictAndStale: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
     await expect(canvas.getByText(/Stale: the need or reviewed evidence changed/)).toBeVisible();
     await expect(canvas.getByRole("radio", { name: "Investigate" })).toBeChecked();
+  },
+};
+
+const measured: Fact[] = [
+  { field: "heightIn", value: 118 },
+  { field: "priceCents", value: 15_000_000 },
+  { field: "transportCents", value: 2_500_000 },
+  { field: "feesCents", value: 320_000 },
+].map((answer) => ({
+  ...(answer as Pick<Fact, "field" | "value">),
+  id: `fact-${answer.field}`,
+  basis: "source_claim",
+  sourceRef: "synthetic-spec-sheet",
+  status: "accepted",
+  reviewedAt,
+})) as Fact[];
+
+export const FitMargins: Story = {
+  args: { data: { ...cedarValley, facts: measured } },
+  render: ({ data }) => (
+    <div className="w-[min(90vw,420px)] p-4">
+      <FitTable need={data.need} rows={evaluateFit(data.need, data.facts)} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const fit = within(within(canvasElement).getByRole("table"));
+    // The margin replaces the status label; screen readers still hear the status first.
+    await expect(fit.getByRole("row", { name: /Height 118 in Met: 2 in under/ })).toBeVisible();
+    await expect(
+      fit.getByRole("row", { name: /\$178,200 all-in Does not meet: \$3,200 over/ }),
+    ).toBeVisible();
+  },
+};
+
+const recorded: SourcingAccount["decision"] = {
+  decision: "investigate",
+  reason: "Waiting for a measured height.",
+  decidedAt: reviewedAt,
+  basis: { needRevision: 1, factIds: [] },
+};
+
+const onOpen = fn();
+
+export const ChatDecision: Story = {
+  args: { data: { ...cedarValley, decision: recorded } },
+  render: ({ data }) => {
+    const rows = evaluateFit(data.need, data.facts);
+    const revised = { ...data, need: { ...data.need, revision: 2 } };
+    return (
+      <div className="grid w-[min(90vw,420px)] gap-4 p-4">
+        <div data-testid="current">
+          <DecisionChatCard account={data} rows={rows} onOpen={onOpen} />
+        </div>
+        <div data-testid="stale">
+          <DecisionChatCard account={revised} rows={rows} onOpen={() => {}} />
+        </div>
+      </div>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const current = within(canvas.getByTestId("current"));
+    const stale = within(canvas.getByTestId("stale"));
+    await expect(current.getByText(/Recorded Oct 19, 2026 against need revision 1/)).toBeVisible();
+    await expect(current.queryByText(/Stale:/)).toBeNull();
+    await userEvent.click(current.getByRole("button", { name: "Open decision" }));
+    await expect(onOpen).toHaveBeenCalledOnce();
+    // A need revised after the decision must not read as current.
+    await expect(stale.getByText(/Stale: the need or reviewed evidence changed/)).toBeVisible();
+    await expect(stale.getByRole("button", { name: "Decide again" })).toBeVisible();
   },
 };

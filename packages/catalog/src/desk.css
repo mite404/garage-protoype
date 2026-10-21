@@ -273,47 +273,6 @@
 .desk-account .sourcing-fit thead {
   background: var(--muted);
 }
-.desk-account .state {
-  border-radius: 5px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.desk-account .state-needs_review {
-  background: color-mix(in srgb, var(--warning) 12%, var(--card));
-  color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--card));
-}
-.desk-account .state-reviewed {
-  background: color-mix(in srgb, var(--success) 12%, var(--card));
-  color: var(--success);
-}
-.desk-account .state-conflict {
-  background: color-mix(in srgb, var(--destructive) 12%, var(--card));
-  color: var(--destructive);
-}
-.desk-account .sourcing-fit .state::before {
-  content: "?";
-  display: inline-grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  color: #fff;
-  background-color: #d58a1c;
-}
-.desk-account .sourcing-fit .state-reviewed::before {
-  content: "✓";
-  background: #226343;
-}
-.desk-account .sourcing-fit .state-conflict::before {
-  content: "!";
-  background: #b03923;
-}
 .desk-account .card-caveat,
 .desk-note {
   font-size: 12px;
@@ -591,7 +550,15 @@
 }
 .desk-proposals {
   display: grid;
+  /* A wide table scrolls in its wrapper instead of widening the card. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  container-type: inline-size;
+}
+@container (width < 480px) {
+  .desk-proposals .desk-table :is(th, td) {
+    padding-inline: 6px;
+  }
 }
 .desk-effect {
   display: flex;
@@ -611,11 +578,12 @@
   margin-top: 2px;
 }
 .desk-split-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .desk-split-actions button {
+  flex: 1 1 auto;
   min-height: 44px;
 }
 .desk-reply-banner {
@@ -696,6 +664,8 @@
   border-collapse: collapse;
   font-size: 13px;
   text-align: left;
+  /* Cards wrap anywhere; table headers and values stay whole words. */
+  overflow-wrap: normal;
 }
 .desk-table thead {
   background: var(--muted);
@@ -1014,11 +984,14 @@
   }
 }
 .sale-chat .chat-message:not(.chat-message-user) .chat-bubble {
+  /* Cards share one width; only the text bubble hugs its words. */
+  align-self: stretch;
   max-width: 100%;
   padding: 0;
   background: none;
 }
 .sale-chat .chat-message:not(.chat-message-user) .chat-bubble > .quiet-prose {
+  width: fit-content;
   padding: 12px 14px;
   border-radius: 0;
   background: var(--chat-assistant);

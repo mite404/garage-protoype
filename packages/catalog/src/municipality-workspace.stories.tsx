@@ -59,6 +59,7 @@ const workspace: Workspace = {
       title: "2008 Freightliner Tanker",
       publishedAt: new Date("2025-02-28T00:00:00Z"),
     },
+    { id: "rescue-unlisted", title: "2011 Spartan Rescue", publishedAt: null },
   ],
 };
 
@@ -150,6 +151,11 @@ export const Default: Story = {
     await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
     await expect(canvas.getByText(/Contacted San Antonio Fire Department/)).toBeVisible();
     await expect(canvas.getByText("$84,000")).toBeVisible();
+    // Bought and sold vehicles share one card; only a published listing links to its record.
+    const selling = within(canvas.getByRole("region", { name: "Selling" }));
+    await expect(selling.getByText("Listed Feb 28, 2025")).toBeVisible();
+    await expect(selling.getByText("Not published")).toBeVisible();
+    await expect(selling.getAllByRole("link", { name: "Public record →" })).toHaveLength(1);
     await expect(
       within(canvas.getByRole("region", { name: "Active acquisition" })).getByRole("img", {
         name: "Synthetic pumper illustration, not vehicle evidence",

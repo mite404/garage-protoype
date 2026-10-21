@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
-import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
@@ -52,9 +51,10 @@ export const ActionsAndStates: Story = {
       <Button variant="outline">Open source</Button>
       <Button variant="ghost">Cancel</Button>
       <Button disabled>Unavailable</Button>
-      <Badge>Ready</Badge>
-      <Badge variant="secondary">Needs review</Badge>
-      <Badge variant="destructive">Conflict</Badge>
+      <span className="state state-reviewed">Reviewed</span>
+      <span className="state state-needs_review">Needs review</span>
+      <span className="state state-conflict">Conflict</span>
+      <span className="state">Unknown</span>
     </div>
   ),
   play: async ({ canvasElement }) => {

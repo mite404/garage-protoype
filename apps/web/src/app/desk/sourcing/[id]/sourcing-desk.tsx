@@ -5,7 +5,7 @@ import type { SourcingCardRef, SourcingStreamView } from "@signal-desk/contracts
 import { evaluateFit, openQuestions } from "@signal-desk/contracts/sourcing-schema";
 import { accountTab, type AccountTab } from "@signal-desk/catalog/desk-shell";
 import type { ChatComposerHandle } from "@signal-desk/catalog/sale-chat";
-import { FitTable, SourceChangeCard } from "@signal-desk/catalog/sourcing-cards";
+import { DecisionChatCard, FitTable, SourceChangeCard } from "@signal-desk/catalog/sourcing-cards";
 import SourcingWorkspace from "@signal-desk/catalog/sourcing-workspace";
 import { postPrototypeCommand } from "@/app/prototype-command";
 import type { getSourcingAccount } from "@/server/sourcing";
@@ -148,19 +148,7 @@ export default function SourcingDesk({
           </button>
         </section>
       );
-    return (
-      <section className="desk-card desk-chat-card">
-        <h3>Connection decision</h3>
-        <p>
-          {account.decision
-            ? `${account.decision.decision}: ${account.decision.reason}`
-            : "No decision recorded."}
-        </p>
-        <button className="quiet-button" onClick={() => review("fit")}>
-          Open decision
-        </button>
-      </section>
-    );
+    return <DecisionChatCard account={account} rows={rows} onOpen={() => review("fit")} />;
   }
   return (
     <SourcingWorkspace

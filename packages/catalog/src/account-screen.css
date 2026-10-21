@@ -34,9 +34,9 @@
   scale: 1.05;
   filter: blur(12px);
   transition:
-    opacity 1000ms ease,
-    scale 1000ms ease,
-    filter 1000ms ease;
+    opacity 1000ms var(--ease-out),
+    scale 1000ms var(--ease-out),
+    filter 1000ms var(--ease-out);
 }
 .sign-in-photo img[data-active] {
   opacity: 1;
@@ -82,7 +82,8 @@
   left: 48px;
   max-width: 400px;
   margin: 0;
-  animation: sign-in-quote-in 700ms ease both;
+  animation: sign-in-quote-in 700ms both;
+  animation-timing-function: var(--ease-out);
 }
 @keyframes sign-in-quote-in {
   from {
@@ -131,7 +132,7 @@
   height: 8px;
   border-radius: 50%;
   background: rgb(255 255 255 / 0.45);
-  transition: background-color 200ms ease;
+  transition: background-color 200ms var(--ease-out);
 }
 .sign-in-dots button:hover::before {
   background: rgb(255 255 255 / 0.75);

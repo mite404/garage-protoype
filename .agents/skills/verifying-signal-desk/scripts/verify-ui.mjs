@@ -51,7 +51,7 @@ const stories = {
   },
   "agent-catalog-assistance-cards--offer-not-accepted": {
     selector: '[data-card="handoff"]',
-    text: ["Offer recorded · Not accepted", "$165,000.00"],
+    text: ["Offer recorded · Not accepted", "$6,500 below current terms of $171,500"],
   },
   "agent-catalog-assistance-cards--empty-conditions": {
     selector: '[data-card="handoff"]',
@@ -68,12 +68,16 @@ const stories = {
     selector: '[data-card="draft"]',
     text: ["Unsent draft · Evidence changed, review again"],
   },
+  "agent-catalog-scripted-demo--inline-catalog": {
+    selector: ".desk-chat-card",
+    text: ["Offer recorded · Not accepted", "Stale: the need or reviewed evidence changed"],
+  },
   "agent-catalog-assistance-cards--evidence-review": {
     selector: '[data-card="answer"]',
     text: ["Evidence review", "Synthetic specimen · Not connected to records"],
   },
-  "workspace-dispatch--evidence-review": {
-    selector: ".dispatch-shell",
+  "workspace-desk-shell--evidence-review": {
+    selector: ".desk-shell",
     text: ["Keep the next step clear.", "Unsent draft · Human review required"],
   },
   "primitives-foundations--palette-and-type": {
@@ -88,39 +92,35 @@ const stories = {
     selector: "form #source-name",
     text: ["Request a source", "Story specimen only. Nothing is saved or sent."],
   },
+  "primitives-working-indicator--wave-and-siren": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
+  "primitives-working-indicator--playground": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
+  "primitives-working-indicator--siren-mid-cycle": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
   "conversation-reading--structured-response": { selector: ".quiet-prose h4" },
   "conversation-reading--literal-evidence": { selector: ".literal-prose" },
   "conversation-reading--connected-turn": { selector: ".conversation-turn" },
-  "conversation-chat-workspace--light": {
-    selector: '.chat-workspace[data-theme="light"]',
-    text: ["What is blocking this purchase?"],
-  },
-  "conversation-chat-workspace--dark": {
-    selector: '.chat-workspace[data-theme="dark"]',
+  "conversation-chat-workspace--default": {
+    selector: ".chat-workspace",
     text: ["What is blocking this purchase?"],
   },
   "conversation-chat-workspace--email-editor": {
     selector: '.chat-workspace[data-editor-open="true"]',
     text: ["Local preview only. Closing keeps your edits until reload."],
   },
-  "conversation-chat-workspace--dark-email-editor": {
-    selector: '.chat-workspace[data-theme="dark"][data-editor-open="true"]',
-    text: ["Local preview only. Closing keeps your edits until reload."],
-  },
   "conversation-chat-workspace--minimized": {
-    selector: '.chat-workspace[data-theme="light"]',
-    dialogsHidden: true,
-  },
-  "conversation-chat-workspace--dark-minimized": {
-    selector: '.chat-workspace[data-theme="dark"]',
+    selector: ".chat-workspace",
     dialogsHidden: true,
   },
   "conversation-chat-workspace--retains-draft-edits": {
     selector: ".chat-workspace",
-    text: ["Please include the test date and pump serial number."],
-  },
-  "conversation-chat-workspace--dark-retains-draft-edits": {
-    selector: '.chat-workspace[data-theme="dark"]',
     text: ["Please include the test date and pump serial number."],
   },
   "conversation-chat-workspace--composes-local-message": {
@@ -129,27 +129,19 @@ const stories = {
   },
   "municipal-sales-workspace--default": {
     selector: 'nav[aria-label="Municipal sales"]',
-    text: ["Austin Fire Department", "Simulated deal. No payment or escrow funds held."],
-  },
-  "municipal-sales-workspace--dark": {
-    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
-    text: ["Austin Fire Department"],
+    text: [
+      "Austin Fire Department",
+      "Simulated deal. No payment or escrow funds held.",
+      "Listed Feb 28, 2025",
+    ],
   },
   "municipal-sales-workspace--chat-open": {
     selector: 'nav[aria-label="Municipal sales"]',
     text: ["Austin Fire Department", "What is blocking this purchase?"],
   },
-  "municipal-sales-workspace--dark-chat-open": {
-    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
-    text: ["What is blocking this purchase?"],
-  },
   "municipal-sales-workspace--chat-working": {
     selector: 'nav[aria-label="Municipal sales"]',
     text: ["Prepare a seller request for the pump-test report.", "Checking evidence…"],
-  },
-  "municipal-sales-workspace--dark-chat-working": {
-    selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
-    text: ["Checking evidence…"],
   },
   "municipal-sales-workspace--chat-jev-suggestion": {
     selector: 'nav[aria-label="Municipal sales"]',
@@ -169,15 +161,19 @@ const stories = {
   },
   "sourcing-department-workspace--reply-rejects-pairing": {
     selector: 'nav[aria-label="Workspace"]',
-    text: ["Does not meet", "Recorded Oct 19, 2026"],
+    text: ["1 in over", "Recorded Oct 19, 2026"],
   },
   "sourcing-department-workspace--conflict-and-stale": {
     selector: 'nav[aria-label="Workspace"]',
     text: ["Conflicting", "Stale: the need or reviewed evidence changed, decide again"],
   },
-  "sourcing-department-workspace--dark": {
-    selector: '[data-theme="dark"] nav[aria-label="Workspace"]',
-    text: ["Does not meet"],
+  "sourcing-department-workspace--fit-margins": {
+    selector: ".sourcing-fit",
+    text: ["2 in under", "$3,200 over"],
+  },
+  "sourcing-department-workspace--chat-decision": {
+    selector: ".desk-chat-card",
+    text: ["Open decision", "Decide again"],
   },
   "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',
@@ -188,7 +184,7 @@ const stories = {
 // Stories whose layout must also hold at a 390px phone width.
 const narrow = [
   "conversation-reading--connected-turn",
-  "conversation-chat-workspace--light",
+  "conversation-chat-workspace--default",
   "municipal-sales-workspace--default",
   "sourcing-department-workspace--reply-rejects-pairing",
 ];

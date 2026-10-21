@@ -209,7 +209,9 @@ test("specialist works the NY sourcing funnel end to end", async ({ page, reques
       .getByRole("navigation", { name: "Account sections" })
       .getByText("Vehicles & fit")
       .click();
-    await expect(page.getByRole("row", { name: /Height ≤120 in/ })).toContainText("Met");
+    await expect(page.getByRole("row", { name: /^Height 118 in/ })).toContainText(
+      "Met: 2 in under",
+    );
     await page.getByLabel("Reason").fill("Height met; sale status, price and authority open.");
     await page.getByRole("button", { name: "Record decision" }).click();
     await expect(page.getByText(/Recorded .* against need revision/)).toBeVisible();

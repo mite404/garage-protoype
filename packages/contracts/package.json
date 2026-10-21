@@ -7,6 +7,7 @@
     "./assistance-schema": "./src/assistance-schema.ts",
     "./evidence-schema": "./src/evidence-schema.ts",
     "./photo-schema": "./src/photo-schema.ts",
+    "./money": "./src/money.ts",
     "./municipality-schema": "./src/municipality-schema.ts",
     "./feedback-schema": "./src/feedback-schema.ts",
     "./sourcing-schema": "./src/sourcing-schema.ts",
