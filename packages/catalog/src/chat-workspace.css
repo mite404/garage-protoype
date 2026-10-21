@@ -650,58 +650,78 @@
     opacity: 1;
   }
 }
-/* A fire-truck roof beacon seen from the front. It spins on a vertical axis, so the beam stays
-   level: a 20° wedge pointing left widens until it fills the square while facing the viewer, then
-   narrows to the right and goes dark behind the lamp. Only the beam is painted; the square
-   reads only at mid-cycle, when the beam faces the viewer. Only the spread animates; the aim flips
-   sides at full spread, where the flip is invisible. */
-@property --siren-aim {
+/* A fire-truck roof beacon seen from the front: the lamp dome fills the top half and its beam
+   sweeps the lower half from left to right. The beam leaves the lamp as a 20° wedge along the
+   left horizon, widens until it fills the lower half while facing the viewer, holds there
+   briefly, then narrows into the right horizon and goes dark behind the lamp. Angles run
+   clockwise from up, so 90deg is right, 180deg down and 270deg left; the wedge spans
+   --siren-from to --siren-from + --siren-spread. */
+@property --siren-from {
   syntax: "<angle>";
   inherits: false;
-  initial-value: 0deg;
+  initial-value: 90deg;
 }
 @property --siren-spread {
   syntax: "<angle>";
   inherits: false;
-  initial-value: 360deg;
+  initial-value: 180deg;
 }
 .turn-progress-siren {
+  position: relative;
   width: 12px;
   height: 12px;
   flex-shrink: 0;
-  border-radius: 2px;
   background: conic-gradient(
-    from calc(var(--siren-aim) - var(--siren-spread) / 2),
-    var(--destructive) var(--siren-spread),
-    transparent 0
-  );
+      from var(--siren-from) at 50% 0%,
+      var(--destructive) var(--siren-spread),
+      transparent 0
+    )
+    bottom / 100% 50% no-repeat;
   animation: turn-progress-siren 1200ms linear infinite;
+}
+/* The dome on its base, centred over the beam's origin. */
+.turn-progress-siren::before,
+.turn-progress-siren::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+}
+.turn-progress-siren::before {
+  top: 1px;
+  width: 6px;
+  height: 4px;
+  border-radius: 3px 3px 0 0;
+  background: var(--destructive);
+}
+.turn-progress-siren::after {
+  top: 5px;
+  width: 10px;
+  height: 1px;
+  background: var(--foreground);
 }
 @keyframes turn-progress-siren {
   0%,
   10% {
-    --siren-aim: -90deg;
+    --siren-from: 270deg;
     --siren-spread: 0deg;
   }
   10.01% {
-    --siren-aim: -90deg;
+    --siren-from: 250deg;
     --siren-spread: 20deg;
   }
-  50% {
-    --siren-aim: -90deg;
-    --siren-spread: 360deg;
-  }
-  50.01% {
-    --siren-aim: 90deg;
-    --siren-spread: 360deg;
+  48%,
+  52% {
+    --siren-from: 90deg;
+    --siren-spread: 180deg;
   }
   90% {
-    --siren-aim: 90deg;
+    --siren-from: 90deg;
     --siren-spread: 20deg;
   }
   90.01%,
   100% {
-    --siren-aim: 90deg;
+    --siren-from: 90deg;
     --siren-spread: 0deg;
   }
 }

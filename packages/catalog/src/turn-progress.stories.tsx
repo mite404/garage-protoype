@@ -93,7 +93,7 @@ export const Playground: StoryObj<typeof Tuner> = {
   },
 };
 
-// Held at mid-cycle, the beam faces the viewer and the siren is a solid red square.
+// Held at mid-cycle, the beam faces the viewer and fills the lower half below the lamp.
 export const SirenMidCycle: StoryObj<typeof Tuner> = {
   ...Playground,
   args: { ...Playground.args, paused: true, frame: 50 },
