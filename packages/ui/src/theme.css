@@ -124,11 +124,12 @@ h2 {
 .quiet-button:active {
   transform: scale(0.98);
 }
-:is(a, button, input, select, textarea, summary):focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-}
 @layer base {
+  /* Layered so primitives that draw their own focus ring can opt out with outline-none. */
+  :is(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+  }
   /* shadcn primitives expect unqualified borders to use the theme border, not currentColor. */
   *,
   ::before,
