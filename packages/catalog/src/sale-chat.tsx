@@ -254,7 +254,7 @@ function ChatComposer({
       <p className="mt-2 px-1 text-xs text-muted-foreground">
         Drafts only. Nothing is sent externally.
       </p>
-      <output className="mt-1 block text-xs text-muted-foreground" aria-live="polite">
+      <output className="mt-1 block px-1 text-xs text-muted-foreground" aria-live="polite">
         {status}
       </output>
     </form>

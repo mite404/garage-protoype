@@ -68,6 +68,10 @@ const stories = {
     selector: '[data-card="draft"]',
     text: ["Unsent draft · Evidence changed, review again"],
   },
+  "agent-catalog-scripted-demo--inline-catalog": {
+    selector: ".desk-chat-card",
+    text: ["Offer recorded · Not accepted", "Stale: the need or reviewed evidence changed"],
+  },
   "agent-catalog-assistance-cards--evidence-review": {
     selector: '[data-card="answer"]',
     text: ["Evidence review", "Synthetic specimen · Not connected to records"],

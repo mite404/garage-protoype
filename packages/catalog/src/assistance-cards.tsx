@@ -7,6 +7,12 @@ import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse, Prose } from "./prose";
 
 // Handoff status drives the badge copy and tone.
+// Draft purposes are the draft command kinds; an unknown one shows as stored.
+const draftPurposes: Record<string, string> = {
+  seller_request: "Seller request",
+  buyer_followup: "Buyer follow-up",
+  photo_request: "Photo request",
+};
 const handoffStates = {
   recorded_not_accepted: ["Offer recorded · Not accepted", "state-needs_review"],
 } as const;
@@ -178,7 +184,7 @@ export default function AssistanceCard({
               ? "Evidence changed, review again"
               : "Human review required"}
           </Badge>
-          <h3>{card.purpose.replaceAll("_", " ")}</h3>
+          <h3>{draftPurposes[card.purpose] ?? card.purpose}</h3>
           <div>
             <p className="reading-label">Proposed recipient</p>
             <LiteralProse text={card.recipientLabel} />

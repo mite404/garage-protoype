@@ -1025,11 +1025,14 @@
   }
 }
 .sale-chat .chat-message:not(.chat-message-user) .chat-bubble {
+  /* Cards share one width; only the text bubble hugs its words. */
+  align-self: stretch;
   max-width: 100%;
   padding: 0;
   background: none;
 }
 .sale-chat .chat-message:not(.chat-message-user) .chat-bubble > .quiet-prose {
+  width: fit-content;
   padding: 12px 14px;
   border-radius: 9px 9px 9px 3px;
   background: var(--chat-assistant);
