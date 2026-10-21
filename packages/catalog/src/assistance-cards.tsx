@@ -1,7 +1,6 @@
 import type { InlineCard, RoutingSuggestion } from "@signal-desk/contracts/assistance-schema";
 import { fieldLabels } from "@signal-desk/contracts/evidence-schema";
 import { formatUsd } from "@signal-desk/contracts/money";
-import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse, Prose } from "./prose";
@@ -68,12 +67,9 @@ function Suggestion({
 function OfferCard({ card }: { card: Extract<InlineCard, { kind: "handoff" }> }) {
   return (
     <Card className="assistance-card" data-card="handoff">
-      <Badge
-        variant="outline"
-        className={`state border-transparent ${handoffStates[card.status][1]}`}
-      >
+      <span className={`state ${handoffStates[card.status][1]}`}>
         {handoffStates[card.status][0]}
-      </Badge>
+      </span>
       <div>
         <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
         {card.termsAmountMinor !== null && (
@@ -128,9 +124,7 @@ export default function AssistanceCard({
     case "answer":
       return (
         <Card className="assistance-card" data-card="answer">
-          <Badge variant="outline" className="state state-reviewed border-transparent">
-            Reviewed, shareable evidence
-          </Badge>
+          <span className="state state-reviewed">Reviewed, shareable evidence</span>
           <div>
             <p className="reading-label">{fieldLabels[card.field]}</p>
             <p className="answer-value">{card.value}</p>
@@ -144,16 +138,15 @@ export default function AssistanceCard({
     case "review":
       return (
         <Card className="assistance-card" data-card="review">
-          <Badge
-            variant="outline"
-            className={`state border-transparent state-${card.state === "conflict" ? "conflict" : "needs_review"}`}
+          <span
+            className={`state state-${card.state === "conflict" ? "conflict" : "needs_review"}`}
           >
             {card.state === "conflict"
               ? "Conflicting evidence"
               : card.state === "human_review"
                 ? "Human interpretation required"
                 : "Unknown · Review required"}
-          </Badge>
+          </span>
           <h3>{card.question}</h3>
           {card.suggestion && (
             <Suggestion
@@ -178,12 +171,12 @@ export default function AssistanceCard({
     case "draft":
       return (
         <Card className="assistance-card" data-card="draft">
-          <Badge variant="outline" className="state state-needs_review border-transparent">
+          <span className="state state-needs_review">
             Unsent draft ·{" "}
             {card.reviewState === "stale"
               ? "Evidence changed, review again"
               : "Human review required"}
-          </Badge>
+          </span>
           <h3>{draftPurposes[card.purpose] ?? card.purpose}</h3>
           <div>
             <p className="reading-label">Proposed recipient</p>

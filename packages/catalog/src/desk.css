@@ -273,47 +273,6 @@
 .desk-account .sourcing-fit thead {
   background: var(--muted);
 }
-.desk-account .state {
-  border-radius: 5px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.desk-account .state-needs_review {
-  background: color-mix(in srgb, var(--warning) 12%, var(--card));
-  color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--card));
-}
-.desk-account .state-reviewed {
-  background: color-mix(in srgb, var(--success) 12%, var(--card));
-  color: var(--success);
-}
-.desk-account .state-conflict {
-  background: color-mix(in srgb, var(--destructive) 12%, var(--card));
-  color: var(--destructive);
-}
-.desk-account .sourcing-fit .state::before {
-  content: "?";
-  display: inline-grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  color: #fff;
-  background-color: #d58a1c;
-}
-.desk-account .sourcing-fit .state-reviewed::before {
-  content: "✓";
-  background: #226343;
-}
-.desk-account .sourcing-fit .state-conflict::before {
-  content: "!";
-  background: #b03923;
-}
 .desk-account .card-caveat,
 .desk-note {
   font-size: 12px;

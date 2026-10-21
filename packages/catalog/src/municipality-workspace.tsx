@@ -208,7 +208,9 @@ export default function MunicipalityWorkspace({
           </a>
         </nav>
         <div className="municipal-topbar-context">
-          {organization.synthetic && <span className="state">Synthetic demonstration</span>}
+          {organization.synthetic && (
+            <span className="state state-simulated">Synthetic demonstration</span>
+          )}
           <span>
             {organization.city}, {organization.region}
           </span>

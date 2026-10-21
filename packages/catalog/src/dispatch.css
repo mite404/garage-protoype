@@ -226,13 +226,6 @@
   gap: 28px;
   font-size: 12px;
 }
-.municipal-topbar .state {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  background: color-mix(in srgb, var(--accent) 12%, var(--card));
-  color: var(--primary);
-}
 .municipal-main {
   padding-bottom: 100px;
 }
@@ -326,7 +319,6 @@
 }
 .municipal-item .state {
   flex-shrink: 0;
-  font-size: 12px;
 }
 .municipal-terms ul {
   display: grid;
@@ -449,9 +441,6 @@
   gap: 16px;
   padding: 20px;
 }
-.sourcing-card > .state {
-  font-size: 12px;
-}
 .sourcing-link {
   align-self: flex-start;
   color: var(--primary);
@@ -492,14 +481,10 @@
   font-weight: 500;
 }
 .sourcing-fit .state {
-  font-size: 12px;
   white-space: nowrap;
 }
 .sourcing-status {
   margin-bottom: 10px;
-}
-.sourcing-status .state {
-  font-size: 12px;
 }
 .sourcing-readiness {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

@@ -13,7 +13,6 @@ import {
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
 import { formatUsd } from "@signal-desk/contracts/money";
-import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
 import { LiteralProse } from "./prose";
@@ -90,9 +89,7 @@ export function SourceChangeCard({
 }) {
   return (
     <Card className="assistance-card sourcing-card" data-card="source-change">
-      <Badge variant="outline" className="state state-needs_review border-transparent">
-        Research trigger only
-      </Badge>
+      <span className="state state-needs_review">Research trigger only</span>
       <blockquote className="card-citation">
         <p className="reading-label">
           {trigger.sourceLabel} · {date.format(trigger.observedAt)}
