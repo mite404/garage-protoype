@@ -337,6 +337,48 @@ function useChatWindow(streams: Turn[], sending: unknown, follow: RefObject<bool
   return { open, setOpen, launcher, composer, history };
 }
 
+const resizeStep = 24;
+const arrows: Record<string, [x: number, y: number]> = {
+  ArrowLeft: [resizeStep, 0],
+  ArrowRight: [-resizeStep, 0],
+  ArrowUp: [0, resizeStep],
+  ArrowDown: [0, -resizeStep],
+};
+
+// The window is pinned bottom-right, so its free top-left corner is the one that resizes it.
+// CSS min and max sizes clamp every change to the viewport.
+function ResizeGrip({
+  label,
+  onResize,
+}: {
+  label: string;
+  onResize: (width: number, height: number) => void;
+}) {
+  // The grip is a direct child of the window it resizes.
+  const windowBox = (grip: HTMLElement) =>
+    (grip.parentElement as HTMLElement).getBoundingClientRect();
+  return (
+    <button
+      type="button"
+      className="chat-resize"
+      aria-label={`Resize ${label}`}
+      onPointerDown={(event) => event.currentTarget.setPointerCapture(event.pointerId)}
+      onPointerMove={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        const box = windowBox(event.currentTarget); // → DOMRect
+        onResize(box.right - event.clientX, box.bottom - event.clientY);
+      }}
+      onKeyDown={(event) => {
+        const step = arrows[event.key]; // → [x, y] | undefined
+        if (!step) return;
+        event.preventDefault();
+        const box = windowBox(event.currentTarget); // → DOMRect
+        onResize(box.width + step[0], box.height + step[1]);
+      }}
+    />
+  );
+}
+
 function ChatWindow({
   context,
   streams,
@@ -350,6 +392,7 @@ function ChatWindow({
   composerRef,
 }: Omit<ChatProps, "copy" | "renderSourcingCard"> & { copy: Copy }) {
   const follow = useRef(true);
+  const [size, setSize] = useState<{ width: number; height: number }>();
   const { input, setInput, sending, active, submit } = useComposer(
     streams,
     pending,
@@ -383,6 +426,7 @@ function ChatWindow({
         {copy.title} {active && <span className="text-xs">· Working</span>}
       </button>
       <dialog
+        style={size}
         id="sale-chat"
         open={open}
         aria-modal="false"
@@ -393,6 +437,10 @@ function ChatWindow({
         }}
         className="chat-window sale-chat"
       >
+        <ResizeGrip
+          label={copy.title.toLowerCase()}
+          onResize={(width, height) => setSize({ width, height })}
+        />
         <ChatWindowHeader title={copy.title} subtitle={context} icon="chat" onMinimize={minimize} />
         <ChatPanel
           denied={denied}

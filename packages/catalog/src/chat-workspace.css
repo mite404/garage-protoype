@@ -441,7 +441,39 @@
   z-index: 50;
   width: min(440px, calc(100vw - 24px));
   height: min(720px, calc(100dvh - 24px));
+  /* Bounds for a resized window, whose size is set inline. */
+  min-width: min(320px, calc(100vw - 24px));
+  min-height: min(360px, calc(100dvh - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
   font: 14px/1.5 var(--font-sans);
+}
+.chat-resize {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.chat-resize::before {
+  content: "";
+  position: absolute;
+  inset: 5px auto auto 5px;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid var(--muted-foreground);
+  border-left: 2px solid var(--muted-foreground);
+  border-top-left-radius: 2px;
+  opacity: 0.5;
+}
+.chat-resize:hover::before,
+.chat-resize:focus-visible::before {
+  opacity: 1;
 }
 .sale-chat-launcher {
   position: fixed;
