@@ -179,6 +179,14 @@ const stories = {
     selector: '[data-theme="dark"] nav[aria-label="Workspace"]',
     text: ["1 in over"],
   },
+  "sourcing-department-workspace--fit-margins": {
+    selector: ".sourcing-fit",
+    text: ["2 in under", "$3,200 over"],
+  },
+  "sourcing-department-workspace--chat-decision": {
+    selector: ".desk-chat-card",
+    text: ["Open decision", "Decide again"],
+  },
   "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',
     text: ["Proposed updates · Not yet approved", "Reject this connection, not the seller account"],
