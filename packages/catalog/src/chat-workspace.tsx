@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Textarea } from "@signal-desk/ui/components/ui/textarea";
 import { ChatIcon, ChatLauncher, ChatWindowHeader } from "./chat-window";
@@ -14,7 +15,6 @@ type VehicleContext = {
 };
 
 type ChatWorkspaceProps = {
-  theme: "light" | "dark";
   context: VehicleContext;
   initialDraft: EmailDraft;
   initialChatState?: "open" | "minimized";
@@ -53,7 +53,9 @@ function DraftCard({ draft, onEdit }: { draft: EmailDraft; onEdit: () => void })
       <div className="chat-card-heading">
         <ChatIcon name="document" />
         <h3>Seller request</h3>
-        <span className="chat-badge">Draft</span>
+        <Badge variant="outline" className="state ml-auto border-transparent">
+          Draft
+        </Badge>
       </div>
       <p className="chat-recipient">
         <span>To</span>
@@ -166,7 +168,6 @@ function ChatTranscript({
 
 /** Synthetic chat composition for reviewing popup interactions without server operations. */
 export function ChatWorkspace({
-  theme,
   context,
   initialDraft,
   initialChatState = "open",
@@ -195,12 +196,7 @@ export function ChatWorkspace({
   }, [editorState]);
 
   return (
-    <div
-      ref={root}
-      className="chat-workspace"
-      data-theme={theme}
-      data-editor-open={editorState === "open"}
-    >
+    <div ref={root} className="chat-workspace" data-editor-open={editorState === "open"}>
       <div className="chat-stage-label">
         <span>Signal Desk</span>
         <p>Municipal sales · Synthetic workspace</p>
