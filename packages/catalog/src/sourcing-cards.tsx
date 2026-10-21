@@ -480,7 +480,9 @@ export function ReplyReview({
   );
 }
 
-function Recorded({
+/** A recorded connection decision with its date and need revision, flagged when stale; otherwise
+ * the rule suggestion. */
+export function Recorded({
   decision,
   suggested,
   stale,
