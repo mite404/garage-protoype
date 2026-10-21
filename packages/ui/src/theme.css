@@ -1,5 +1,13 @@
 @import "tw-animate-css";
 
+/* Shared motion curves. They replace Tailwind's defaults, so the ease-out and ease-in-out
+   utilities and plain CSS (var(--ease-out)) move the same way. Ease out for anything entering or
+   responding to input; ease in-out for things already on screen that move or loop. */
+@theme static {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -630,7 +630,8 @@
   border-radius: 999px;
   background: var(--primary);
   transform-origin: bottom;
-  animation: turn-progress-wave 900ms ease-in-out infinite;
+  animation: turn-progress-wave 900ms infinite;
+  animation-timing-function: var(--ease-in-out);
 }
 .turn-progress-glyph span:nth-child(2) {
   animation-delay: 150ms;
