@@ -1020,7 +1020,7 @@
 }
 .sale-chat .chat-message:not(.chat-message-user) .chat-bubble > .quiet-prose {
   padding: 12px 14px;
-  border-radius: 9px 9px 9px 3px;
+  border-radius: 0;
   background: var(--chat-assistant);
   margin-bottom: 10px;
 }

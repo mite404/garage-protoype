@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Textarea } from "@signal-desk/ui/components/ui/textarea";
 import { ChatIcon, ChatLauncher, ChatWindowHeader } from "./chat-window";
@@ -52,7 +53,9 @@ function DraftCard({ draft, onEdit }: { draft: EmailDraft; onEdit: () => void })
       <div className="chat-card-heading">
         <ChatIcon name="document" />
         <h3>Seller request</h3>
-        <span className="chat-badge">Draft</span>
+        <Badge variant="outline" className="state ml-auto border-transparent">
+          Draft
+        </Badge>
       </div>
       <p className="chat-recipient">
         <span>To</span>
