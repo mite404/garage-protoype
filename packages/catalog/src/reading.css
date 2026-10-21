@@ -72,6 +72,7 @@
   padding: 24px;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+  box-shadow: none;
 }
 .assistance-card > .state {
   justify-self: start;
@@ -111,21 +112,10 @@
   border-left: 2px solid var(--border);
 }
 .card-meta {
-  display: grid;
-  gap: 12px;
   margin: 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 20px;
-}
-.card-meta dt {
-  color: var(--muted-foreground);
-}
-.card-meta dd {
-  margin: 2px 0 0;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
 }
 .card-caveat {
   margin: 0;

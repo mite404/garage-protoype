@@ -46,6 +46,47 @@ function Suggestion({
   );
 }
 
+// An offer reads against the deal it would change; buyers receive no terms to compare.
+function OfferCard({ card }: { card: Extract<InlineCard, { kind: "handoff" }> }) {
+  return (
+    <Card className="assistance-card" data-card="handoff">
+      <Badge variant="outline" className="state state-needs_review border-transparent">
+        Offer recorded · Not accepted
+      </Badge>
+      <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
+      <div>
+        <p className="reading-label">Stated timing</p>
+        <LiteralProse text={card.timingText} />
+      </div>
+      <div>
+        <h4 className="reading-label">Conditions retained</h4>
+        <ul className="card-list">
+          {card.conditions.map((c, i) => (
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+        {!card.conditions.length && <LiteralProse text="No additional conditions supplied." />}
+      </div>
+      <div>
+        <h4 className="reading-label">Unanswered questions</h4>
+        <ul className="card-list">
+          {card.unansweredQuestions.map((q, i) => (
+            <li key={i}>{q}</li>
+          ))}
+        </ul>
+        {!card.unansweredQuestions.length && (
+          <LiteralProse text="No unanswered questions supplied." />
+        )}
+      </div>
+      <div className="card-next-action">
+        <p className="reading-label">Next human action</p>
+        <Prose text={card.nextAction} />
+      </div>
+      <p className="card-meta">Assigned to {card.assigneeId}</p>
+    </Card>
+  );
+}
+
 /** Renders only the finite authored catalog. Text is escaped by React; no generated markup runs. */
 export default function AssistanceCard({
   card,
@@ -85,10 +126,7 @@ export default function AssistanceCard({
                 ? "Human interpretation required"
                 : "Unknown · Review required"}
           </Badge>
-          <div>
-            <p className="reading-label">Question</p>
-            <h3>{card.question}</h3>
-          </div>
+          <h3>{card.question}</h3>
           {card.suggestion && (
             <Suggestion
               suggestion={card.suggestion}
@@ -98,66 +136,17 @@ export default function AssistanceCard({
               }
             />
           )}
-          <p className="card-caveat">No supported answer yet.</p>
           <div className="card-next-action">
             <p className="reading-label">Next human action</p>
             <Prose text={card.nextAction} />
           </div>
-          <dl className="card-meta">
-            <div>
-              <dt>Assigned specialist</dt>
-              <dd>{card.assigneeId}</dd>
-            </div>
-            <div>
-              <dt>Blocker reference</dt>
-              <dd>{card.blockerId}</dd>
-            </div>
-          </dl>
+          <p className="card-meta">
+            Assigned to {card.assigneeId} · Blocker {card.blockerId}
+          </p>
         </Card>
       );
     case "handoff":
-      return (
-        <Card className="assistance-card" data-card="handoff">
-          <Badge variant="outline" className="state state-needs_review border-transparent">
-            Offer recorded · Not accepted
-          </Badge>
-          <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
-          <div>
-            <p className="reading-label">Stated timing</p>
-            <LiteralProse text={card.timingText} />
-          </div>
-          <div>
-            <h4 className="reading-label">Conditions retained</h4>
-            <ul className="card-list">
-              {card.conditions.map((c, i) => (
-                <li key={i}>{c}</li>
-              ))}
-            </ul>
-            {!card.conditions.length && <LiteralProse text="No additional conditions supplied." />}
-          </div>
-          <div>
-            <h4 className="reading-label">Unanswered questions</h4>
-            <ul className="card-list">
-              {card.unansweredQuestions.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-            {!card.unansweredQuestions.length && (
-              <LiteralProse text="No unanswered questions supplied." />
-            )}
-          </div>
-          <div className="card-next-action">
-            <p className="reading-label">Next human action</p>
-            <Prose text={card.nextAction} />
-          </div>
-          <dl className="card-meta">
-            <div>
-              <dt>Assigned specialist</dt>
-              <dd>{card.assigneeId}</dd>
-            </div>
-          </dl>
-        </Card>
-      );
+      return <OfferCard card={card} />;
     case "draft":
       return (
         <Card className="assistance-card" data-card="draft">
