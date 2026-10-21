@@ -230,9 +230,6 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-}
-.municipal-topbar .state,
-.municipal-state .state {
   background: color-mix(in srgb, var(--accent) 12%, var(--card));
   color: var(--primary);
 }
@@ -267,29 +264,47 @@
   line-height: 1.4;
   font-weight: 600;
 }
-.municipal-acquisition,
+.municipal-item,
 .municipal-list {
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 0;
   background: var(--card);
 }
-.municipal-acquisition {
+.municipal-item {
   display: flex;
   align-items: flex-start;
   gap: 22px;
   padding: 16px;
   margin-bottom: 12px;
 }
-.municipal-acquisition-content {
+.municipal-item-content {
+  display: grid;
+  gap: 10px;
   min-width: 0;
   flex: 1;
+}
+.municipal-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.municipal-figure {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.municipal-figure strong {
+  color: var(--foreground);
+  font-size: 18px;
 }
 .municipal-thumbnail {
   width: 132px;
   height: 98px;
   flex-shrink: 0;
   object-fit: cover;
-  border-radius: 5px;
+  border-radius: 0;
   background: var(--muted);
 }
 .municipal-no-photo {
@@ -304,42 +319,28 @@
   margin-top: 3px;
   color: var(--muted-foreground);
 }
-.municipal-price {
-  margin-top: 5px;
-  font-size: 16px;
-}
-.municipal-state,
-.municipal-conditions {
+.municipal-terms {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-top: 6px;
-  color: var(--muted-foreground);
+  gap: 10px;
 }
-.municipal-state .state {
-  padding: 4px 10px;
-  font-size: 13px;
-  font-weight: 500;
-}
-.municipal-conditions > span {
+.municipal-item .state {
   flex-shrink: 0;
+  font-size: 12px;
 }
-.municipal-conditions ul {
+.municipal-terms ul {
   display: grid;
   gap: 4px;
 }
-.municipal-acquisition-footer {
+.municipal-item-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: 4px 20px;
   justify-content: space-between;
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
   color: var(--muted-foreground);
   font-size: 12px;
 }
-.municipal-acquisition-footer a {
+.municipal-item-footer a {
   color: var(--primary);
 }
 .municipal-list {
@@ -392,16 +393,17 @@
   .municipal-identity h1 {
     font-size: 28px;
   }
-  .municipal-acquisition {
+  .municipal-item {
     gap: 12px;
     padding: 12px;
   }
-  .municipal-acquisition > .municipal-thumbnail {
+  .municipal-item > .municipal-thumbnail {
     width: 72px;
     height: 64px;
   }
-  .municipal-conditions {
-    display: block;
+  .municipal-terms {
+    display: grid;
+    justify-items: start;
   }
   .municipal-list-row {
     gap: 12px;

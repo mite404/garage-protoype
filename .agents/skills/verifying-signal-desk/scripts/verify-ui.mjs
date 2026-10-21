@@ -141,7 +141,11 @@ const stories = {
   },
   "municipal-sales-workspace--default": {
     selector: 'nav[aria-label="Municipal sales"]',
-    text: ["Austin Fire Department", "Simulated deal. No payment or escrow funds held."],
+    text: [
+      "Austin Fire Department",
+      "Simulated deal. No payment or escrow funds held.",
+      "Listed Feb 28, 2025",
+    ],
   },
   "municipal-sales-workspace--dark": {
     selector: '[data-theme="dark"] nav[aria-label="Municipal sales"]',
