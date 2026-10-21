@@ -644,10 +644,68 @@
     opacity: 1;
   }
 }
+/* A fire-truck roof beacon seen from the front. It spins on a vertical axis, so the beam stays
+   level: a 20° wedge pointing left widens until it fills the square while facing the viewer, then
+   narrows to the right and goes dark behind the lamp. Only the beam is painted; the square
+   reads only at mid-cycle, when the beam faces the viewer. Only the spread animates; the aim flips
+   sides at full spread, where the flip is invisible. */
+@property --siren-aim {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --siren-spread {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 360deg;
+}
+.turn-progress-siren {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: conic-gradient(
+    from calc(var(--siren-aim) - var(--siren-spread) / 2),
+    var(--destructive) var(--siren-spread),
+    transparent 0
+  );
+  animation: turn-progress-siren 1200ms linear infinite;
+}
+@keyframes turn-progress-siren {
+  0%,
+  10% {
+    --siren-aim: -90deg;
+    --siren-spread: 0deg;
+  }
+  10.01% {
+    --siren-aim: -90deg;
+    --siren-spread: 20deg;
+  }
+  50% {
+    --siren-aim: -90deg;
+    --siren-spread: 360deg;
+  }
+  50.01% {
+    --siren-aim: 90deg;
+    --siren-spread: 360deg;
+  }
+  90% {
+    --siren-aim: 90deg;
+    --siren-spread: 20deg;
+  }
+  90.01%,
+  100% {
+    --siren-aim: 90deg;
+    --siren-spread: 0deg;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .turn-progress-glyph span {
     animation: none;
     transform: scaleY(0.7);
+  }
+  .turn-progress-siren {
+    animation: none;
   }
 }
 .chat-bubble .turn-progress {

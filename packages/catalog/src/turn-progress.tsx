@@ -29,18 +29,31 @@ export function sendingMessage(sent: SentTurn | undefined, streams: Pick<StreamV
   return sent.message;
 }
 
-/** Live status for an unfinished turn: an animated glyph that starts on mount, then a label. */
-export function TurnProgress({ label, spaced = false }: { label: string; spaced?: boolean }) {
+/** Live status for an unfinished turn: an animated glyph that starts on mount, then a label.
+ * The glyph is a rotating siren beam by default, or a three-bar wave. */
+export function TurnProgress({
+  label,
+  spaced = false,
+  glyph = "siren",
+}: {
+  label: string;
+  spaced?: boolean;
+  glyph?: "wave" | "siren";
+}) {
   return (
     <output
       className={spaced ? "turn-progress turn-progress-spaced" : "turn-progress"}
       data-turn-progress=""
     >
-      <span aria-hidden="true" className="turn-progress-glyph">
-        <span />
-        <span />
-        <span />
-      </span>
+      {glyph === "siren" ? (
+        <span aria-hidden="true" className="turn-progress-siren" />
+      ) : (
+        <span aria-hidden="true" className="turn-progress-glyph">
+          <span />
+          <span />
+          <span />
+        </span>
+      )}
       {label}…
     </output>
   );

@@ -88,6 +88,18 @@ const stories = {
     selector: "form #source-name",
     text: ["Request a source", "Story specimen only. Nothing is saved or sent."],
   },
+  "primitives-working-indicator--wave-and-siren": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
+  "primitives-working-indicator--playground": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
+  "primitives-working-indicator--siren-mid-cycle": {
+    selector: ".turn-progress-siren",
+    text: ["Checking evidence…"],
+  },
   "conversation-reading--structured-response": { selector: ".quiet-prose h4" },
   "conversation-reading--literal-evidence": { selector: ".literal-prose" },
   "conversation-reading--connected-turn": { selector: ".conversation-turn" },
