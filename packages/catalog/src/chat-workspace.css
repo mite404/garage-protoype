@@ -475,6 +475,11 @@
 .chat-resize:focus-visible::before {
   opacity: 1;
 }
+/* The window's rounded corner clips an outside ring. */
+.chat-resize:focus-visible {
+  outline-offset: -2px;
+  border-top-left-radius: 10px;
+}
 .sale-chat-launcher {
   position: fixed;
   right: 24px;
