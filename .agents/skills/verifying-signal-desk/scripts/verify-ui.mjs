@@ -169,7 +169,7 @@ const stories = {
   },
   "sourcing-department-workspace--reply-rejects-pairing": {
     selector: 'nav[aria-label="Workspace"]',
-    text: ["Does not meet", "Recorded Oct 19, 2026"],
+    text: ["1 in over", "Recorded Oct 19, 2026"],
   },
   "sourcing-department-workspace--conflict-and-stale": {
     selector: 'nav[aria-label="Workspace"]',
@@ -177,7 +177,7 @@ const stories = {
   },
   "sourcing-department-workspace--dark": {
     selector: '[data-theme="dark"] nav[aria-label="Workspace"]',
-    text: ["Does not meet"],
+    text: ["1 in over"],
   },
   "sourcing-department-workspace--chat-cards": {
     selector: '[data-card="reply-review"]',

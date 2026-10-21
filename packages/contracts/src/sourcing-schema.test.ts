@@ -59,6 +59,7 @@ test("an accepted 121 inch measurement rejects the pairing; the rest stay unreso
   assert.equal(reviewed.find((f) => f.id === "s")?.status, "proposed");
   const rows = evaluateFit(pineBrook, reviewed);
   assert.equal(status(reviewed).height, "not_met");
+  assert.equal(rows[1]?.margin, "1 in over");
   assert.equal(status(reviewed).available, "unknown");
   assert.equal(suggestDecision(rows), "reject");
   assert.throws(() => acceptSelected(reviewed, ["h"], at), /not a current proposal/);
@@ -70,7 +71,21 @@ test("a purchase-price limit compares price alone; a total budget never does", (
     fact({ id: "p", field: "priceCents", value: 17_500_000, status: "accepted", reviewedAt: at }),
   ];
   assert.equal(evaluateFit(purchase, price)[2]?.status, "met");
+  assert.equal(evaluateFit(purchase, price)[2]?.margin, "At limit");
   assert.equal(evaluateFit(pineBrook, price)[2]?.status, "incomplete");
+});
+
+test("a decided budget row states its distance from the limit, keeping real cents", () => {
+  const accepted = (id: string, field: Fact["field"], value: number) =>
+    fact({ id, field, value, status: "accepted", reviewedAt: at } as Fact);
+  const costs = [
+    accepted("p", "priceCents", 16_000_050),
+    accepted("t", "transportCents", 400_000),
+    accepted("f", "feesCents", 0),
+  ];
+  assert.equal(evaluateFit(pineBrook, costs)[2]?.margin, "$10,999.50 under");
+  const over = [...costs.slice(1), accepted("p", "priceCents", 17_500_000)];
+  assert.equal(evaluateFit(pineBrook, over)[2]?.margin, "$4,000 over");
 });
 
 test("price alone never establishes all-in cost, but a partial sum over the limit fails", () => {

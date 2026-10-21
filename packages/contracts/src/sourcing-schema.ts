@@ -65,6 +65,8 @@ export type FitRow = {
   requirement: Requirement;
   status: FitStatus;
   evidence: string;
+  // Distance from a numeric limit, such as "2 in under", when a measured value decides the row.
+  margin?: string;
   sourceRefs: string[];
 };
 type Answers = Partial<{ [F in Field]: Extract<Fact, { field: F }> }>;
@@ -115,6 +117,10 @@ function conflictRow(fields: Field[], facts: Fact[]): Omit<FitRow, "requirement"
   };
 }
 
+// Signed distance past a limit, in the limit's own unit.
+const margin = (over: number, format: (amount: number) => string) =>
+  over === 0 ? "At limit" : `${format(Math.abs(over))} ${over > 0 ? "over" : "under"}`;
+
 function availableRow(answer: Answers["saleStatus"]): Omit<FitRow, "requirement"> {
   if (!answer) return { status: "unknown", evidence: "Not confirmed", sourceRefs: [] };
   const refs = [answer.sourceRef];
@@ -129,6 +135,7 @@ function heightRow(need: Need, answer: Answers["heightIn"]): Omit<FitRow, "requi
   return {
     status: answer.value <= need.maxHeightIn ? "met" : "not_met",
     evidence: `${answer.value} in`,
+    margin: margin(answer.value - need.maxHeightIn, (inches) => `${inches} in`),
     sourceRefs: [answer.sourceRef],
   };
 }
@@ -145,12 +152,18 @@ function costRow(need: Need, answers: Answers): Omit<FitRow, "requirement"> {
     const missing = fields.filter((field) => !answers[field]).map((f) => f.replace("Cents", ""));
     // A partial sum already over the limit is a definite failure.
     return total > need.maxBudgetCents
-      ? { status: "not_met", evidence: `${money(total)} before ${missing.join(", ")}`, sourceRefs }
+      ? {
+          status: "not_met",
+          evidence: `${money(total)} before ${missing.join(", ")}`,
+          margin: margin(total - need.maxBudgetCents, money),
+          sourceRefs,
+        }
       : { status: "incomplete", evidence: `${missing.join(", ")} missing`, sourceRefs };
   }
   return {
     status: total <= need.maxBudgetCents ? "met" : "not_met",
     evidence: `${money(total)}${need.budgetBasis === "total" ? " all-in" : ""}`,
+    margin: margin(total - need.maxBudgetCents, money),
     sourceRefs,
   };
 }

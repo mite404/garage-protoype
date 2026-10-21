@@ -172,7 +172,7 @@ export const ReplyRejectsPairing: Story = {
     ).not.toBeChecked();
     await userEvent.click(canvas.getByRole("button", { name: "Vehicles & fit" }));
     const fit = within(canvas.getByRole("table"));
-    await expect(fit.getByText("Does not meet")).toBeVisible();
+    await expect(fit.getByText("1 in over")).toBeVisible();
     await expect(fit.getByText("121 in")).toBeVisible();
     await expect(canvas.getByRole("radio", { name: "Reject" })).toBeChecked();
     await userEvent.type(canvas.getByLabelText("Reason"), "Reviewed height 121 in exceeds 120 in.");

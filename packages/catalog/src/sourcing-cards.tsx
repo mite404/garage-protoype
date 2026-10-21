@@ -108,6 +108,14 @@ export function SourceChangeCard({
   );
 }
 
+// Fit rows name the requirement only; a measured row states its distance from the limit instead.
+const fitNames = (need: Need): Record<FitRow["requirement"], string> => ({
+  available: "Available for sale",
+  height: "Height",
+  budget: need.budgetBasis === "total" ? "All-in cost" : "Purchase price",
+  authority: "Seller authority",
+});
+
 /** Hard constraints against reviewed evidence; unknowns stay visible and never pass. */
 export function FitTable({ need, rows }: { need: Need; rows: FitRow[] }) {
   return (
@@ -131,12 +139,21 @@ export function FitTable({ need, rows }: { need: Need; rows: FitRow[] }) {
                 <th scope="row">
                   <span className="desk-requirement">
                     <DeskIcon name={row.requirement} />
-                    {requirementLabel(need, row.requirement)}
+                    {fitNames(need)[row.requirement]}
                   </span>
                 </th>
                 <td>{row.evidence}</td>
                 <td>
-                  <span className={`state ${tone}`}>{label}</span>
+                  <span className={`state ${tone}`}>
+                    {row.margin ? (
+                      <>
+                        <span className="sr-only">{label}: </span>
+                        {row.margin}
+                      </>
+                    ) : (
+                      label
+                    )}
+                  </span>
                 </td>
               </tr>
             );
