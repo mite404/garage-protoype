@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { flushSync } from "react-dom";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -20,6 +21,7 @@ import {
 import { Skeleton } from "@signal-desk/ui/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@signal-desk/ui/components/ui/tooltip";
 import { PanelLeftIcon } from "lucide-react";
+import { focusInPanel, listenForPeek, peekIntent } from "./sidebar-peek";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -35,7 +37,16 @@ type SidebarContextProps = {
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
   isMobile: boolean;
-  toggleSidebar: () => void;
+  /** Toggles the sidebar; `instant` (a key made the change) draws it with no motion. */
+  toggleSidebar: (motion?: { instant?: boolean }) => void;
+  /** The collapsed desktop sidebar is peeking: drawn expanded over the content. */
+  peeking: boolean;
+  setPeeking: (peeking: boolean) => void;
+  /**
+   * Runs a change to the sidebar with no motion: the wrapper carries `data-instant` while the
+   * change renders, so no transition starts.
+   */
+  instantly: (change: () => void) => void;
 };
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
@@ -84,17 +95,40 @@ function SidebarProvider({
     [setOpenProp, open],
   );
 
-  // Helper to toggle the sidebar.
-  const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
-  }, [isMobile, setOpen, setOpenMobile]);
+  const [peeking, setPeeking] = React.useState(false);
+  const wrapper = React.useRef<HTMLDivElement>(null);
+  const instantly = React.useCallback((change: () => void) => {
+    const root = wrapper.current;
+    if (root === null || root.dataset.instant !== undefined) {
+      change();
+      return;
+    }
+    root.dataset.instant = "";
+    flushSync(change);
+    root.getBoundingClientRect(); // styles computed with motion off, so no transition starts
+    delete root.dataset.instant;
+  }, []);
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // Helper to toggle the sidebar. A toggle pins or unpins, so it ends any peek.
+  const toggleSidebar = React.useCallback(
+    (motion?: { instant?: boolean }) => {
+      const toggle = () => {
+        setPeeking(false);
+        if (isMobile) setOpenMobile((open) => !open);
+        else setOpen((open) => !open);
+      };
+      if (motion?.instant) instantly(toggle);
+      else toggle();
+    },
+    [isMobile, setOpen, setOpenMobile, instantly],
+  );
+
+  // Adds a keyboard shortcut to toggle the sidebar, at once: a key press never animates.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        toggleSidebar();
+        toggleSidebar({ instant: true });
       }
     };
 
@@ -115,13 +149,17 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      peeking,
+      setPeeking,
+      instantly,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, peeking, instantly],
   );
 
   return (
     <SidebarContext.Provider value={contextValue}>
       <div
+        ref={wrapper}
         data-slot="sidebar-wrapper"
         style={
           {
@@ -142,6 +180,49 @@ function SidebarProvider({
   );
 }
 
+// What a desktop sidebar's children read to draw collapsed: the collapsible kind while collapsed
+// and not peeking; a peeking sidebar draws expanded, and `data-peek` marks it.
+function collapsedAs(state: string, collapsible: string, peeking: boolean) {
+  return {
+    "data-collapsible": state === "collapsed" && !peeking ? collapsible : "",
+    "data-peek": peeking ? "" : undefined,
+  };
+}
+
+// An icon's tooltip names it only while the column is collapsed to icons on a desktop.
+function tooltipHidden({ state, isMobile, peeking }: SidebarContextProps): boolean {
+  return state !== "collapsed" || isMobile || peeking;
+}
+
+// The peek needs a pointer that hovers: it means nothing to a touch screen.
+const FINE_HOVER = "(hover: hover) and (pointer: fine)";
+
+// While an icon sidebar is collapsed on a desktop with a fine pointer, wires the page to its
+// peek (sidebar-peek.ts), and rests the peek whenever it cannot peek. Escape's close is instant.
+// ponytail: reads the pointer's kind once per collapse; subscribe to the media query if a
+// device switch mid-session matters.
+function useSidebarPeek(collapsible: string) {
+  const { state, isMobile, peeking, setPeeking, instantly } = useSidebar();
+  const out = React.useRef(peeking);
+  React.useLayoutEffect(() => {
+    out.current = peeking;
+  }, [peeking]);
+  const enabled = state === "collapsed" && !isMobile && collapsible === "icon";
+  React.useEffect(() => {
+    if (!enabled || !window.matchMedia(FINE_HOVER).matches) {
+      setPeeking(false);
+      return undefined;
+    }
+    const peek = peekIntent({
+      open: () => out.current,
+      held: focusInPanel,
+      show: () => setPeeking(true),
+      hide: (instant) => (instant ? instantly(() => setPeeking(false)) : setPeeking(false)),
+    });
+    return listenForPeek(peek, () => out.current);
+  }, [enabled, setPeeking, instantly]);
+}
+
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -155,7 +236,8 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, peeking } = useSidebar();
+  useSidebarPeek(collapsible);
 
   if (collapsible === "none") {
     return (
@@ -202,17 +284,18 @@ function Sidebar({
     <div
       className="group peer hidden text-sidebar-foreground md:block"
       data-state={state}
-      data-collapsible={state === "collapsed" ? collapsible : ""}
+      {...collapsedAs(state, collapsible, peeking)}
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* This is what handles the sidebar gap on desktop. A peek draws the sidebar expanded
+          over the content, so the gap keeps the icon column's width and nothing beside moves. */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
-          "group-data-[collapsible=offcanvas]:w-0",
+          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-250 ease-panel motion-reduce:transition-none",
+          "group-data-[collapsible=offcanvas]:w-0 group-data-peek:w-(--sidebar-width-icon)",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
             ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
@@ -223,7 +306,7 @@ function Sidebar({
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,box-shadow] duration-250 ease-panel group-data-peek:shadow-[8px_0_24px_-12px_color-mix(in_srgb,var(--foreground)_30%,transparent)] group-data-peek:duration-220 motion-reduce:transition-none data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -256,7 +339,8 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       className={cn(className)}
       onClick={(event) => {
         onClick?.(event);
-        toggleSidebar();
+        // A click with no detail is Enter or Space on the button: a key press, so no motion.
+        toggleSidebar({ instant: event.detail === 0 });
       }}
       {...props}
     >
@@ -275,7 +359,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="sidebar-rail"
       aria-label="Toggle Sidebar"
       tabIndex={-1}
-      onClick={toggleSidebar}
+      onClick={() => toggleSidebar()}
       title="Toggle Sidebar"
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
@@ -383,7 +467,7 @@ function SidebarGroupLabel({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin] duration-250 ease-panel group-data-[collapsible=icon]:-mt-8 motion-reduce:transition-none group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
           className,
         ),
       },
@@ -489,7 +573,7 @@ function SidebarMenuButton({
     isActive?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const { isMobile, state } = useSidebar();
+  const sidebar = useSidebar();
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -520,12 +604,7 @@ function SidebarMenuButton({
   return (
     <Tooltip>
       {comp}
-      <TooltipContent
-        side="right"
-        align="center"
-        hidden={state !== "collapsed" || isMobile}
-        {...tooltip}
-      />
+      <TooltipContent side="right" align="center" hidden={tooltipHidden(sidebar)} {...tooltip} />
     </Tooltip>
   );
 }

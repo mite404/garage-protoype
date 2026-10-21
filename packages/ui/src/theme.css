@@ -6,6 +6,31 @@
 @theme static {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* The sidebar's dock, undock and peek (YakLabs' panel curve): a fast start into a long, smooth
+     settle, half the travel done by 13% of the time and 90% by 43%. */
+  --ease-panel: cubic-bezier(0.17, 1.02, 0.58, 1);
+}
+
+/* Collapsing to icons, the labels leave before the column does: at 0 within 60ms, so no label is
+   still clipping as the column lands. Expanding, they are there from the first frame. A key's
+   change and reduced motion skip the fade. */
+[data-slot="sidebar"][data-collapsible="icon"]
+  :is([data-slot="sidebar-menu-button"] > span:last-child, [data-slot="sidebar-group-label"]) {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="sidebar-wrapper"]:not([data-instant])
+    [data-slot="sidebar"][data-collapsible="icon"]
+    :is([data-slot="sidebar-menu-button"] > span:last-child, [data-slot="sidebar-group-label"]) {
+    transition:
+      opacity 60ms var(--ease-out),
+      margin 250ms var(--ease-panel);
+  }
+}
+/* A key's toggle (Cmd/Ctrl+B, Enter or Space on the trigger) and Escape on a peek move at once.
+   Unlayered, so it outranks every transition utility inside the sidebar. */
+[data-slot="sidebar-wrapper"][data-instant] [data-slot="sidebar"] * {
+  transition: none;
 }
 
 @theme inline {
