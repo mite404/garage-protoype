@@ -2,16 +2,10 @@
 import { useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { SourcingCardRef, SourcingStreamView } from "@signal-desk/contracts/assistance-schema";
-import {
-  evaluateFit,
-  isStale,
-  openQuestions,
-  suggestDecision,
-  type FitRow,
-} from "@signal-desk/contracts/sourcing-schema";
+import { evaluateFit, openQuestions } from "@signal-desk/contracts/sourcing-schema";
 import { accountTab, type AccountTab } from "@signal-desk/catalog/desk-shell";
 import type { ChatComposerHandle } from "@signal-desk/catalog/sale-chat";
-import { FitTable, Recorded, SourceChangeCard } from "@signal-desk/catalog/sourcing-cards";
+import { DecisionChatCard, FitTable, SourceChangeCard } from "@signal-desk/catalog/sourcing-cards";
 import SourcingWorkspace from "@signal-desk/catalog/sourcing-workspace";
 import { postPrototypeCommand } from "@/app/prototype-command";
 import type { getSourcingAccount } from "@/server/sourcing";
@@ -59,33 +53,6 @@ function revive(view: View): View {
       },
     },
   };
-}
-
-// A decision recorded against an older need or evidence must not read as current.
-function DecisionChatCard({
-  account,
-  rows,
-  onOpen,
-}: {
-  account: View["account"];
-  rows: FitRow[];
-  onOpen: () => void;
-}) {
-  const stale = Boolean(
-    account.decision && isStale(account.decision.basis, account.need, account.facts),
-  );
-  const [buttonClass, action] = stale
-    ? ["button", "Decide again"]
-    : ["quiet-button", "Open decision"];
-  return (
-    <section className="desk-card desk-chat-card">
-      <h3>Connection decision</h3>
-      <Recorded decision={account.decision} suggested={suggestDecision(rows)} stale={stale} />
-      <button className={buttonClass} onClick={onOpen}>
-        {action}
-      </button>
-    </section>
-  );
 }
 
 /** Connects the department page and its assistant to the same saved case and commands. */

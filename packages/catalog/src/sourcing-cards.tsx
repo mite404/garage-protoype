@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   evaluateFit,
+  isStale,
   openQuestions,
   requirementLabel,
   suggestDecision,
@@ -480,9 +481,9 @@ export function ReplyReview({
   );
 }
 
-/** A recorded connection decision with its date and need revision, flagged when stale; otherwise
- * the rule suggestion. */
-export function Recorded({
+// A recorded connection decision with its date and need revision, flagged when stale; otherwise
+// the rule suggestion.
+function Recorded({
   decision,
   suggested,
   stale,
@@ -510,6 +511,34 @@ export function Recorded({
         <strong>{capitalize(decision.decision)}</strong>: {decision.reason}
       </p>
     </div>
+  );
+}
+
+/** The chat summary of the connection decision; a decision made against an older need or
+ * evidence is flagged and asks for a new one. */
+export function DecisionChatCard({
+  account,
+  rows,
+  onOpen,
+}: {
+  account: Pick<SourcingAccount, "decision" | "need" | "facts">;
+  rows: FitRow[];
+  onOpen: () => void;
+}) {
+  const stale = Boolean(
+    account.decision && isStale(account.decision.basis, account.need, account.facts),
+  );
+  const [buttonClass, action] = stale
+    ? ["button", "Decide again"]
+    : ["quiet-button", "Open decision"];
+  return (
+    <section className="desk-card desk-chat-card">
+      <h3>Connection decision</h3>
+      <Recorded decision={account.decision} suggested={suggestDecision(rows)} stale={stale} />
+      <button className={buttonClass} onClick={onOpen}>
+        {action}
+      </button>
+    </section>
   );
 }
 
