@@ -14,7 +14,6 @@ type VehicleContext = {
 };
 
 type ChatWorkspaceProps = {
-  theme: "light" | "dark";
   context: VehicleContext;
   initialDraft: EmailDraft;
   initialChatState?: "open" | "minimized";
@@ -166,7 +165,6 @@ function ChatTranscript({
 
 /** Synthetic chat composition for reviewing popup interactions without server operations. */
 export function ChatWorkspace({
-  theme,
   context,
   initialDraft,
   initialChatState = "open",
@@ -195,12 +193,7 @@ export function ChatWorkspace({
   }, [editorState]);
 
   return (
-    <div
-      ref={root}
-      className="chat-workspace"
-      data-theme={theme}
-      data-editor-open={editorState === "open"}
-    >
+    <div ref={root} className="chat-workspace" data-editor-open={editorState === "open"}>
       <div className="chat-stage-label">
         <span>Signal Desk</span>
         <p>Municipal sales · Synthetic workspace</p>

@@ -7,7 +7,6 @@ const meta = {
   component: ChatWorkspace,
   parameters: { layout: "fullscreen" },
   args: {
-    theme: "light",
     context: {
       department: "Austin Fire Department",
       vehicle: "2014 Pierce Pumper",
@@ -56,16 +55,11 @@ const checkMessageContrast: NonNullable<Story["play"]> = async ({ canvasElement 
   }
 };
 
-export const Light: Story = { play: checkMessageContrast };
-export const Dark: Story = { args: { theme: "dark" }, play: checkMessageContrast };
+export const Default: Story = { play: checkMessageContrast };
 export const EmailEditor: Story = { args: { initialEditorState: "open" } };
-export const DarkEmailEditor: Story = {
-  args: { theme: "dark", initialEditorState: "open" },
-};
 export const Minimized: Story = {
   args: { initialChatState: "minimized", initialEditorState: "minimized" },
 };
-export const DarkMinimized: Story = { args: { ...Minimized.args, theme: "dark" } };
 
 // Catches lost edits on minimize/close and saves that never update the visible draft card.
 export const RetainsDraftEdits: Story = {
@@ -100,11 +94,6 @@ export const RetainsDraftEdits: Story = {
       canvas.getByText("Please include the test date and pump serial number.", { selector: "p" }),
     ).toBeInTheDocument();
   },
-};
-
-export const DarkRetainsDraftEdits: Story = {
-  ...RetainsDraftEdits,
-  args: { theme: "dark" },
 };
 
 // Catches disappearing conversation text and treating a preview submit as a live model answer.

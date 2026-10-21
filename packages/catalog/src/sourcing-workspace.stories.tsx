@@ -118,14 +118,12 @@ function Interactive({ data }: { data: SourcingAccount }) {
 const meta = {
   title: "Sourcing/Department workspace",
   component: Interactive,
-  parameters: { layout: "fullscreen", theme: "light" },
+  parameters: { layout: "fullscreen" },
   decorators: [
-    (Story, { parameters }) => (
-      <div data-theme={parameters.theme}>
-        <DeskShell pathname="/desk/sourcing/synthetic">
-          <Story />
-        </DeskShell>
-      </div>
+    (Story) => (
+      <DeskShell pathname="/desk/sourcing/synthetic">
+        <Story />
+      </DeskShell>
     ),
   ],
 } satisfies Meta<typeof Interactive>;
@@ -203,8 +201,6 @@ export const ChatCards: Story = {
     ).toBeDisabled();
   },
 };
-
-export const Dark: Story = { ...ReplyRejectsPairing, parameters: { theme: "dark" } };
 
 const reviewed = (id: string, value: number, sourceRef: string) =>
   ({
