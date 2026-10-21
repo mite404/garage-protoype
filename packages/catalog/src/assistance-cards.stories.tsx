@@ -163,7 +163,7 @@ export const OfferNotAccepted: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText("Offer recorded · Not accepted")).toBeVisible();
-    await expect(canvas.getByText("$165,000.00")).toBeVisible();
+    await expect(canvas.getByText("$165,000")).toBeVisible();
   },
 };
 export const EmptyConditions: Story = {

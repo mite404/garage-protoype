@@ -51,7 +51,7 @@ const stories = {
   },
   "agent-catalog-assistance-cards--offer-not-accepted": {
     selector: '[data-card="handoff"]',
-    text: ["Offer recorded · Not accepted", "$165,000.00"],
+    text: ["Offer recorded · Not accepted", "$165,000"],
   },
   "agent-catalog-assistance-cards--empty-conditions": {
     selector: '[data-card="handoff"]',

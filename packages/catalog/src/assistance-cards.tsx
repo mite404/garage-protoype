@@ -1,5 +1,6 @@
 import type { InlineCard, RoutingSuggestion } from "@signal-desk/contracts/assistance-schema";
 import { fieldLabels } from "@signal-desk/contracts/evidence-schema";
+import { formatUsd } from "@signal-desk/contracts/money";
 import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
@@ -120,13 +121,7 @@ export default function AssistanceCard({
           <Badge variant="outline" className="state state-needs_review border-transparent">
             Offer recorded · Not accepted
           </Badge>
-          <h3 className="answer-value">
-            {new Intl.NumberFormat("en-US", {
-              style: "currency",
-              currency: card.currency,
-              maximumFractionDigits: 2,
-            }).format(card.amountMinor / 100)}
-          </h3>
+          <h3 className="answer-value">{formatUsd(card.amountMinor)}</h3>
           <div>
             <p className="reading-label">Stated timing</p>
             <LiteralProse text={card.timingText} />

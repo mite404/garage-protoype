@@ -460,6 +460,7 @@
   display: grid;
   gap: 10px;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
   /* Chat messages wrap anywhere; requirements, amounts and statuses stay whole. */
   overflow-wrap: normal;
   container-type: inline-size;

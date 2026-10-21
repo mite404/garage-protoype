@@ -11,6 +11,7 @@ import {
   type Need,
   type SourcingAccount,
 } from "@signal-desk/contracts/sourcing-schema";
+import { formatUsd } from "@signal-desk/contracts/money";
 import { Badge } from "@signal-desk/ui/components/ui/badge";
 import { Button } from "@signal-desk/ui/components/ui/button";
 import { Card } from "@signal-desk/ui/components/ui/card";
@@ -22,11 +23,6 @@ const date = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
   year: "numeric",
   timeZone: "UTC",
-});
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
 });
 const fitStates: Record<FitStatus, [label: string, tone: string]> = {
   met: ["Met", "state-reviewed"],
@@ -67,7 +63,7 @@ function factValue(fact: Fact) {
   if (fact.field === "saleStatus") return saleStatuses[fact.value];
   if (fact.field === "heightIn") return `${fact.value} in`;
   if (fact.field === "authority") return fact.value;
-  return usd.format(fact.value / 100);
+  return formatUsd(fact.value);
 }
 
 // Names what accepting one proposal would newly fail, so reviewers see the consequence first.

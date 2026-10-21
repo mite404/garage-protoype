@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatUsd as money } from "@signal-desk/contracts/money";
 
 const id = z.string().trim().min(1).max(160);
 const cents = z.number().int().nonnegative();
@@ -69,12 +70,6 @@ export type FitRow = {
 type Answers = Partial<{ [F in Field]: Extract<Fact, { field: F }> }>;
 
 const costFields = ["priceCents", "transportCents", "feesCents"] as const;
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-const money = (value: number) => usd.format(value / 100);
 const questions: Record<Requirement, string> = {
   available: "Is the vehicle being offered for sale, and when?",
   height: "What is the exact overall height in inches?",

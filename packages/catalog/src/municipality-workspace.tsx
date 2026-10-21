@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatUsd } from "@signal-desk/contracts/money";
 import type { MunicipalityWorkspace as Workspace } from "@signal-desk/contracts/municipality-schema";
 
 const stages = {
@@ -6,12 +7,6 @@ const stages = {
   contingent: "Contingent purchase",
   escrow_simulated: "Escrow · Simulated",
 };
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
 const date = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -53,7 +48,7 @@ function Acquisition({
         {deal.terms ? (
           <>
             <p className="municipal-price">
-              <strong>{money.format(deal.terms.amountCents / 100)}</strong> proposed
+              <strong>{formatUsd(deal.terms.amountCents)}</strong> proposed
             </p>
             <p className="municipal-state">
               <span>State:</span> <span className="state">{stages[deal.terms.stage]}</span>
