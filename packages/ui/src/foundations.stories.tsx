@@ -31,7 +31,7 @@ export const PaletteAndType: Story = {
           ["Foreground", "bg-foreground text-background"],
           ["Muted", "bg-muted text-foreground"],
         ].map(([name, colors]) => (
-          <div key={name} className={`rounded-lg border border-border p-6 text-sm ${colors}`}>
+          <div key={name} className={`border border-border p-6 text-sm ${colors}`}>
             {name}
           </div>
         ))}

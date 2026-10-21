@@ -15,7 +15,6 @@
     "./sourcing-cards": "./src/sourcing-cards.tsx",
     "./sourcing-workspace": "./src/sourcing-workspace.tsx",
     "./turn-progress": "./src/turn-progress.tsx",
-    "./workspace-shell": "./src/workspace-shell.tsx",
     "./styles.css": "./src/dispatch.css"
   },
   "scripts": {

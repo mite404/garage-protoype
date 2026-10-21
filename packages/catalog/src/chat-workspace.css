@@ -12,7 +12,7 @@
 .chat-workspace :is(h2, h3, p, dl, dd) {
   margin: 0;
 }
-.chat-workspace :is(h2, h3) {
+.chat-workspace :is(h2, h3, .chat-summary strong) {
   font-family: var(--font-display);
   font-weight: 600;
 }
@@ -32,11 +32,6 @@
 .sale-chat[hidden],
 .sale-chat-launcher[hidden] {
   display: none;
-}
-.chat-workspace :focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-  box-shadow: none;
 }
 .chat-stage-label {
   position: absolute;
@@ -74,7 +69,7 @@
   flex-shrink: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--background);
   box-shadow: 0 6px 24px #00000020;
 }
@@ -152,9 +147,11 @@
 .chat-message-user {
   align-items: flex-end;
 }
+/* Type scale follows the assistance cards: 13/20 labels, 15/24 body, 13/20 italic caveats. */
 .chat-message-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
   color: var(--muted-foreground);
   padding: 0 2px 5px;
 }
@@ -164,19 +161,21 @@
 }
 .chat-bubble {
   max-width: 90%;
+  font-size: 15px;
+  line-height: 24px;
   padding: 12px 14px;
-  border-radius: 9px 9px 9px 3px;
+  border-radius: 0;
   background: var(--chat-assistant);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .chat-message-user .chat-bubble {
-  border-radius: 9px 9px 3px 9px;
+  border-radius: 0;
   background: var(--chat-user);
 }
 .chat-card {
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 0;
   margin-bottom: 12px;
   overflow: hidden;
 }
@@ -204,6 +203,7 @@
 .chat-summary dl {
   padding: 6px 14px;
   font-size: 13px;
+  line-height: 20px;
 }
 .chat-summary dl > div {
   display: grid;
@@ -225,20 +225,16 @@
   align-items: center;
   gap: 12px;
 }
-.chat-badge {
-  margin-left: auto;
-  border-radius: 4px;
-  background: var(--muted);
-  padding: 2px 8px;
-  font-size: 11px;
-  color: var(--muted-foreground);
+.chat-card .state {
+  font-size: 12px;
 }
 .chat-recipient {
   display: flex;
   gap: 12px;
   padding: 12px 0 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 20px;
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
 }
@@ -246,7 +242,8 @@
   padding-top: 10px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 24px;
 }
 .chat-edit-draft {
   margin: 6px 0 -6px -8px;
@@ -282,23 +279,23 @@
   margin-top: 10px;
   padding: 6px 10px;
   border: 1px solid var(--input);
-  border-radius: 7px;
+  border-radius: 0;
 }
 .chat-composer:focus-within {
   border-color: var(--ring);
 }
 .chat-composer textarea {
   border: 0;
-  border-radius: 3px;
+  border-radius: 0;
   min-height: 44px;
   max-height: 120px;
   resize: none;
   font-size: 14px;
   padding: 6px 2px;
 }
+/* The composer border carries focus; the Textarea primitive's own ring would sit inside it. */
 .chat-workspace .chat-composer textarea:focus-visible {
-  outline-offset: 0;
-  outline: none;
+  box-shadow: none;
 }
 .chat-composer-toolbar {
   display: flex;
@@ -329,7 +326,9 @@
   text-align: center;
 }
 .chat-preview-notice {
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 20px;
+  font-style: italic;
   color: var(--muted-foreground);
 }
 .chat-launcher-dock {
@@ -344,7 +343,7 @@
   gap: 12px;
   min-height: 52px;
   padding: 8px 20px;
-  border-radius: 9px;
+  border-radius: 0;
   background: var(--background);
   color: var(--foreground);
   border: 1px solid var(--border);
@@ -386,8 +385,16 @@
 .email-draft-fields label {
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
   color: var(--muted-foreground);
+}
+/* Match the chat composer: square field, focus shown by the border alone. */
+.email-draft-fields input:focus-visible,
+.email-draft-body textarea:focus-visible {
+  border-color: var(--ring);
+  box-shadow: none;
 }
 .email-draft-fields input {
   height: 40px;
@@ -408,10 +415,10 @@
   resize: none;
   padding: 12px;
   border: 1px solid var(--input);
-  border-radius: 7px;
   background: var(--background);
   color: var(--foreground);
-  line-height: 1.75;
+  font-size: 15px;
+  line-height: 24px;
 }
 .email-draft-footer {
   padding: 12px 20px 20px;
@@ -426,7 +433,9 @@
 .email-draft-footer output {
   display: block;
   margin-top: 12px;
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 20px;
+  font-style: italic;
   color: var(--muted-foreground);
 }
 .chat-save {

@@ -139,15 +139,8 @@ function PreviewChat({ initial = [completedTurn] }: { initial?: StreamView[] }) 
 const meta = {
   title: "Municipal sales/Workspace",
   component: MunicipalityWorkspace,
-  parameters: { layout: "fullscreen", theme: "light" },
+  parameters: { layout: "fullscreen" },
   args: { workspace, chat: <PreviewChat /> },
-  decorators: [
-    (Story, { parameters }) => (
-      <div data-theme={parameters.theme}>
-        <Story />
-      </div>
-    ),
-  ],
 } satisfies Meta<typeof MunicipalityWorkspace>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -170,7 +163,6 @@ export const Default: Story = {
     ).toBeVisible();
   },
 };
-export const Dark: Story = { ...Default, parameters: { theme: "dark" } };
 export const ChatOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -181,7 +173,6 @@ export const ChatOpen: Story = {
     await expect(canvas.getByRole("heading", { name: "Austin Fire Department" })).toBeVisible();
   },
 };
-export const DarkChatOpen: Story = { ...ChatOpen, parameters: { theme: "dark" } };
 export const EmptyActivityAndListings: Story = {
   args: { workspace: { ...workspace, activity: [], ownedListings: [] } },
   play: async ({ canvasElement }) => {
@@ -230,7 +221,6 @@ export const ChatWorking: Story = {
     await expect(within(dialog).queryByText("Writing a draft…")).toBeNull();
   },
 };
-export const DarkChatWorking: Story = { ...ChatWorking, parameters: { theme: "dark" } };
 export const ChatJevSuggestion: Story = {
   args: { chat: <PreviewChat initial={[completedTurn, suggestedTurn]} /> },
   play: async ({ canvasElement }) => {
