@@ -4,13 +4,50 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Main, nightly, and manual runs execute every task without replaying cached successes.
+  TURBO_FORCE: ${{ github.event_name != 'pull_request' }}
+  TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+  TURBO_SCM_HEAD: ${{ github.sha }}
+
 jobs:
-  check:
+  quality:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          cache-scope: quality
+      - run: npm run check:docs && npm run format:check && npm run lint
+      - name: Generate route contracts without a build
+        run: npx next typegen
+        working-directory: apps/web
+      - name: Typecheck affected packages and all root tooling
+        run: |
+          npx turbo run typecheck $TURBO_AFFECTED
+          npx tsc --noEmit
+
+  tests:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [node, cloudflare, e2e]
     services:
       postgres:
         image: postgres:16
@@ -27,20 +64,21 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_test
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_test
-      FALLOW_AUDIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      # Every matrix job owns its own PostgreSQL service; e2e also resets its own database.
+      E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_e2e_test
+      FALLOW_AUDIT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
     steps:
       - uses: actions/checkout@v4
         with:
+          filter: blob:none
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/setup
         with:
-          node-version-file: .node-version
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - name: Build the Cloudflare streaming Worker
-        run: npm run cloudflare:build
-      - name: Check against the running application
+          cache-scope: ${{ matrix.suite }}
+      # HTTP tests need a production Next build even when no application package changed.
+      - run: npx turbo run build --filter=@signal-desk/web
+      - name: Check Node behavior and audit fresh coverage
+        if: matrix.suite == 'node'
         env:
           TEST_APP_URL: http://127.0.0.1:3000
         run: |
@@ -52,18 +90,37 @@ jobs:
               cat "$RUNNER_TEMP/app.log"
               exit 1
             }
-          npm run check
+          npm test
+          npm run fallow
+      - name: Build the Cloudflare streaming Worker
+        if: matrix.suite == 'cloudflare'
+        run: npm run cloudflare:build
       - name: Check streaming and import guarantees on the Cloudflare Worker
+        if: matrix.suite == 'cloudflare'
         run: npm run test:cloudflare
-      - name: Install the Playwright browser
+      - name: Read the installed Playwright version
+        if: matrix.suite == 'e2e'
+        id: playwright
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: matrix.suite == 'e2e'
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}-chromium
+      - name: Install Chromium and system dependencies
+        if: matrix.suite == 'e2e' && steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-      # Its own database: npm test owns signal_desk_test, and fixtures cannot share one.
+      - name: Install only system dependencies for cached Chromium
+        if: matrix.suite == 'e2e' && steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - name: Drive the specialist funnel in a browser
-        env:
-          E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_e2e_test
+        if: matrix.suite == 'e2e'
         run: npm run test:e2e
       - name: Keep the funnel recording and trace
-        if: always()
+        if: always() && matrix.suite == 'e2e'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-funnel
@@ -71,9 +128,49 @@ jobs:
             apps/web/test-results/
             apps/web/playwright-report/
           if-no-files-found: ignore
-      # Last: OpenNext reruns `next build`, which would replace the build the checks started.
+      - name: Show Cloudflare Worker logs
+        if: failure() && matrix.suite == 'cloudflare'
+        run: cat apps/web/cloudflare/.wrangler/test-worker.log || true
+
+  builds:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_test
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/signal_desk_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          cache-scope: builds
+      - run: npm run build
+
+  website:
+    needs: [quality, tests, builds]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          cache-scope: website
+      # Last: OpenNext reruns `next build`; retain the post-check website build contract.
       - name: Build the website Worker
         run: npm run website:build
-      - name: Show Cloudflare Worker logs
-        if: failure()
-        run: cat apps/web/cloudflare/.wrangler/test-worker.log || true
+
+  # Preserve the required check name and fail if any parallel job failed or was skipped.
+  check:
+    if: always()
+    needs: [quality, tests, builds, website]
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "$QUALITY" = success && test "$TESTS" = success && test "$BUILDS" = success && test "$WEBSITE" = success
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          TESTS: ${{ needs.tests.result }}
+          BUILDS: ${{ needs.builds.result }}
+          WEBSITE: ${{ needs.website.result }}
