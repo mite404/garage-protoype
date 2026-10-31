@@ -1,0 +1,36 @@
+name: CI dependencies
+description: Install the pinned toolchain and restore task results
+inputs:
+  cache-scope:
+    description: Separate cache writers for parallel jobs
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - name: Limit affected checks to changes Turbo can account for
+      shell: bash
+      env:
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+      run: |
+        if [[ "$IS_PR" == true ]]; then
+          git diff --name-only "$TURBO_SCM_BASE...$TURBO_SCM_HEAD" > "$RUNNER_TEMP/changed-files"
+          if grep -qvE '^(apps|packages)/' "$RUNNER_TEMP/changed-files"; then
+            # Root tooling, fixtures, CI, or a new directory must not reuse an unseen success.
+            echo 'TURBO_FORCE=true' >> "$GITHUB_ENV"
+          else
+            echo 'TURBO_AFFECTED=--affected' >> "$GITHUB_ENV"
+          fi
+        fi
+    - uses: actions/cache@v4
+      with:
+        path: .turbo
+        key: ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-${{ github.head_ref || github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-${{ github.head_ref || github.ref_name }}-
+          ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-main-

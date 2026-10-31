@@ -1,4 +1,14 @@
 pre-commit:
+  parallel: true
   jobs:
-    - name: quality
-      run: npm run check
+    - name: format
+      glob: "*.{js,mjs,cjs,jsx,ts,tsx,json,jsonc,yml,yaml,css}"
+      run: npx oxfmt --check {staged_files}
+    - name: lint
+      glob: "*.{js,mjs,cjs,jsx,ts,tsx}"
+      run: npx oxlint --deny-warnings {staged_files}
+
+pre-push:
+  jobs:
+    - name: typecheck
+      run: npm run typecheck
