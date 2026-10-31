@@ -19,13 +19,17 @@ runs:
         IS_PR: ${{ github.event_name == 'pull_request' }}
       run: |
         if [[ "$IS_PR" == true ]]; then
-          git diff --name-only "$TURBO_SCM_BASE...$TURBO_SCM_HEAD" > "$RUNNER_TEMP/changed-files"
-          if grep -qvE '^(apps|packages)/' "$RUNNER_TEMP/changed-files"; then
-            # Root tooling, fixtures, CI, or a new directory must not reuse an unseen success.
-            echo 'TURBO_FORCE=true' >> "$GITHUB_ENV"
-          else
-            echo 'TURBO_AFFECTED=--affected' >> "$GITHUB_ENV"
-          fi
+          node --input-type=module <<'JS'
+        import { execFileSync } from 'node:child_process';
+        import { appendFileSync } from 'node:fs';
+        const { TURBO_SCM_BASE: base, TURBO_SCM_HEAD: head, GITHUB_ENV: output } = process.env;
+        const workspaces = JSON.parse(execFileSync('npm', ['query', '.workspace'], { encoding: 'utf8' }));
+        const directories = workspaces.map(({ location }) => `${location}/`);
+        const files = execFileSync('git', ['diff', '--name-only', '-z', `${base}...${head}`], { encoding: 'utf8' }).split('\0').filter(Boolean);
+        // Unknown directories and shared root inputs must not reuse an unseen success.
+        const safe = files.every(file => directories.some(directory => file.startsWith(directory)));
+        appendFileSync(output, safe ? 'TURBO_AFFECTED=--affected\n' : 'TURBO_FORCE=true\n');
+        JS
         fi
     - uses: actions/cache@v4
       with:

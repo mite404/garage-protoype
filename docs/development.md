@@ -291,8 +291,9 @@ verified slice. Local tests may skip those groups when services are not configur
 
 Turbo results persist per job and branch, with a fallback to main. Package-only PRs use
 `--affected` for package typechecks; root tooling always typechecks, and behavioral tests always
-run. A change outside `apps/` and `packages/` forces a full uncached run rather than trusting a
-package graph that cannot see it. Root tooling, database files, fixtures, and CI config also enter
+run. A change outside npm's resolved workspace directories forces a full uncached run rather than
+trusting a package graph that cannot see it, including unknown paths under `apps/` or `packages/`.
+Root tooling, database files, fixtures, and CI config also enter
 every Turbo task hash. Main pushes, manual runs, and the nightly 07:17 UTC schedule run all tasks
 uncached. PR runs cancel superseded runs. Chromium is cached by the installed Playwright version;
 cache hits install only OS dependencies.
