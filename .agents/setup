@@ -41,3 +41,56 @@ pdftotext -v
 npm ci
 npm exec -- lefthook check-install
 npm exec -- fallow --version
+
+# Local PostgreSQL 16, matching CI's service, so the loopback-only test databases exist.
+# Speed over durability: disposable test databases only.
+pg_major=16
+if ! command -v psql >/dev/null 2>&1 || [[ "$(psql --version | awk '{print $3}' | cut -d. -f1)" != "$pg_major" ]]; then
+  sudo apt-get update
+  sudo install -d /usr/share/postgresql-common/pgdg
+  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+  . /etc/os-release
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+    | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+  sudo apt-get update
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    "postgresql-${pg_major}"
+fi
+
+conf_dir="/etc/postgresql/${pg_major}/main/conf.d"
+if ! sudo test -f "$conf_dir/99-orb-speed.conf"; then
+  printf 'fsync = off\nsynchronous_commit = off\nfull_page_writes = off\n' \
+    | sudo tee "$conf_dir/99-orb-speed.conf" >/dev/null
+fi
+
+# A stopped cluster cannot authenticate: start it only while creating databases, then stop it,
+# because processes running when setup exits never reach the snapshot. Resume starts it.
+sudo pg_ctlcluster "$pg_major" main start || true
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres';"
+for name in signal_desk_test signal_desk_e2e_test; do
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$name'" | grep -q 1; then
+    sudo -u postgres createdb "$name"
+  fi
+done
+sudo pg_ctlcluster "$pg_major" main stop || true
+
+# Playwright's Chromium for `npm run test:e2e`, once per machine as the docs prescribe.
+if ! ls "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome >/dev/null 2>&1; then
+  (cd apps/web && npx playwright install --with-deps chromium)
+fi
+
+# Export the loopback test database URLs from login shells, agent shells, and services.
+profile_marker="# Signal Desk test databases"
+for profile in "$HOME/.bash_profile" "$HOME/.bashrc"; do
+  if ! grep -Fqx "$profile_marker" "$profile" 2>/dev/null; then
+    cat >> "$profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD" == "$repo_root" || "\$PWD" == "$repo_root/"* ]]; then
+  export TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/signal_desk_test"
+  export E2E_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/signal_desk_e2e_test"
+fi
+EOF
+  fi
+done

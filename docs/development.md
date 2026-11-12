@@ -70,8 +70,12 @@ hook. Run `npm run build` before `npm run check`; the HTTP review test launches 
 build against a loopback-only controlled identity provider. Rebuild after application changes.
 These commands do not deploy the app or spend inference tokens.
 
-Fresh orbs run `.agents/setup` to install the pinned Node toolchain, locked dependencies, and hook.
-The setup is safe to repeat. Fallow is a pinned development dependency, not a global installation.
+Fresh orbs run `.agents/setup` to install the pinned Node toolchain, locked dependencies, hook,
+PostgreSQL 16 with disposable `signal_desk_test` and `signal_desk_e2e_test` databases, and
+Playwright's Chromium. `.agents/resume` restarts the database cluster after every wake. Setup
+exports `TEST_DATABASE_URL` and `E2E_DATABASE_URL` from shells whose working directory is
+inside the repository. The setup is safe to repeat. Fallow is a pinned development dependency,
+not a global installation.
 Existing ticket orbs receive these files with their dependency snapshot and run `.agents/setup`.
 Future orbs inherit this automatically only after the setup reaches the project's default branch.
 No Claude, Codex, or Cursor MCP configuration is needed for Amp's CLI checks.

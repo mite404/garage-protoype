@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The disposable test databases only live on a running cluster, which never survives a
+# snapshot or a pause. Starting an already-running cluster is a no-op with exit status 2.
+if command -v pg_ctlcluster >/dev/null 2>&1; then
+  sudo pg_ctlcluster 16 main start || true
+fi
+sudo -u postgres pg_isready -q -p 5432 || true
