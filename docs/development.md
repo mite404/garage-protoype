@@ -53,7 +53,7 @@ npm exec --yes --package npm@11.16.0 -- npm exec --yes --package \
 ```
 
 The reference supplied the `apps/*` and `packages/*` workspaces, Turbo task structure, and shared
-TypeScript base. This repo keeps its existing Node 22, TypeScript 5.9, Next 16.4.1, React 19.3.1,
+TypeScript base. This repo keeps its existing Node 22, Next 16.4.1, React 19.3.1,
 PostgreSQL, and Supabase integration. It does not use the template's varlock override, example
 primitives, or extra dependencies. `apps/web` owns the existing Next routes, API, worker, and MCP.
 `apps/storybook` hosts stories colocated in `packages/ui` and `packages/catalog`.
@@ -65,8 +65,9 @@ Root `db/` and operator `scripts/` stay together so migration paths and root CLI
 unchanged. Root `.env.local` is never copied or overwritten. Next loads it alongside app-local env;
 the worker, MCP, and operator scripts load it from their own commands. Turbo passes runtime and test
 environment variables through rather than excluding secrets via strict env filtering.
-Run `npm ci` after checkout; its `prepare` step installs Lefthook's pre-commit
-hook. Run `npm run build` before `npm run check`; the HTTP review test launches that production
+Run `npm ci` after checkout; its `prepare` step installs Lefthook's staged-file lint/format
+pre-commit hook and typecheck pre-push hook. Neither hook requires a database.
+Run `npm run build` before `npm run check`; the HTTP review test launches that production
 build against a loopback-only controlled identity provider. Rebuild after application changes.
 These commands do not deploy the app or spend inference tokens.
 
@@ -204,7 +205,10 @@ can create the `signal_desk_worker_test` login role, because Hyperdrive's local 
 startup options. It refuses to run while `apps/web/cloudflare/.dev.vars` exists, since Wrangler
 would let that file override the test seams. The local provider and crash points are compiled in
 only with `SIGNAL_DESK_TEST_SEAMS=1`; deployable builds contain neither. Worker logs from each run
-are kept in `apps/web/cloudflare/.wrangler/test-worker.log`. Run Wrangler and Vite through the
+are kept in `apps/web/cloudflare/.wrangler/test-worker.log`. Each suite builds a test-only bundle
+under `.wrangler/test-build/`, then restarts it with local Wrangler/workerd instead of recompiling
+a Vite dev server at every crash boundary. Durable Object state survives those crashes; test seams
+never enter deployable `dist/`. Run Wrangler and Vite through the
 package scripts or from `apps/web/cloudflare/` directly: `npx` in a workspace runs from the
 package root and picks up the wrong configuration.
 
@@ -274,11 +278,29 @@ written to the ignored `.amp/in/artifacts/latency/` directory. Running either co
 | `npm test` | Native Node behavioral tests through tsx, with fresh V8 coverage |
 | `npm run fallow` | Changed-code dead code, complexity, duplication, and structural findings |
 
-`npm run check` runs these in order and stops on failure. Lefthook and GitHub Actions use that same
-command. CI additionally builds the application and supplies a disposable PostgreSQL 16 database
-through `DATABASE_URL` and `TEST_DATABASE_URL`. It starts that build and sets `TEST_APP_URL` before
-running the gate. Database and HTTP tests fail in CI if their configuration is absent; a skipped
-suite is not a verified slice. Local tests may skip those groups when services are not configured.
+`npm run check` runs these in order and stops on failure. Typechecks use the stable TypeScript 7
+native compiler (`@typescript/native`, installed as an alias of `typescript@7.0.2`). Its executable
+is now called `tsc`, formerly `tsgo`. The `typescript` import retains Microsoft's TypeScript 6
+compatibility API for Next.js and Storybook. Strictness flags are unchanged; side-effect import
+checking explicitly retains its TypeScript 5.9 default.
+
+CI runs quality checks, Node tests plus Fallow, workerd guarantees, Playwright, and builds in
+parallel on standard GitHub-hosted runners. Each test job owns its own PostgreSQL 16 service.
+Node tests still generate fresh V8 coverage before Fallow. Test jobs build Next and HTTP tests use
+that production build. OpenNext's website build runs after those checks and builds, retaining the
+post-check ordering for its second `next build`. The final `check` job fails if any dependency
+failed or was skipped.
+Database and HTTP tests fail in CI if their configuration is absent; a skipped suite is not a
+verified slice. Local tests may skip those groups when services are not configured.
+
+Turbo results persist per job and branch, with a fallback to main. Package-only PRs use
+`--affected` for package typechecks; root tooling always typechecks, and behavioral tests always
+run. A change outside npm's resolved workspace directories forces a full uncached run rather than
+trusting a package graph that cannot see it, including unknown paths under `apps/` or `packages/`.
+Root tooling, database files, fixtures, and CI config also enter
+every Turbo task hash. Main pushes, manual runs, and the nightly 07:17 UTC schedule run all tasks
+uncached. PR runs cancel superseded runs. Chromium is cached by the installed Playwright version;
+cache hits install only OS dependencies.
 
 The foundational application and its test setup belong to ETH-73. The complete vertical-slice
 evaluation belongs to ETH-79. Installing these checks is not evidence that AE1 through AE8 pass.
@@ -315,7 +337,7 @@ a labelled local model.
 `apps/web/e2e/harness.ts` seeds the synthetic NY walkthrough, signs in one controlled specialist and
 serves `next start` on port 3919 (`E2E_PORT`). The single spec records one video of the whole run
 under `apps/web/test-results/`. Set `E2E_SLOWMO` in milliseconds to pace a recording for review, and
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse a local Chrome. CI runs it after the gate and keeps the
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse a local Chrome. CI runs it in parallel and keeps the
 recording and trace as the `playwright-funnel` artifact.
 
 ## Formatting and analysis

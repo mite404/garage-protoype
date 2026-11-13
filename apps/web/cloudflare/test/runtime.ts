@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { access, mkdir, rm } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,9 @@ type LaunchOptions = { providerPort?: number; fault?: OwnerFault; log?: (text: s
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const vite = fileURLToPath(new URL("../../../../node_modules/.bin/vite", import.meta.url));
+const wrangler = fileURLToPath(new URL("../../../../node_modules/.bin/wrangler", import.meta.url));
+const buildDir = ".wrangler/test-build";
+const config = new URL(`../${buildDir}/garage_prototype_worker/wrangler.json`, import.meta.url);
 const state = fileURLToPath(new URL("../.wrangler/test-state", import.meta.url));
 // Every launch appends here, so a hung or failed run can be diagnosed afterwards, including in CI.
 const logFile = fileURLToPath(new URL("../.wrangler/test-worker.log", import.meta.url));
@@ -84,7 +87,7 @@ async function createWorkerRole(url: string) {
   return worker.toString();
 }
 
-// First requests trigger dependency optimization reloads; wait until the Worker answers.
+// Readiness is a response from workerd, not just Wrangler opening its HTTP port.
 async function waitUntilReady(origin: string, child: ChildProcess, logs: () => string) {
   let status: number | undefined;
   for (let i = 0; i < 600 && running(child); i++) {
@@ -92,7 +95,7 @@ async function waitUntilReady(origin: string, child: ChildProcess, logs: () => s
       headers: { authorization: `Bearer ${token}` },
     }).catch(() => undefined);
     status = response?.status;
-    if (response?.status === 404 && !/program reload\s*$/.test(logs())) return;
+    if (response?.status === 404) return;
     await setTimeout(200);
   }
   throw new Error(`The Worker did not start; last readiness status ${status}\n${logs()}`);
@@ -104,13 +107,27 @@ async function sweep(origin: string, fault: string | undefined, logs: () => stri
   if (!response?.ok && !fault) throw new Error(`The sweep failed\n${logs()}`);
 }
 
-// Runs the Worker in local workerd through `vite dev`, built with the test seams.
+// Restart the prebuilt test bundle, preserving real workerd crashes and durable storage.
 async function launch(options: LaunchOptions): Promise<OwnerProcess> {
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   const fault = faultValue(options.fault);
-  const args = ["dev", "--host", "127.0.0.1", "--port", String(port), "--strictPort"];
-  const child = spawn(vite, args, {
+  const args = [
+    "dev",
+    "--local",
+    "--config",
+    fileURLToPath(config),
+    "--persist-to",
+    state,
+    "--test-scheduled",
+    "--ip",
+    "127.0.0.1",
+    "--port",
+    String(port),
+    "--inspector-port",
+    "0",
+  ];
+  const child = spawn(wrangler, args, {
     cwd: root,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -136,6 +153,7 @@ async function launch(options: LaunchOptions): Promise<OwnerProcess> {
   child.stderr?.on("data", onData);
   try {
     await waitUntilReady(origin, child, () => logs);
+    log.write(`--- ready ${new Date().toISOString()}\n`);
   } catch (error) {
     await kill();
     throw error;
@@ -151,7 +169,7 @@ const exists = (path: URL) =>
     () => false,
   );
 
-/** Runs the Cloudflare Worker in local workerd, with Durable Object storage that survives crashes.
+/** Builds once per suite, then runs local workerd with crash-surviving Durable Object storage.
  * @throws If the database role cannot be created or the Worker does not start.
  */
 export const cloudflareRuntime: StreamingTestRuntime = {
@@ -164,6 +182,18 @@ export const cloudflareRuntime: StreamingTestRuntime = {
     await mkdir(state, { recursive: true });
     await rm(logFile, { force: true });
     process.env.STREAM_WORKER_TOKEN = token;
+    // Keep seams outside deployable dist/; every crash restart uses this identical bundle.
+    const build = spawnSync(vite, ["build", "--outDir", buildDir], {
+      cwd: root,
+      env: { ...workerEnv({}), NODE_ENV: "production" },
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    await writeFile(logFile, `${build.stdout ?? ""}${build.stderr ?? ""}`);
+    if (build.error) throw build.error;
+    if (build.status !== 0) throw new Error(`Test Worker build failed; see ${logFile}`);
+    // Vite snapshots build-time bindings here; launches must use their own provider and fault.
+    await rm(new URL(".dev.vars", config), { force: true });
   },
   async start(providerPort) {
     const owner = await launch({ providerPort });

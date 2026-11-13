@@ -38,7 +38,8 @@ These are common instructions for Ethan's agents across all scenarios.
 - When writing or editing Markdown files, keep every physical line at or under 100 columns, wrapping
   longer lines at word boundaries.
   `npm run check:docs` enforces this without rewriting prose, code fences, tables, or headings.
-- Before committing, run `npm run check`. Lefthook runs the same gate automatically.
+- Before committing, run `npm run check`. Lefthook checks staged lint/format on commit and
+  typechecks on push; CI runs the full gate in parallel jobs.
   Fallow checks changed-code structure; types and behavioral tests remain separate checks.
   See [development checks](docs/development.md) for setup, CI, and test prerequisites.
 - Before PR handoff, use the [verification skill](.agents/skills/verifying-signal-desk/SKILL.md).

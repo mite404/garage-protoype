@@ -14,6 +14,7 @@
     "apps/storybook/.storybook/main.ts"
   ],
   "health": { "coverage": "coverage" },
+  "ignoreDependencies": ["@typescript/native"],
   "ignorePatterns": [
     ".next/**",
     "apps/web/cloudflare/dist/**",

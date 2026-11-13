@@ -24,7 +24,7 @@ If that fails in a shell started before setup, prepend
 
 ```sh
 npm run build
-CI=true npm exec -- lefthook run pre-commit --force
+CI=true npm run check
 ```
 
 Set `TEST_DATABASE_URL` to a disposable test database and `TEST_APP_URL` to the running production
@@ -32,9 +32,9 @@ app. Never point a seeded harness at that database. If the gate reports leftover
 `npm run db:test:status`, stop only the workflow you started, then `npm run db:test:reset`.
 See [disposable test databases](../../../docs/development.md#disposable-test-databases).
 With `CI=true`, missing database or HTTP prerequisites fail instead of silently skipping.
-Use `--force` for manual verification so an unstaged worktree cannot produce a skipped hook.
-The installed pre-commit hook runs `npm run check`. That command owns docs, Oxfmt, Oxlint,
-TypeScript across workspaces, native tests and Fallow. CI runs the build and same check on PRs.
+Run the gate directly: the staged-file pre-commit hook only checks lint/format, and pre-push only
+typechecks. `npm run check` owns docs, Oxfmt, Oxlint, TypeScript across workspaces, native tests and
+Fallow. CI runs these responsibilities in parallel jobs, with fresh coverage before Fallow.
 No extra formatter or linter is needed. Fallow uses the PR base in CI and `origin/main` locally;
 set `FALLOW_AUDIT_BASE` when validating another explicit base. Keep thresholds unchanged.
 Verify GitHub required-check enforcement separately; workflow existence does not prove protection.

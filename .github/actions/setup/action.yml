@@ -1,0 +1,40 @@
+name: CI dependencies
+description: Install the pinned toolchain and restore task results
+inputs:
+  cache-scope:
+    description: Separate cache writers for parallel jobs
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - name: Limit affected checks to changes Turbo can account for
+      shell: bash
+      env:
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+      run: |
+        if [[ "$IS_PR" == true ]]; then
+          node --input-type=module <<'JS'
+        import { execFileSync } from 'node:child_process';
+        import { appendFileSync } from 'node:fs';
+        const { TURBO_SCM_BASE: base, TURBO_SCM_HEAD: head, GITHUB_ENV: output } = process.env;
+        const workspaces = JSON.parse(execFileSync('npm', ['query', '.workspace'], { encoding: 'utf8' }));
+        const directories = workspaces.map(({ location }) => `${location}/`);
+        const files = execFileSync('git', ['diff', '--name-only', '-z', `${base}...${head}`], { encoding: 'utf8' }).split('\0').filter(Boolean);
+        // Unknown directories and shared root inputs must not reuse an unseen success.
+        const safe = files.every(file => directories.some(directory => file.startsWith(directory)));
+        appendFileSync(output, safe ? 'TURBO_AFFECTED=--affected\n' : 'TURBO_FORCE=true\n');
+        JS
+        fi
+    - uses: actions/cache@v4
+      with:
+        path: .turbo
+        key: ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-${{ github.head_ref || github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-${{ github.head_ref || github.ref_name }}-
+          ${{ runner.os }}-turbo-${{ inputs.cache-scope }}-main-
